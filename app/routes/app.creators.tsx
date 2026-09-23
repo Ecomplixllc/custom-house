@@ -1137,9 +1137,13 @@ export default function Creators() {
                                 <summary aria-label={`More actions for ${displayName}`} />
                                 <Form method="post" className="creator-table-action">
                                   <input type="hidden" name="creatorId" value={creator.id} />
-                                  <input name="reason" placeholder="Reason" />
-                                  <SubmitButton name="intent" value="SUSPEND">
-                                    Suspend
+                                  <input name="reason" placeholder="Optional deactivation reason" />
+                                  <SubmitButton
+                                    name="intent"
+                                    value="SUSPEND"
+                                    confirmMessage="Deactivate this Creator? Dashboard and marketplace access will be suspended while orders, products, earnings, payouts, and audit history remain preserved."
+                                  >
+                                    Deactivate
                                   </SubmitButton>
                                 </Form>
                               </details>

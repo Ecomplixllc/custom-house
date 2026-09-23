@@ -30,9 +30,13 @@ type ProductRow = {
 
 type PricingDefaults = {
   embroiderySurcharge: string;
+  embroideryTextSurcharge: string;
+  embroideryImageSurcharge: string;
   dtfSurcharge: string;
   dtgSurcharge: string;
   embroideryFeeVariantId: string | null;
+  embroideryTextFeeVariantId: string | null;
+  embroideryImageFeeVariantId: string | null;
   dtfFeeVariantId: string | null;
   dtgFeeVariantId: string | null;
 };
@@ -76,9 +80,13 @@ function moneyRange(product: ProductRow) {
 function rowDefaults(row?: PricingDefaults): PricingDefaults {
   return {
     embroiderySurcharge: row?.embroiderySurcharge ?? "0.00",
+    embroideryTextSurcharge: row?.embroideryTextSurcharge ?? row?.embroiderySurcharge ?? "0.00",
+    embroideryImageSurcharge: row?.embroideryImageSurcharge ?? row?.embroiderySurcharge ?? "0.00",
     dtfSurcharge: row?.dtfSurcharge ?? "0.00",
     dtgSurcharge: row?.dtgSurcharge ?? "0.00",
     embroideryFeeVariantId: row?.embroideryFeeVariantId ?? null,
+    embroideryTextFeeVariantId: row?.embroideryTextFeeVariantId ?? null,
+    embroideryImageFeeVariantId: row?.embroideryImageFeeVariantId ?? null,
     dtfFeeVariantId: row?.dtfFeeVariantId ?? null,
     dtgFeeVariantId: row?.dtgFeeVariantId ?? null,
   };
@@ -145,9 +153,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
       row.shopifyProductId,
       {
         embroiderySurcharge: row.embroiderySurcharge.toFixed(2),
+        embroideryTextSurcharge: row.embroideryTextSurcharge.toFixed(2),
+        embroideryImageSurcharge: row.embroideryImageSurcharge.toFixed(2),
         dtfSurcharge: row.dtfSurcharge.toFixed(2),
         dtgSurcharge: row.dtgSurcharge.toFixed(2),
         embroideryFeeVariantId: row.embroideryFeeVariantId,
+        embroideryTextFeeVariantId: row.embroideryTextFeeVariantId,
+        embroideryImageFeeVariantId: row.embroideryImageFeeVariantId,
         dtfFeeVariantId: row.dtfFeeVariantId,
         dtgFeeVariantId: row.dtgFeeVariantId,
       },
@@ -173,6 +185,8 @@ export async function action({ request }: ActionFunctionArgs) {
         {
           currency,
           embroidery: form.get("embroiderySurcharge"),
+          embroideryText: form.get("embroideryTextSurcharge"),
+          embroideryImage: form.get("embroideryImageSurcharge"),
           dtf: form.get("dtfSurcharge"),
           dtg: form.get("dtgSurcharge"),
         },
@@ -218,6 +232,8 @@ export async function action({ request }: ActionFunctionArgs) {
         shopifyProductId: productId,
         currency,
         embroidery: form.get("embroiderySurcharge"),
+        embroideryText: form.get("embroideryTextSurcharge"),
+        embroideryImage: form.get("embroideryImageSurcharge"),
         dtf: form.get("dtfSurcharge"),
         dtg: form.get("dtgSurcharge"),
       },
@@ -315,6 +331,16 @@ export default function Products() {
                   <small>{creatorCurrency}</small>
                 </label>
                 <label>
+                  <span>Embroidery — Text only</span>
+                  <input name="embroideryTextSurcharge" type="number" min="0" step="0.01" defaultValue={creatorPricingDefaults.embroideryTextSurcharge} />
+                  <small>{creatorCurrency}</small>
+                </label>
+                <label>
+                  <span>Embroidery — Image / Logo</span>
+                  <input name="embroideryImageSurcharge" type="number" min="0" step="0.01" defaultValue={creatorPricingDefaults.embroideryImageSurcharge} />
+                  <small>{creatorCurrency}</small>
+                </label>
+                <label>
                   <span>DTF</span>
                   <input
                     name="dtfSurcharge"
@@ -393,6 +419,16 @@ export default function Products() {
                             step="0.01"
                             defaultValue={pricing.embroiderySurcharge}
                           />
+                          <small>{currency}</small>
+                        </label>
+                        <label>
+                          <span>Embroidery — Text only</span>
+                          <input name="embroideryTextSurcharge" type="number" min="0" step="0.01" defaultValue={pricing.embroideryTextSurcharge} />
+                          <small>{currency}</small>
+                        </label>
+                        <label>
+                          <span>Embroidery — Image / Logo</span>
+                          <input name="embroideryImageSurcharge" type="number" min="0" step="0.01" defaultValue={pricing.embroideryImageSurcharge} />
                           <small>{currency}</small>
                         </label>
                         <label>
