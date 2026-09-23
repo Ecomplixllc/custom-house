@@ -41,6 +41,14 @@
       </label>
       <label class="customhouse-field">Quantity<input type="number" name="quantity" min="1" value="1"></label>
       <p class="customhouse-made-to-order-note">This customized Creator product is made to order and cannot be returned.</p>
+      <label class="customhouse-field customhouse-acknowledgement">
+        <input type="checkbox" name="properties[Customized product acknowledgement]" value="Accepted" required>
+        <span>I understand that this is a customized / made-to-order product and cannot be returned.</span>
+      </label>
+      <label class="customhouse-field customhouse-acknowledgement">
+        <input type="checkbox" name="properties[Terms & Conditions]" value="Accepted" required>
+        <span>I accept the <a href="{{ shop.terms_of_service.url | default: '/policies/terms-of-service' }}" target="_blank" rel="noopener">Terms &amp; Conditions</a>.</span>
+      </label>
       <button type="submit">{{ block.settings.button }}</button>
     </form>
   </div>

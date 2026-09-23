@@ -13,6 +13,11 @@ import {
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
 import { parseJsonList } from "../services/domain";
+import {
+  cleanWelcomeEmailContent,
+  DEFAULT_CREATOR_WELCOME_BODY,
+  DEFAULT_CREATOR_WELCOME_SUBJECT,
+} from "../services/creator-welcome-email.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -28,6 +33,21 @@ export async function action({ request }: ActionFunctionArgs) {
   const { session } = await authenticate.admin(request);
   const form = await request.formData();
   const intent = String(form.get("intent") || "save");
+
+  if (intent === "reset-welcome-email") {
+    return db.shopConfig.upsert({
+      where: { shop: session.shop },
+      create: {
+        shop: session.shop,
+        creatorWelcomeEmailSubject: DEFAULT_CREATOR_WELCOME_SUBJECT,
+        creatorWelcomeEmailBody: DEFAULT_CREATOR_WELCOME_BODY,
+      },
+      update: {
+        creatorWelcomeEmailSubject: DEFAULT_CREATOR_WELCOME_SUBJECT,
+        creatorWelcomeEmailBody: DEFAULT_CREATOR_WELCOME_BODY,
+      },
+    });
+  }
 
   if (intent === "reset-defaults") {
     return db.shopConfig.upsert({
@@ -45,6 +65,8 @@ export async function action({ request }: ActionFunctionArgs) {
         creatorProfileFieldMapJson: null,
         inkybayAllowedHostsJson: JSON.stringify(["pitchprint.com"]),
         inkybayBuyOnlyHiddenSelectorsJson: "[]",
+        creatorWelcomeEmailSubject: DEFAULT_CREATOR_WELCOME_SUBJECT,
+        creatorWelcomeEmailBody: DEFAULT_CREATOR_WELCOME_BODY,
       },
     });
   }
@@ -57,6 +79,10 @@ export async function action({ request }: ActionFunctionArgs) {
     .split(/\r?\n/)
     .map((value) => value.trim())
     .filter(Boolean);
+  const welcomeEmail = cleanWelcomeEmailContent(
+    form.get("creatorWelcomeEmailSubject"),
+    form.get("creatorWelcomeEmailBody"),
+  );
 
   const settings = {
     creatorApplicationsEnabled: form.has("applications"),
@@ -76,6 +102,8 @@ export async function action({ request }: ActionFunctionArgs) {
       ...new Set([...hosts, "pitchprint.com"]),
     ]),
     inkybayBuyOnlyHiddenSelectorsJson: JSON.stringify(selectors),
+    creatorWelcomeEmailSubject: welcomeEmail.subject,
+    creatorWelcomeEmailBody: welcomeEmail.body,
   };
 
   return db.shopConfig.upsert({
@@ -148,6 +176,29 @@ export default function Settings() {
                     defaultChecked={config.automaticCollectionCreationEnabled}
                   />
                 </label>
+              </div>
+            </section>
+
+            <section className="settings-card settings-card--wide">
+              <div className="settings-card-heading">
+                <span className="settings-icon settings-icon--general" />
+                <div>
+                  <h2>Creator Welcome Email</h2>
+                  <p>Edit the message used for future Creator approval transitions. Supported placeholders: {"{{creator_name}}"} and {"{{dashboard_url}}"}.</p>
+                </div>
+              </div>
+              <div className="settings-field-stack">
+                <label>
+                  <span>Subject</span>
+                  <input name="creatorWelcomeEmailSubject" maxLength={200} defaultValue={config.creatorWelcomeEmailSubject} required />
+                </label>
+                <label>
+                  <span>Body/content</span>
+                  <textarea name="creatorWelcomeEmailBody" rows={12} maxLength={10000} defaultValue={config.creatorWelcomeEmailBody} required />
+                </label>
+                <SubmitButton name="intent" value="reset-welcome-email" confirmMessage="Reset the Creator welcome email to the CustomHouse default?">
+                  Reset welcome email to default
+                </SubmitButton>
               </div>
             </section>
 

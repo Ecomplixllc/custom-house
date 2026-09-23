@@ -69,7 +69,13 @@
           <strong>CUSTOMHOUSE</strong>
         </a>
         <div class="customhouse-dashboard-topbar-profile">
-          <span class="customhouse-notification-dot"><span class="material-symbols-outlined notranslate" translate="no" aria-hidden="true">notifications</span></span>
+          <div class="customhouse-creator-notifications" data-dashboard-notifications>
+            <button class="customhouse-notification-dot" data-dashboard-notification-toggle data-has-unread="false" type="button" aria-label="Notifications" aria-expanded="false" aria-controls="customhouse-creator-notification-panel"><span class="material-symbols-outlined notranslate" translate="no" aria-hidden="true">notifications</span></button>
+            <section id="customhouse-creator-notification-panel" data-dashboard-notification-panel hidden>
+              <header><strong>Notifications</strong><button type="button" data-dashboard-notification-close aria-label="Close notifications">×</button></header>
+              <p>No new notifications.</p>
+            </section>
+          </div>
           <strong data-dashboard-top-name></strong>
           <span class="customhouse-top-avatar" data-dashboard-top-initials>SK</span>
         </div>
@@ -212,12 +218,13 @@
       <section class="customhouse-dashboard-tab-panel customhouse-dashboard-section customhouse-creator-products-panel ch-designs" data-dashboard-tab-panel="my-products" aria-label="My Designs">
         <div class="customhouse-dashboard-empty" data-dashboard-creator-products-empty>
           <span data-empty-icon="bag"></span>
-          <strong>Your Designs</strong>
-          <p>You haven't created a design yet.</p>
+          <strong>No products yet</strong>
+          <p>Create your first product from an approved CustomHouse base product.</p>
+          <button type="button" data-dashboard-tab-target="add-product" data-dashboard-new-product>Create Product</button>
         </div>
         <div class="customhouse-section-heading customhouse-my-designs-heading">
-          <h3>My Products</h3>
-          <p>Manage your designs, review status, and published products.</p>
+          <div><h3>My Products</h3><p>Manage your designs, review status, and published products.</p></div>
+          <button type="button" data-dashboard-tab-target="add-product" data-dashboard-new-product>Create Product</button>
         </div>
         <div class="ch-designs__toolbar" data-dashboard-design-toolbar>
           <div class="ch-designs__filters" data-dashboard-design-filters aria-label="Filter designs"></div>
@@ -559,6 +566,13 @@
           <p>Your information is visible on your creator profile and collection.<br>We make sure all information is accurate and up to date.</p>
           <a data-dashboard-account-learn-more href="{{ routes.root_url }}" target="_blank" rel="noreferrer">Learn more about your profile</a>
         </div>
+        <section class="customhouse-creator-danger-zone" aria-label="Creator account danger zone">
+          <div>
+            <h4>Danger Zone</h4>
+            <p>Deactivate your Creator participation and public Creator presence. Your Shopify customer account, orders, earnings, payouts, and audit history are preserved.</p>
+          </div>
+          <button type="button" data-dashboard-deactivate-creator>Delete Creator Account</button>
+        </section>
       </section>
 
       <section class="customhouse-dashboard-tab-panel customhouse-dashboard-section customhouse-withdraw-panel" data-dashboard-tab-panel="withdraw" aria-label="Withdraw earnings">
@@ -842,11 +856,31 @@
                   <input name="country" data-profile-field="country" type="text" maxlength="80" autocomplete="country-name">
                 </label>
                 <label>
-                  <span>Social / Portfolio URL</span>
+                  <span>Portfolio URL</span>
                   <input name="portfolioUrl" data-profile-field="portfolioUrl" type="url" inputmode="url" autocomplete="url">
                 </label>
+                <label>
+                  <span>Primary Platform</span>
+                  <select name="primaryPlatform" data-profile-field="primaryPlatform">
+                    <option value="">None</option>
+                    <option>Instagram</option>
+                    <option>TikTok</option>
+                    <option>YouTube</option>
+                    <option>Facebook</option>
+                    <option>Website</option>
+                    <option>Other</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Primary Profile URL</span>
+                  <input name="primaryProfileUrl" data-profile-field="primaryProfileUrl" type="url" inputmode="url" autocomplete="url">
+                </label>
                 <label class="customhouse-native-profile-wide">
-                  <span>Short Creator Bio *</span>
+                  <span>Additional Social/Profile URLs</span>
+                  <textarea name="socialLinks" data-profile-field="socialLinks" rows="3" placeholder="One HTTPS URL per line"></textarea>
+                </label>
+                <label class="customhouse-native-profile-wide">
+                  <span>Short Creator Bio <small>(optional)</small></span>
                   <textarea name="bio" data-profile-field="bio" maxlength="1000" rows="5"></textarea>
                 </label>
                 <label class="customhouse-native-profile-check customhouse-native-profile-wide">

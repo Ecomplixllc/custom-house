@@ -35,7 +35,7 @@ export interface CreatorApplicationInput {
   emailSnapshot?: string;
   country?: string;
   city?: string;
-  bio: string;
+  bio?: string;
   primaryPlatform?: string;
   primaryProfileUrl?: string;
   audienceRange?: string;
@@ -65,20 +65,18 @@ export function validateCreatorApplication(input: CreatorApplicationInput) {
   const primaryProfileUrl = input.primaryProfileUrl
     ? normalizeHttpsUrl(input.primaryProfileUrl)
     : undefined;
-  if (input.primaryPlatform && !primaryProfileUrl) throw new DomainError("INVALID_PROFILE_URL", "Enter a valid primary profile URL.");
   const audienceRange = input.audienceRange
     ? cleanChoice(input.audienceRange, CREATOR_AUDIENCE_RANGES, "Audience size")
     : undefined;
   const categories = Array.from(new Set(input.categories || []))
     .map((category) => cleanChoice(category, CREATOR_CATEGORIES, "Creator category"))
     .slice(0, 8);
-  if (input.primaryPlatform && !categories.length) throw new DomainError("CATEGORIES_REQUIRED", "Choose at least one creator category.");
   const profileImageUrl = input.profileImageUrl ? (input.profileImageUrl.startsWith("gid://shopify/MediaImage/") ? input.profileImageUrl : normalizeHttpsUrl(input.profileImageUrl)) : undefined;
   const socialLinks = [
     ...(primaryProfileUrl ? [primaryProfileUrl] : []),
     ...(input.socialLinks || []),
   ];
-  return { legalName: input.legalName?.trim() ? cleanText(input.legalName, "Legal name", 2, 120) : undefined, displayName: cleanText(input.displayName, "Display name", 2, 80), emailSnapshot: input.emailSnapshot?.trim() ? cleanText(input.emailSnapshot, "Email", 3, 254) : undefined, country: input.country?.trim() ? cleanText(input.country, "Country", 2, 80) : undefined, city: input.city?.trim() ? cleanText(input.city, "City", 1, 100) : undefined, bio: cleanText(input.bio, "Biography", 10, 500), primaryPlatform, primaryProfileUrl, audienceRange, categories, portfolioUrl: input.portfolioUrl ? normalizeHttpsUrl(input.portfolioUrl) : undefined, aboutWork: input.aboutWork?.trim() ? cleanText(input.aboutWork, "About your work", 1, 1000) : undefined, socialLinks: socialLinks.filter(Boolean).slice(0, 5).map((url) => normalizeHttpsUrl(url)), profileImageUrl, message: input.message?.trim() ? cleanText(input.message, "Message", 1, 1000) : undefined, termsAcceptedAt: new Date() };
+  return { legalName: input.legalName?.trim() ? cleanText(input.legalName, "Legal name", 2, 120) : undefined, displayName: cleanText(input.displayName, "Display name", 2, 80), emailSnapshot: input.emailSnapshot?.trim() ? cleanText(input.emailSnapshot, "Email", 3, 254) : undefined, country: input.country?.trim() ? cleanText(input.country, "Country", 2, 80) : undefined, city: input.city?.trim() ? cleanText(input.city, "City", 1, 100) : undefined, bio: input.bio?.trim() ? cleanText(input.bio, "Biography", 10, 500) : undefined, primaryPlatform, primaryProfileUrl, audienceRange, categories, portfolioUrl: input.portfolioUrl ? normalizeHttpsUrl(input.portfolioUrl) : undefined, aboutWork: input.aboutWork?.trim() ? cleanText(input.aboutWork, "About your work", 1, 1000) : undefined, socialLinks: socialLinks.filter(Boolean).slice(0, 5).map((url) => normalizeHttpsUrl(url)), profileImageUrl, message: input.message?.trim() ? cleanText(input.message, "Message", 1, 1000) : undefined, termsAcceptedAt: new Date() };
 }
 
 function cleanChoice<T extends readonly string[]>(value: string | undefined, choices: T, name: string): T[number] {

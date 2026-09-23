@@ -9,10 +9,11 @@ import {
 import { authenticate } from "../shopify.server";
 import {
   listCreatorProductsForAdmin,
+  cleanupCreatorProductAsAdmin,
   moderateCreatorProductAsAdmin,
 } from "../services/creator-products.server";
 
-const FILTERS = ["PENDING", "PUBLISHED", "REJECTED", "ALL"] as const;
+const FILTERS = ["PENDING", "PUBLISHED", "REJECTED", "DRAFT", "ARCHIVED", "ALL"] as const;
 
 function formatDate(value: string | Date | null | undefined) {
   if (!value) return "-";
@@ -46,6 +47,21 @@ export async function action({ request }: ActionFunctionArgs) {
   const { session } = await authenticate.admin(request);
   const form = await request.formData();
   const decision = String(form.get("decision") || "");
+  const creatorProductId = String(form.get("creatorProductId") || "");
+  if (decision === "ARCHIVE" || decision === "DELETE") {
+    const result = await cleanupCreatorProductAsAdmin(
+      session.shop,
+      session.id || null,
+      creatorProductId,
+      decision,
+    );
+    return {
+      ok: true,
+      message: result.hardDeleted
+        ? "Creator Product permanently deleted after dependency checks."
+        : "Creator Product archived; order and financial history remain preserved.",
+    };
+  }
   const product = await moderateCreatorProductAsAdmin(
     session.shop,
     null,
@@ -179,6 +195,22 @@ export default function CreatorProductsAdmin() {
                           >
                             Reject
                           </SubmitButton>
+                        </div>
+                      </Form>
+                    </div>
+                  ) : null}
+                  {["PUBLISHED", "DRAFT", "REJECTED", "ARCHIVED"].includes(product.status) ? (
+                    <div className="creator-review-actions">
+                      <Form method="post" className="creator-decision-form">
+                        <input type="hidden" name="creatorProductId" value={product.id} />
+                        <p>Cleanup checks linked orders and financial history before any hard deletion.</p>
+                        <div>
+                          {product.status !== "ARCHIVED" ? (
+                            <SubmitButton name="decision" value="ARCHIVE" confirmMessage="Archive this Creator Product? It will leave normal active views and public purchase flow while history is preserved.">Archive</SubmitButton>
+                          ) : null}
+                          {["DRAFT", "REJECTED", "ARCHIVED"].includes(product.status) ? (
+                            <SubmitButton name="decision" value="DELETE" confirmMessage="Permanently delete this Creator Product only if it has no order or financial dependencies?">Delete if safe</SubmitButton>
+                          ) : null}
                         </div>
                       </Form>
                     </div>

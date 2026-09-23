@@ -136,7 +136,7 @@ test("public creator collection exposes basic share controls without Instagram d
   assert.doesNotMatch(source, /instagram\.com\/share|instagram\.com\/intent/i);
 });
 
-test("public Creator product page is buy-only with fixed color and selectable printing method", () => {
+test("public Creator product page is buy-only with fixed color and fixed printing method", () => {
   const source = readFileSync(
     "app/services/storefront-proxy.server.ts",
     "utf8",
@@ -147,17 +147,17 @@ test("public Creator product page is buy-only with fixed color and selectable pr
   assert.match(source, /<dt>Color<\/dt>/);
   assert.match(source, /<dt>Designed placements<\/dt>/);
   assert.match(source, /name="selectedProductionMethod"/);
-  assert.match(source, /aria-label="Printing method options"/);
+  assert.match(source, /<dt>Printing method<\/dt>/);
   assert.match(source, /const sizeControls = optionControls/);
   assert.match(source, /One size/);
   assert.match(source, /aria-label="Size options"/);
-  assert.match(source, /data-option-target="selectedProductionMethod"/);
-  assert.match(source, /data-option-label="\$\{escapeHtml\(methodLabel\(method\.method\)\)\}"/);
-  assert.match(source, /customhouse-option-pill__price/);
-  assert.match(source, /productionMethodPriceLabel/);
-  assert.match(source, /data-customhouse-option-current="selectedProductionMethod"/);
+  assert.doesNotMatch(source, /data-option-target="selectedProductionMethod"/);
   assert.match(source, /data-customhouse-production-method/);
-  assert.match(source, /selectedProductionMethod: productionMethodInput\?\.value/);
+  assert.match(source, /selectedProductionMethod: productionMethodInput\?\.value \|\| ""/);
+  assert.match(source, /nonReturnAcknowledged: Boolean\(form\.nonReturnAcknowledged\?\.checked\)/);
+  assert.match(source, /termsAccepted: Boolean\(form\.termsAccepted\?\.checked\)/);
+  assert.match(source, /name="nonReturnAcknowledged" type="checkbox" required/);
+  assert.match(source, /name="termsAccepted" type="checkbox" required/);
   assert.match(source, /customhouse-made-to-order-note/);
   assert.match(source, /made to order and cannot be returned/);
   assert.match(source, /optionName\.includes\("color"\)/);
