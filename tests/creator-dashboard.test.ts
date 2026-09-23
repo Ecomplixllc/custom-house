@@ -484,8 +484,9 @@ test("creator dashboard starts PitchPrint directly and reviews saved designs wit
   assert.match(script, /copy\.className = "ch-design-card__body customhouse-base-product-card__body"/);
   assert.match(script, /button\.className = "ch-design-card__button ch-design-card__button--primary"/);
   assert.match(script, /Unavailable/);
-  assert.doesNotMatch(script, /dataBaseProductColor|baseProductColor|selectedBaseProductColor/);
-  assert.doesNotMatch(script, /Choose one color before opening the designer/);
+  assert.match(script, /data-base-product-color/);
+  assert.match(script, /data-base-product-method/);
+  assert.match(script, /Choose exactly one product color and one printing method/);
   assert.match(script, /existing\?\.readyState === "complete"/);
   assert.match(script, /src === JQUERY_SRC && window\.jQuery/);
   assert.match(script, /root\.__customHouseCreatorDesignActionsBound/);
@@ -972,11 +973,11 @@ test("creator dashboard PitchPrint bridge uses Creator setup contract instead of
   assert.match(script, /optionGroups/);
   assert.match(script, /productionMethods/);
   assert.match(script, /productionMethodPricing/);
-  assert.match(script, /selectedColor: ""/);
-  assert.match(script, /selectedColors: \[\]/);
-  assert.match(script, /fixedColor: ""/);
-  assert.match(script, /selectedProductionMethod: null/);
-  assert.match(script, /fixedProductionMethod: null/);
+  assert.match(script, /selectedColor: setup\?\.fixedColor \|\| ""/);
+  assert.match(script, /selectedColors: setup\?\.fixedColor \? \[setup\.fixedColor\] : \[\]/);
+  assert.match(script, /fixedColor: setup\?\.fixedColor \|\| ""/);
+  assert.match(script, /selectedProductionMethod: setup\?\.productionMethod \|\| ""/);
+  assert.match(script, /fixedProductionMethod: setup\?\.productionMethod \|\| ""/);
   assert.match(script, /supportsMultipleSelections: false/);
   assert.match(script, /CUSTOMHOUSE_PP_CREATOR_SETUP_READY/);
   assert.match(script, /customhouse:pitchprint-creator-setup-ready/);
@@ -1375,5 +1376,37 @@ test("dashboard sections do not clip between 1101px and 1510px", () => {
     styles,
     /@media \(min-width: 1101px\) and \(max-width: 1510px\)[\s\S]*\.customhouse-dashboard-tabs-rail > \[data-dashboard-tab-panel\]\.is-active\s*\{[^}]*width: 100% !important;[^}]*min-width: 0 !important;[^}]*max-width: none !important;/s,
   );
+});
+
+test("client-final dashboard controls reuse existing flows and preserve safe state", () => {
+  assert.match(block, /No products yet/);
+  assert.match(block, /data-dashboard-tab-target="add-product"[^>]*>Create Product</);
+  assert.match(block, /data-dashboard-notification-toggle/);
+  assert.match(block, /data-dashboard-notification-panel/);
+  assert.match(block, /data-has-unread="false"/);
+  assert.match(script, /function bindCreatorNotifications\(root\)/);
+  assert.match(script, /document\.addEventListener\("click"/);
+  assert.match(script, /event\.key === "Escape"/);
+  assert.match(styles, /\[data-dashboard-notification-panel\][\s\S]*z-index: 1000/);
+  assert.match(script, /root\.__customHouseBannerDraft/);
+  assert.match(script, /bannerDraft\.bannerImageUrl = URL\.createObjectURL\(file\)/);
+  assert.match(block, /Danger Zone/);
+  assert.match(block, /Delete Creator Account/);
+  assert.match(script, /method: "DELETE"/);
+  assert.match(script, /confirmation !== "DEACTIVATE"/);
+  const profileRoute = readFileSync("app/routes/proxy.api.creator-profile.tsx", "utf8");
+  assert.match(profileRoute, /changeCreatorStatus\([\s\S]*"SUSPENDED"/);
+  assert.match(profileRoute, /shopifyCustomerPreserved: true/);
+  assert.match(script, /designFilter: "ACTIVE"/);
+  assert.match(script, /status !== "ARCHIVED"/);
+});
+
+test("theme account choices and footer explain the canonical Creator path", () => {
+  const header = readFileSync("theme-live-cart/sections/header.liquid", "utf8");
+  const footer = readFileSync("theme-live-cart/sections/footer-group.json", "utf8");
+  assert.match(header, /Create a customer account to manage your orders and purchases\./);
+  assert.match(header, /Apply to become a Creator and publish your designs on CustomHouse\./);
+  assert.match(footer, /BECOME A CREATOR/);
+  assert.match(footer, /shopify:\/\/pages\/become-a-creator/);
 });
 

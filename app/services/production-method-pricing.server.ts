@@ -9,6 +9,8 @@ export const PRODUCTION_METHODS = ["EMBROIDERY", "DTF", "DTG"] as const;
 export const CREATOR_PRODUCTION_PRICING_PRODUCT_ID = "customhouse:creator-products";
 
 export type ProductionMethodCode = (typeof PRODUCTION_METHODS)[number];
+export const EMBROIDERY_SUBTYPES = ["TEXT_ONLY", "IMAGE_OR_LOGO"] as const;
+export type EmbroiderySubtype = (typeof EMBROIDERY_SUBTYPES)[number];
 
 type ProductionPricingDb = {
   publicProductProductionPricing: {
@@ -27,9 +29,13 @@ export type PublicProductProductionPricingRecord = {
   shopKey: string;
   shopifyProductId: string;
   embroiderySurcharge: Prisma.Decimal;
+  embroideryTextSurcharge: Prisma.Decimal;
+  embroideryImageSurcharge: Prisma.Decimal;
   dtfSurcharge: Prisma.Decimal;
   dtgSurcharge: Prisma.Decimal;
   embroideryFeeVariantId: string | null;
+  embroideryTextFeeVariantId: string | null;
+  embroideryImageFeeVariantId: string | null;
   dtfFeeVariantId: string | null;
   dtgFeeVariantId: string | null;
   createdAt?: Date;
@@ -47,6 +53,8 @@ export type SaveProductionPricingInput = {
   shopifyProductId: string;
   currency: string;
   embroidery: unknown;
+  embroideryText?: unknown;
+  embroideryImage?: unknown;
   dtf: unknown;
   dtg: unknown;
 };
@@ -180,6 +188,36 @@ export function pricingForMethod(
     case "DTG":
       return pricing.dtgSurcharge;
   }
+}
+
+export function cleanEmbroiderySubtype(value: unknown): EmbroiderySubtype {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (EMBROIDERY_SUBTYPES.includes(normalized as EmbroiderySubtype)) {
+    return normalized as EmbroiderySubtype;
+  }
+  throw new DomainError(
+    "INVALID_EMBROIDERY_SUBTYPE",
+    "A validated embroidery artwork subtype is required.",
+    422,
+  );
+}
+
+export function pricingForEmbroiderySubtype(
+  pricing: Pick<PublicProductProductionPricingRecord, "embroideryTextSurcharge" | "embroideryImageSurcharge">,
+  subtype: unknown,
+) {
+  return cleanEmbroiderySubtype(subtype) === "TEXT_ONLY"
+    ? pricing.embroideryTextSurcharge
+    : pricing.embroideryImageSurcharge;
+}
+
+export function feeVariantIdForEmbroiderySubtype(
+  pricing: Pick<PublicProductProductionPricingRecord, "embroideryTextFeeVariantId" | "embroideryImageFeeVariantId">,
+  subtype: unknown,
+) {
+  return cleanEmbroiderySubtype(subtype) === "TEXT_ONLY"
+    ? pricing.embroideryTextFeeVariantId
+    : pricing.embroideryImageFeeVariantId;
 }
 
 export function feeVariantIdForMethod(
@@ -389,12 +427,32 @@ export async function syncProductionFeeMerchandise(
             name: FEE_PRODUCT_OPTION_NAME,
             values: [
               { name: "Embroidery Production Fee" },
+              { name: "Embroidery Text Production Fee" },
+              { name: "Embroidery Image or Logo Production Fee" },
               { name: "DTF Production Fee" },
               { name: "DTG Production Fee" },
             ],
           },
         ],
         variants: [
+          {
+            optionValues: [
+              { optionName: FEE_PRODUCT_OPTION_NAME, name: "Embroidery Text Production Fee" },
+            ],
+            price: (pricing.embroideryTextSurcharge ?? pricing.embroiderySurcharge).toFixed(2),
+            taxable: true,
+            inventoryPolicy: "CONTINUE",
+            inventoryItem: { tracked: false },
+          },
+          {
+            optionValues: [
+              { optionName: FEE_PRODUCT_OPTION_NAME, name: "Embroidery Image or Logo Production Fee" },
+            ],
+            price: (pricing.embroideryImageSurcharge ?? pricing.embroiderySurcharge).toFixed(2),
+            taxable: true,
+            inventoryPolicy: "CONTINUE",
+            inventoryItem: { tracked: false },
+          },
           {
             optionValues: [
               { optionName: FEE_PRODUCT_OPTION_NAME, name: "Embroidery Production Fee" },
@@ -465,9 +523,11 @@ export async function syncProductionFeeMerchandise(
     feeProduct.variants.nodes.map((variant) => [variant.title, variant.id]),
   );
   const embroideryFeeVariantId = variantByTitle.get("Embroidery Production Fee");
+  const embroideryTextFeeVariantId = variantByTitle.get("Embroidery Text Production Fee");
+  const embroideryImageFeeVariantId = variantByTitle.get("Embroidery Image or Logo Production Fee");
   const dtfFeeVariantId = variantByTitle.get("DTF Production Fee");
   const dtgFeeVariantId = variantByTitle.get("DTG Production Fee");
-  if (!embroideryFeeVariantId || !dtfFeeVariantId || !dtgFeeVariantId) {
+  if (!embroideryFeeVariantId || !embroideryTextFeeVariantId || !embroideryImageFeeVariantId || !dtfFeeVariantId || !dtgFeeVariantId) {
     throw new DomainError(
       "PRODUCTION_FEE_VARIANTS_MISSING",
       "Production fee variants could not be synced.",
@@ -479,6 +539,8 @@ export async function syncProductionFeeMerchandise(
     where: { id: pricing.id },
     data: {
       embroideryFeeVariantId,
+      embroideryTextFeeVariantId,
+      embroideryImageFeeVariantId,
       dtfFeeVariantId,
       dtgFeeVariantId,
     },
@@ -592,6 +654,8 @@ export async function saveProductionPricing(
   database: ProductionPricingDb = db as unknown as ProductionPricingDb,
 ): Promise<ProductionPricingSyncState> {
   const embroidery = parseSurchargeInput(input.embroidery);
+  const embroideryText = parseSurchargeInput(input.embroideryText ?? input.embroidery);
+  const embroideryImage = parseSurchargeInput(input.embroideryImage ?? input.embroidery);
   const dtf = parseSurchargeInput(input.dtf);
   const dtg = parseSurchargeInput(input.dtg);
   const settings = await methodSettings(shop, database);
@@ -616,11 +680,15 @@ export async function saveProductionPricing(
       shopKey: shop,
       shopifyProductId: input.shopifyProductId,
       embroiderySurcharge: embroidery,
+      embroideryTextSurcharge: embroideryText,
+      embroideryImageSurcharge: embroideryImage,
       dtfSurcharge: dtf,
       dtgSurcharge: dtg,
     },
     update: {
       embroiderySurcharge: embroidery,
+      embroideryTextSurcharge: embroideryText,
+      embroideryImageSurcharge: embroideryImage,
       dtfSurcharge: dtf,
       dtgSurcharge: dtg,
     },
@@ -688,6 +756,8 @@ export async function saveCreatorProductionPricing(
   database: ProductionPricingDb = db as unknown as ProductionPricingDb,
 ): Promise<ProductionPricingSyncState> {
   const embroidery = parseSurchargeInput(input.embroidery);
+  const embroideryText = parseSurchargeInput(input.embroideryText ?? input.embroidery);
+  const embroideryImage = parseSurchargeInput(input.embroideryImage ?? input.embroidery);
   const dtf = parseSurchargeInput(input.dtf);
   const dtg = parseSurchargeInput(input.dtg);
   let pricing = await database.publicProductProductionPricing.upsert({
@@ -701,11 +771,15 @@ export async function saveCreatorProductionPricing(
       shopKey: shop,
       shopifyProductId: CREATOR_PRODUCTION_PRICING_PRODUCT_ID,
       embroiderySurcharge: embroidery,
+      embroideryTextSurcharge: embroideryText,
+      embroideryImageSurcharge: embroideryImage,
       dtfSurcharge: dtf,
       dtgSurcharge: dtg,
     },
     update: {
       embroiderySurcharge: embroidery,
+      embroideryTextSurcharge: embroideryText,
+      embroideryImageSurcharge: embroideryImage,
       dtfSurcharge: dtf,
       dtgSurcharge: dtg,
     },
