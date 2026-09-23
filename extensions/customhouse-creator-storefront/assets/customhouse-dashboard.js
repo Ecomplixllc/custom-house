@@ -155,6 +155,20 @@ async function saveProfileUpdate(payload) {
   return body.data;
 }
 
+async function deactivateCreatorAccount() {
+  const response = await fetch(PROFILE_UPDATE_ENDPOINT, {
+    method: "DELETE",
+    credentials: "same-origin",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const body = await response.json();
+  if (!response.ok || !body.ok) {
+    throw new Error(body?.error?.message || "Creator account could not be deactivated.");
+  }
+  return body.data;
+}
+
 async function removeProfilePhoto(root, message) {
   const buttons = root.querySelectorAll(
     "[data-dashboard-remove-image], [data-profile-modal-remove-photo]",
@@ -371,7 +385,7 @@ function dashboardState(root) {
     creatorProducts: [],
     baseProducts: [],
     actionLoading: new Set(),
-    designFilter: "ALL",
+    designFilter: "ACTIVE",
     designSearch: "",
     designSort: "updated",
   };
@@ -523,6 +537,35 @@ function renderBaseProducts(root, products) {
     title.className = "ch-design-card__title";
     title.textContent = product.title || "Base product";
     copy.append(title);
+    const colors = optionValuesFromVariants(
+      pitchPrintProductVariants(product),
+      /^(color|colour|farg|färg)$/i,
+    );
+    const pricing = parseJsonObject(product.productionMethodPricing);
+    const methods = Array.isArray(pricing?.productionMethods)
+      ? pricing.productionMethods.filter((item) => ["EMBROIDERY", "DTF", "DTG"].includes(item?.id || item?.method))
+      : [];
+    const setup = document.createElement("div");
+    setup.className = "customhouse-base-product-card__setup";
+    const colorLabel = document.createElement("label");
+    colorLabel.textContent = "Product Color";
+    const colorSelect = document.createElement("select");
+    colorSelect.dataset.baseProductColor = product.id || "";
+    colorSelect.append(new Option("Choose one color", ""));
+    colors.forEach((color) => colorSelect.append(new Option(color, color)));
+    colorLabel.append(colorSelect);
+    const methodLabel = document.createElement("label");
+    methodLabel.textContent = "Printing Method";
+    const methodSelect = document.createElement("select");
+    methodSelect.dataset.baseProductMethod = product.id || "";
+    methodSelect.append(new Option("Choose one method", ""));
+    methods.forEach((method) => {
+      const value = method.id || method.method;
+      methodSelect.append(new Option(method.label || value, value));
+    });
+    methodLabel.append(methodSelect);
+    setup.append(colorLabel, methodLabel);
+    copy.append(setup);
 
     const actions = document.createElement("div");
     actions.className = "ch-design-card__actions";
@@ -533,7 +576,12 @@ function renderBaseProducts(root, products) {
     button.textContent = product.pitchprintDesignId
       ? "Start Design"
       : "Unavailable";
-    button.disabled = !product.pitchprintDesignId;
+    const syncAvailability = () => {
+      button.disabled = !product.pitchprintDesignId || !colorSelect.value || !methodSelect.value;
+    };
+    colorSelect.addEventListener("change", syncAvailability);
+    methodSelect.addEventListener("change", syncAvailability);
+    syncAvailability();
     actions.append(button);
 
     card.append(top, copy, actions);
@@ -563,6 +611,7 @@ function creatorProductPreviewUrl(product) {
 
 function designFilterLabel(filter) {
   return {
+    ACTIVE: "Active",
     ALL: "All",
     DRAFT: "Drafts",
     PENDING: "Pending",
@@ -577,7 +626,11 @@ function filterCreatorProducts(products, state) {
   return products
     .filter((product) => {
       const status = String(product.status || "DRAFT").toUpperCase();
-      return state.designFilter === "ALL" || status === state.designFilter;
+      return (
+        state.designFilter === "ALL" ||
+        (state.designFilter === "ACTIVE" && status !== "ARCHIVED") ||
+        status === state.designFilter
+      );
     })
     .filter((product) => {
       if (!query) return true;
@@ -617,10 +670,11 @@ function renderDesignFilters(root, products) {
       memo[status] = (memo[status] || 0) + 1;
       return memo;
     },
-    { ALL: 0, DRAFT: 0, PENDING: 0, REJECTED: 0, PUBLISHED: 0, ARCHIVED: 0 },
+    { ACTIVE: 0, ALL: 0, DRAFT: 0, PENDING: 0, REJECTED: 0, PUBLISHED: 0, ARCHIVED: 0 },
   );
+  counts.ACTIVE = counts.ALL - counts.ARCHIVED;
   wrap.replaceChildren();
-  ["ALL", "DRAFT", "PENDING", "REJECTED", "PUBLISHED", "ARCHIVED"].forEach((filter) => {
+  ["ACTIVE", "DRAFT", "PENDING", "REJECTED", "PUBLISHED", "ARCHIVED", "ALL"].forEach((filter) => {
     const button = document.createElement("button");
     button.type = "button";
     button.dataset.designFilter = filter;
@@ -686,7 +740,7 @@ function renderCreatorProducts(list, empty, products) {
     dashboardState(root).creatorProducts = products;
     root.__customHouseCreatorProducts = products;
   }
-  const state = root ? dashboardState(root) : { designFilter: "ALL", designSearch: "", designSort: "updated" };
+  const state = root ? dashboardState(root) : { designFilter: "ACTIVE", designSearch: "", designSort: "updated" };
   if (root) renderDesignFilters(root, products);
   list.replaceChildren();
   const visibleProducts = filterCreatorProducts(products, state);
@@ -766,6 +820,8 @@ function renderCreatorProducts(list, empty, products) {
         addMenuAction(menu, "Delete Design", "delete", product.id, true);
       } else if (statusValue === "PUBLISHED") {
         addMenuAction(menu, "Archive Design", "archive", product.id, true);
+      } else if (statusValue === "ARCHIVED") {
+        addMenuAction(menu, "Delete Design", "delete", product.id, true);
       }
     }
     menuWrap.append(menuButton, menu);
@@ -998,9 +1054,17 @@ function normalizeCreatorSetupPayload(setup) {
   record.creatorContext = true;
   record.launchContext = "creator_dashboard";
   record.isCreatorProduct = true;
-  record.selectedProductionMethod = null;
-  record.productionMethod = null;
-  record.fixedProductionMethod = null;
+  const fixedProductionMethod = String(
+    record.fixedProductionMethod ||
+      record.productionMethod ||
+      record.selectedProductionMethod ||
+      "",
+  ).trim().toUpperCase();
+  if (fixedProductionMethod) {
+    record.selectedProductionMethod = fixedProductionMethod;
+    record.productionMethod = fixedProductionMethod;
+    record.fixedProductionMethod = fixedProductionMethod;
+  }
   return record;
 }
 
@@ -1174,9 +1238,9 @@ function creatorPitchPrintConfig(root, product, identity) {
     selectedColor: setup?.fixedColor || "",
     selectedColors: setup?.fixedColor ? [setup.fixedColor] : [],
     fixedColor: setup?.fixedColor || "",
-    selectedProductionMethod: null,
-    productionMethod: null,
-    fixedProductionMethod: null,
+    selectedProductionMethod: setup?.productionMethod || "",
+    productionMethod: setup?.productionMethod || "",
+    fixedProductionMethod: setup?.productionMethod || "",
     productionMethods,
     productionMethodPricing: pricing?.productionMethodPricing || {},
     supportsMultipleSelections: false,
@@ -1655,11 +1719,21 @@ function bindCreatorDesignActions(root) {
       state.actionLoading.add(key);
       const restoreButton = setActionLoading(startButton, "Preparing designer...");
       try {
+        const card = startButton.closest(".customhouse-base-product-card");
+        const fixedColor = card?.querySelector("[data-base-product-color]")?.value || "";
+        const selectedProductionMethod = card?.querySelector("[data-base-product-method]")?.value || "";
+        if (!fixedColor || !selectedProductionMethod) {
+          throw new Error("Choose exactly one product color and one printing method.");
+        }
         const created = await createCreatorProductDraft({
           shopifyProductId: baseProduct.id,
           title: baseProduct.title,
           description: "",
           pitchprintDesignId: baseProduct.pitchprintDesignId,
+          fixedColor,
+          selectedColors: [fixedColor],
+          selectedProductionMethod,
+          fixedProductionMethod: selectedProductionMethod,
         });
         created._customHouseCreatorSetup = {
           schema: "creator_design_setup_v1",
@@ -1671,12 +1745,12 @@ function bindCreatorDesignActions(root) {
           creatorContext: true,
           launchContext: "creator_dashboard",
           isCreatorProduct: true,
-          fixedColor: "",
-          selectedColor: "",
-          selectedColors: [],
-          selectedProductionMethod: null,
-          productionMethod: null,
-          fixedProductionMethod: null,
+          fixedColor,
+          selectedColor: fixedColor,
+          selectedColors: [fixedColor],
+          selectedProductionMethod,
+          productionMethod: selectedProductionMethod,
+          fixedProductionMethod: selectedProductionMethod,
         };
         updateCreatorProductInState(root, created);
         showCreatorToast(root, "Draft created.");
@@ -2073,7 +2147,7 @@ function bindMyDesignsUx(root) {
   root.addEventListener("click", async (event) => {
     const filter = event.target.closest("[data-design-filter]");
     if (filter) {
-      dashboardState(root).designFilter = filter.dataset.designFilter || "ALL";
+      dashboardState(root).designFilter = filter.dataset.designFilter || "ACTIVE";
       const profile = root.querySelector("[data-dashboard-profile]");
       renderCreatorProducts(
         profile?.querySelector("[data-dashboard-creator-products]"),
@@ -2085,7 +2159,7 @@ function bindMyDesignsUx(root) {
     if (event.target.closest("[data-design-clear-search]")) {
       const state = dashboardState(root);
       state.designSearch = "";
-      state.designFilter = "ALL";
+      state.designFilter = "ACTIVE";
       const input = root.querySelector("[data-dashboard-design-search]");
       if (input) input.value = "";
       const profile = root.querySelector("[data-dashboard-profile]");
@@ -2423,6 +2497,15 @@ function profileUpdateValues(root, data = {}) {
     "socialportfolio_url": socialUrl,
     "social portfolio url": socialUrl,
     "portfolio url": socialUrl,
+    primaryPlatform: data.primaryPlatform || "",
+    primaryProfileUrl: data.primaryProfileUrl || "",
+    socialLinks: (() => {
+      try {
+        return JSON.parse(data.socialLinksJson || "[]").filter(Boolean).join("\n");
+      } catch {
+        return "";
+      }
+    })(),
     "terms agreement": termsAgreement,
     "terms_agreement": termsAgreement,
     "terms accepted": termsAgreement,
@@ -2773,6 +2856,9 @@ function hydrateNativeProfileForm(root, data = {}) {
   setProfileField(form, "city", values.city);
   setProfileField(form, "country", values.country);
   setProfileField(form, "portfolioUrl", values["socialportfolio_url"]);
+  setProfileField(form, "primaryPlatform", data.primaryPlatform || "");
+  setProfileField(form, "primaryProfileUrl", data.primaryProfileUrl || "");
+  setProfileField(form, "socialLinks", values.socialLinks);
   setProfileField(form, "bio", values["short_creator_bio"]);
   setProfileField(form, "termsAccepted", values["terms_agreement"]);
   updateNativeProfileModalSummary(root, values, data);
@@ -2786,6 +2872,12 @@ function nativeProfilePayload(form) {
     city: String(data.get("city") || ""),
     country: String(data.get("country") || ""),
     portfolioUrl: String(data.get("portfolioUrl") || ""),
+    primaryPlatform: String(data.get("primaryPlatform") || ""),
+    primaryProfileUrl: String(data.get("primaryProfileUrl") || ""),
+    socialLinks: String(data.get("socialLinks") || "")
+      .split(/[\r\n,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean),
     bio: String(data.get("bio") || ""),
     termsAccepted: data.get("termsAccepted") === "on",
   };
@@ -2863,6 +2955,54 @@ function bindProfileUpdateModal(root, refreshDashboard, getDashboardData) {
   });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && modal && !modal.hidden) close();
+  });
+}
+
+function bindCreatorAccountDeactivation(root, refreshDashboard) {
+  const button = root.querySelector("[data-dashboard-deactivate-creator]");
+  if (!button || button.dataset.bound === "true") return;
+  button.dataset.bound = "true";
+  button.addEventListener("click", async () => {
+    const confirmation = window.prompt(
+      "This deactivates your Creator profile but keeps your Shopify customer account and financial history. Type DEACTIVATE to continue.",
+    );
+    if (confirmation !== "DEACTIVATE") return;
+    const restore = setActionLoading(button, "Deactivating...");
+    try {
+      await deactivateCreatorAccount();
+      await refreshDashboard?.();
+    } catch (error) {
+      restore();
+      showDashboardToast(
+        root,
+        error instanceof Error ? error.message : "Creator account could not be deactivated.",
+        "error",
+      );
+    }
+  });
+}
+
+function bindCreatorNotifications(root) {
+  const wrap = root.querySelector("[data-dashboard-notifications]");
+  const toggle = wrap?.querySelector("[data-dashboard-notification-toggle]");
+  const panel = wrap?.querySelector("[data-dashboard-notification-panel]");
+  if (!wrap || !toggle || !panel || wrap.dataset.bound === "true") return;
+  wrap.dataset.bound = "true";
+  const close = () => {
+    panel.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+  };
+  toggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    panel.hidden = !panel.hidden;
+    toggle.setAttribute("aria-expanded", String(!panel.hidden));
+  });
+  wrap.querySelector("[data-dashboard-notification-close]")?.addEventListener("click", close);
+  document.addEventListener("click", (event) => {
+    if (!panel.hidden && !wrap.contains(event.target)) close();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !panel.hidden) close();
   });
 }
 
@@ -2954,10 +3094,12 @@ function bindCollectionBannerManager(root, refreshDashboard, getDashboardData) {
   const save = root.querySelector("[data-dashboard-banner-save]");
   const remove = root.querySelector("[data-dashboard-banner-remove]");
   const selected = root.querySelector("[data-dashboard-banner-selected]");
+  const bannerDraft = (root.__customHouseBannerDraft ||= {});
   const updatePreviewText = () => {
     const current = collectionBannerData(getDashboardData?.() || {});
     renderCollectionBannerPreview(root, {
       ...current,
+      ...(bannerDraft.bannerImageUrl ? { bannerImageUrl: bannerDraft.bannerImageUrl } : {}),
       bannerTitle: title?.value || "",
       bannerSubtitle: subtitle?.value || "",
     });
@@ -2967,8 +3109,10 @@ function bindCollectionBannerManager(root, refreshDashboard, getDashboardData) {
   input?.addEventListener("change", () => {
     const file = input.files?.[0];
     if (!file) return;
+    if (bannerDraft.bannerImageUrl?.startsWith("blob:")) URL.revokeObjectURL(bannerDraft.bannerImageUrl);
+    bannerDraft.bannerImageUrl = URL.createObjectURL(file);
     renderCollectionBannerPreview(root, {
-      bannerImageUrl: URL.createObjectURL(file),
+      bannerImageUrl: bannerDraft.bannerImageUrl,
       bannerTitle: title?.value || "",
       bannerSubtitle: subtitle?.value || "",
     });
@@ -2986,6 +3130,8 @@ function bindCollectionBannerManager(root, refreshDashboard, getDashboardData) {
     setBannerMessage(message, "Saving collection banner...", "neutral");
     try {
       const collection = await saveCollectionBanner(form);
+      if (bannerDraft.bannerImageUrl?.startsWith("blob:")) URL.revokeObjectURL(bannerDraft.bannerImageUrl);
+      bannerDraft.bannerImageUrl = "";
       if (input) input.value = "";
       if (selected) {
         selected.textContent = "";
@@ -3025,6 +3171,8 @@ function bindCollectionBannerManager(root, refreshDashboard, getDashboardData) {
         toast: "Collection banner removed.",
         onConfirm: async () => {
           const collection = await removeCollectionBanner();
+          if (bannerDraft.bannerImageUrl?.startsWith("blob:")) URL.revokeObjectURL(bannerDraft.bannerImageUrl);
+          bannerDraft.bannerImageUrl = "";
           if (input) input.value = "";
           hydrateCollectionBannerManager(root, { collection });
           if (typeof refreshDashboard === "function") {
@@ -4512,6 +4660,8 @@ if (typeof document !== "undefined") {
         { quiet: Boolean(options.quiet) },
       );
     bindProfileUpdateModal(root, refreshDashboard, () => latestDashboardData);
+    bindCreatorAccountDeactivation(root, refreshDashboard);
+    bindCreatorNotifications(root);
     bindCollectionBannerManager(root, refreshDashboard, () => latestDashboardData);
     bindPitchPrintManager(root);
     bindCreatorDesignActions(root);
