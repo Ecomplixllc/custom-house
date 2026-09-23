@@ -7,7 +7,9 @@ import {
 } from "../app/services/shopify-graphql.server.ts";
 import {
   CREATOR_PRODUCTION_PRICING_PRODUCT_ID,
+  feeVariantIdForEmbroiderySubtype,
   parseSurchargeInput,
+  pricingForEmbroiderySubtype,
   productionPricingBridgePayload,
   pricingConfigToMetafieldValue,
   saveCreatorProductionPricing,
@@ -25,10 +27,24 @@ type PricingRow = PublicProductProductionPricingRecord;
 
 type PricingCreateData = Pick<
   PricingRow,
-  "shopKey" | "shopifyProductId" | "embroiderySurcharge" | "dtfSurcharge" | "dtgSurcharge"
+  | "shopKey"
+  | "shopifyProductId"
+  | "embroiderySurcharge"
+  | "embroideryTextSurcharge"
+  | "embroideryImageSurcharge"
+  | "dtfSurcharge"
+  | "dtgSurcharge"
 > &
   Partial<
-    Pick<PricingRow, "id" | "embroideryFeeVariantId" | "dtfFeeVariantId" | "dtgFeeVariantId">
+    Pick<
+      PricingRow,
+      | "id"
+      | "embroideryFeeVariantId"
+      | "embroideryTextFeeVariantId"
+      | "embroideryImageFeeVariantId"
+      | "dtfFeeVariantId"
+      | "dtgFeeVariantId"
+    >
   >;
 
 type PricingDbArgs = {
@@ -107,6 +123,20 @@ test("production method surcharge validation accepts zero and two decimals", () 
 test("production method surcharge validation rejects negative and too many decimals", () => {
   assert.throws(() => parseSurchargeInput("-1"), /negative/i);
   assert.throws(() => parseSurchargeInput("1.234"), /two decimals/i);
+});
+
+test("embroidery subtype pricing uses configured Text and Image or Logo rates", () => {
+  const pricing = {
+    embroideryTextSurcharge: parseSurchargeInput("99.00"),
+    embroideryImageSurcharge: parseSurchargeInput("300.00"),
+    embroideryTextFeeVariantId: "gid://shopify/ProductVariant/991",
+    embroideryImageFeeVariantId: "gid://shopify/ProductVariant/992",
+  };
+  assert.equal(pricingForEmbroiderySubtype(pricing, "TEXT_ONLY").toFixed(2), "99.00");
+  assert.equal(pricingForEmbroiderySubtype(pricing, "IMAGE_OR_LOGO").toFixed(2), "300.00");
+  assert.equal(feeVariantIdForEmbroiderySubtype(pricing, "TEXT_ONLY"), "gid://shopify/ProductVariant/991");
+  assert.equal(feeVariantIdForEmbroiderySubtype(pricing, "IMAGE_OR_LOGO"), "gid://shopify/ProductVariant/992");
+  assert.throws(() => pricingForEmbroiderySubtype(pricing, undefined), /validated embroidery artwork subtype/);
 });
 
 test("production method display config serializes minor units", () => {
@@ -263,6 +293,8 @@ test("saving production pricing is isolated per public product", async () => {
             variants: {
               nodes: [
                 { id: "gid://shopify/ProductVariant/9001", title: "Embroidery Production Fee" },
+                { id: "gid://shopify/ProductVariant/9004", title: "Embroidery Text Production Fee" },
+                { id: "gid://shopify/ProductVariant/9005", title: "Embroidery Image or Logo Production Fee" },
                 { id: "gid://shopify/ProductVariant/9002", title: "DTF Production Fee" },
                 { id: "gid://shopify/ProductVariant/9003", title: "DTG Production Fee" },
               ],
@@ -365,6 +397,8 @@ test("saving creator production pricing uses one shared creator key without prod
               variants: {
                 nodes: [
                   { id: "gid://shopify/ProductVariant/9001", title: "Embroidery Production Fee" },
+                  { id: "gid://shopify/ProductVariant/9004", title: "Embroidery Text Production Fee" },
+                  { id: "gid://shopify/ProductVariant/9005", title: "Embroidery Image or Logo Production Fee" },
                   { id: "gid://shopify/ProductVariant/9002", title: "DTF Production Fee" },
                   { id: "gid://shopify/ProductVariant/9003", title: "DTG Production Fee" },
                 ],
@@ -458,6 +492,8 @@ test("admin save writes storefront pricing metafield after fee IDs are persisted
               variants: {
                 nodes: [
                   { id: "gid://shopify/ProductVariant/9001", title: "Embroidery Production Fee" },
+                  { id: "gid://shopify/ProductVariant/9004", title: "Embroidery Text Production Fee" },
+                  { id: "gid://shopify/ProductVariant/9005", title: "Embroidery Image or Logo Production Fee" },
                   { id: "gid://shopify/ProductVariant/9002", title: "DTF Production Fee" },
                   { id: "gid://shopify/ProductVariant/9003", title: "DTG Production Fee" },
                 ],
@@ -530,9 +566,13 @@ test("production fee sync uses supported productSet variant input and maps price
     shopKey: "shop.test",
     shopifyProductId: "gid://shopify/Product/100",
     embroiderySurcharge: parseSurchargeInput("10.00"),
+    embroideryTextSurcharge: parseSurchargeInput("10.00"),
+    embroideryImageSurcharge: parseSurchargeInput("10.00"),
     dtfSurcharge: parseSurchargeInput("20.00"),
     dtgSurcharge: parseSurchargeInput("30.00"),
     embroideryFeeVariantId: null,
+    embroideryTextFeeVariantId: null,
+    embroideryImageFeeVariantId: null,
     dtfFeeVariantId: null,
     dtgFeeVariantId: null,
   };
@@ -590,6 +630,8 @@ test("production fee sync uses supported productSet variant input and maps price
             variants: {
               nodes: [
                 { id: "gid://shopify/ProductVariant/9001", title: "Embroidery Production Fee" },
+                { id: "gid://shopify/ProductVariant/9004", title: "Embroidery Text Production Fee" },
+                { id: "gid://shopify/ProductVariant/9005", title: "Embroidery Image or Logo Production Fee" },
                 { id: "gid://shopify/ProductVariant/9002", title: "DTF Production Fee" },
                 { id: "gid://shopify/ProductVariant/9003", title: "DTG Production Fee" },
               ],
@@ -607,15 +649,19 @@ test("production fee sync uses supported productSet variant input and maps price
   assert.ok(productSetInput);
   assert.deepEqual(
     productSetInput.variants.map((variant) => variant.price),
-    ["10.00", "20.00", "30.00"],
+    ["10.00", "10.00", "10.00", "20.00", "30.00"],
   );
   assert.equal(productSetInput.variants.some((variant) => "requiresShipping" in variant), false);
   assert.deepEqual(productSetInput.variants.map((variant) => variant.inventoryPolicy), [
     "CONTINUE",
     "CONTINUE",
     "CONTINUE",
+    "CONTINUE",
+    "CONTINUE",
   ]);
   assert.deepEqual(productSetInput.variants.map((variant) => variant.inventoryItem?.tracked), [
+    false,
+    false,
     false,
     false,
     false,
@@ -669,9 +715,13 @@ test("production fee sync keeps fee product active and published to Online Store
     shopKey: "shop.test",
     shopifyProductId: "gid://shopify/Product/100",
     embroiderySurcharge: parseSurchargeInput("50.00"),
+    embroideryTextSurcharge: parseSurchargeInput("50.00"),
+    embroideryImageSurcharge: parseSurchargeInput("50.00"),
     dtfSurcharge: parseSurchargeInput("20.00"),
     dtgSurcharge: parseSurchargeInput("30.00"),
     embroideryFeeVariantId: null,
+    embroideryTextFeeVariantId: null,
+    embroideryImageFeeVariantId: null,
     dtfFeeVariantId: null,
     dtgFeeVariantId: null,
   };
@@ -717,6 +767,8 @@ test("production fee sync keeps fee product active and published to Online Store
               variants: {
                 nodes: [
                   { id: "gid://shopify/ProductVariant/9001", title: "Embroidery Production Fee" },
+                  { id: "gid://shopify/ProductVariant/9004", title: "Embroidery Text Production Fee" },
+                  { id: "gid://shopify/ProductVariant/9005", title: "Embroidery Image or Logo Production Fee" },
                   { id: "gid://shopify/ProductVariant/9002", title: "DTF Production Fee" },
                   { id: "gid://shopify/ProductVariant/9003", title: "DTG Production Fee" },
                 ],
@@ -883,9 +935,13 @@ const fakePricingDb = {
         shopKey: "shop.test",
         shopifyProductId: "gid://shopify/Product/100",
         embroiderySurcharge: parseSurchargeInput("50.00"),
+        embroideryTextSurcharge: parseSurchargeInput("55.00"),
+        embroideryImageSurcharge: parseSurchargeInput("60.00"),
         dtfSurcharge: parseSurchargeInput("30.00"),
         dtgSurcharge: parseSurchargeInput("20.00"),
         embroideryFeeVariantId: "gid://shopify/ProductVariant/9001",
+        embroideryTextFeeVariantId: "gid://shopify/ProductVariant/9004",
+        embroideryImageFeeVariantId: "gid://shopify/ProductVariant/9005",
         dtfFeeVariantId: "gid://shopify/ProductVariant/9002",
         dtgFeeVariantId: "gid://shopify/ProductVariant/9003",
       };

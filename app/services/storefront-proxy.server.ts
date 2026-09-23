@@ -408,6 +408,9 @@ function publicCss() {
     .customhouse-locked-details dt{color:var(--ch-muted);font-size:.72rem;font-weight:950;text-transform:uppercase}
     .customhouse-locked-details dd{display:inline-flex;align-items:center;gap:.45rem;margin:0;color:#fff;font-weight:900;text-align:right}
     .customhouse-made-to-order-note{margin:0;color:var(--ch-muted);font-size:.86rem;line-height:1.42}
+    .customhouse-acknowledgement{display:flex;align-items:flex-start;gap:.65rem;color:var(--ch-text);font-size:.86rem;font-weight:650;line-height:1.42;text-transform:none}
+    .customhouse-acknowledgement input{width:18px;height:18px;margin:.1rem 0 0;accent-color:var(--ch-primary)}
+    .customhouse-acknowledgement a{color:var(--ch-service)}
     .customhouse-product-form{display:grid;gap:1rem}
     .customhouse-field{display:grid;gap:.65rem;margin:0;font-weight:850;text-transform:uppercase}
     .customhouse-field select{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
@@ -480,6 +483,7 @@ function siteFooter() {
         <a href="/pages/about-us">About</a>
         <a href="/pages/contact">Contact</a>
         <a href="/pages/faq">FAQ</a>
+        <a href="/pages/become-a-creator">Become a Creator</a>
         <a href="/policies/refund-policy">Returns</a>
       </nav>
     </div>
@@ -509,6 +513,7 @@ export function collectionHtml(input: {
     baseProductTitle: string;
     previewUrl: string | null;
     previewUrls?: string | null;
+    publishedShopifyProductUrl?: string | null;
     baseProduct?: {
       priceRange: {
         minVariantPrice: { amount: string; currencyCode: string };
@@ -540,7 +545,9 @@ export function collectionHtml(input: {
               : `${formatMoney(price.amount, price.currencyCode)} - ${formatMoney(max?.amount || price.amount, price.currencyCode)}`
             : "";
           const href =
-            getCreatorProductStorefrontUrl(input.collection, product) || "#";
+            (product.publishedShopifyProductUrl?.startsWith("/") || product.publishedShopifyProductUrl?.startsWith("https://")
+              ? product.publishedShopifyProductUrl
+              : null) || getCreatorProductStorefrontUrl(input.collection, product) || "#";
           const preview = productPreviewImages(product)[0] || product.previewUrl;
           return `<a class="customhouse-public-card" href="${href}">
             <span class="customhouse-public-card-favorite material-symbols-outlined" aria-hidden="true">favorite</span>
@@ -772,7 +779,11 @@ function productHtml(input: {
             },
           ]
         : [];
-  const defaultProductionMethod = productionMethods[0]?.method || input.productionPricing?.method || "";
+  const fixedProductionMethod = setup?.productionMethod || input.productionPricing?.method || "";
+  const fixedProductionMethods = productionMethods.filter(
+    (method) => method.method === fixedProductionMethod,
+  );
+  const defaultProductionMethod = fixedProductionMethod;
   const defaultProductionSurchargeMinor =
     BigInt(productionMethods.find((method) => method.method === defaultProductionMethod)?.surchargeMinor || "0") *
     BigInt(Math.max(1, placementCount));
@@ -790,20 +801,6 @@ function productHtml(input: {
     if (!variant) return "";
     const baseMinor = BigInt(Math.round(Number(variant.price.amount || 0) * 100));
     return formatMinorAmount(baseMinor + defaultProductionSurchargeMinor, variant.price.currencyCode);
-  };
-  const productionCurrencyCode = firstAvailable?.price.currencyCode || "SEK";
-  const productionMethodDisplayRateMinor = (method: { surchargeMinor: string }) => {
-    try {
-      return BigInt(method.surchargeMinor || "0");
-    } catch {
-      return 0n;
-    }
-  };
-  const productionMethodPriceLabel = (method: { surchargeMinor: string }) => {
-    const surchargeMinor = productionMethodDisplayRateMinor(method);
-    return surchargeMinor > 0n
-      ? `+${formatMinorAmount(surchargeMinor, productionCurrencyCode)}`
-      : "Included";
   };
   const optionControls = (input.baseProduct?.options || [])
     .filter((option) => {
@@ -885,43 +882,17 @@ function productHtml(input: {
           <dd><span class="customhouse-swatch" style="--ch-swatch:${swatchColor(fixedColor)}" aria-hidden="true"></span>${escapeHtml(fixedColor)}</dd>
         </div>
         <div>
+          <dt>Printing method</dt>
+          <dd>${escapeHtml(methodLabel(defaultProductionMethod))}</dd>
+        </div>
+        <div>
           <dt>Designed placements</dt>
           <dd>${escapeHtml(String(placementCount))}</dd>
         </div>
       </dl>`
     : "";
-  const productionMethodControls = productionMethods.length
-    ? `<label class="customhouse-field">
-        <span class="customhouse-option-header">
-          <span>Printing method:</span>
-          <strong data-customhouse-option-current="selectedProductionMethod">${escapeHtml(methodLabel(defaultProductionMethod))}</strong>
-        </span>
-        <select data-customhouse-production-method name="selectedProductionMethod" required>
-          ${productionMethods
-            .map(
-              (method) =>
-                `<option value="${escapeHtml(method.method)}"${method.method === defaultProductionMethod ? " selected" : ""}>${escapeHtml(methodLabel(method.method))}</option>`,
-            )
-            .join("")}
-        </select>
-        <span class="customhouse-option-pills" aria-label="Printing method options">
-          ${productionMethods
-            .map((method) => {
-              const active = method.method === defaultProductionMethod;
-              return `<button
-                class="customhouse-option-pill${active ? " is-active" : ""}"
-                type="button"
-                data-customhouse-option-pill
-                data-option-target="selectedProductionMethod"
-                data-option-value="${escapeHtml(method.method)}"
-                data-option-label="${escapeHtml(methodLabel(method.method))}"
-                data-option-price="${escapeHtml(productionMethodPriceLabel(method))}"
-                aria-pressed="${active ? "true" : "false"}"
-              ><span>${escapeHtml(methodLabel(method.method))}</span><span class="customhouse-option-pill__price">${escapeHtml(productionMethodPriceLabel(method))}</span></button>`;
-            })
-            .join("")}
-        </span>
-      </label>`
+  const productionMethodControls = fixedProductionMethods.length
+    ? `<input data-customhouse-production-method type="hidden" name="selectedProductionMethod" value="${escapeHtml(defaultProductionMethod)}">`
     : `<label class="customhouse-field">
         <span>Printing method</span>
         <select data-customhouse-production-method name="selectedProductionMethod" disabled required>
@@ -1057,6 +1028,8 @@ function productHtml(input: {
                   </span>
                 </label>
                 <p class="customhouse-made-to-order-note">This customized Creator product is made to order and cannot be returned.</p>
+                <label class="customhouse-acknowledgement"><input name="nonReturnAcknowledged" type="checkbox" required> <span>I understand that this is a customized / made-to-order product and cannot be returned.</span></label>
+                <label class="customhouse-acknowledgement"><input name="termsAccepted" type="checkbox" required> <span>I accept the <a href="/policies/terms-of-service" target="_blank" rel="noopener">Terms &amp; Conditions</a>.</span></label>
                 <button class="customhouse-add-button" type="submit">Add to Cart</button>
                 <p data-customhouse-cart-message role="status" aria-live="polite"></p>
               </form>
@@ -1402,7 +1375,9 @@ function productHtml(input: {
                   body: JSON.stringify({
                     variantId: form.variantId.value,
                     selectedProductionMethod: productionMethodInput?.value || "",
-                    quantity: Number(form.quantity.value || 1)
+                    quantity: Number(form.quantity.value || 1),
+                    nonReturnAcknowledged: Boolean(form.nonReturnAcknowledged?.checked),
+                    termsAccepted: Boolean(form.termsAccepted?.checked)
                   })
                 });
                 const prepared = await readPrepareCartResponse(response, "PREPARE_CART", "This item is temporarily unavailable.");
@@ -1853,6 +1828,8 @@ export async function handleStorefrontProxy(
               selectedProductionMethod:
                 body.selectedProductionMethod ?? body.productionMethod,
               quantity: body.quantity,
+              nonReturnAcknowledged: body.nonReturnAcknowledged,
+              termsAccepted: body.termsAccepted,
             },
             context.client,
           );
