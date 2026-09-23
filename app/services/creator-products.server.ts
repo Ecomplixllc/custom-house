@@ -115,6 +115,10 @@ export type CreateCreatorProductInput = {
   title?: unknown;
   description?: unknown;
   pitchprintDesignId?: unknown;
+  fixedColor?: unknown;
+  selectedColors?: unknown;
+  selectedProductionMethod?: unknown;
+  fixedProductionMethod?: unknown;
 };
 
 export type AttachPitchPrintProjectInput = {
@@ -184,7 +188,7 @@ export type CreatorProductSetup = {
   isCreatorProduct: true;
   fixedColor: string;
   selectedColors: string[];
-  productionMethod: ProductionMethodCode | null;
+  productionMethod: ProductionMethodCode;
   placementCount: number;
   placements: string[];
   copyrightAccepted: boolean;
@@ -260,6 +264,8 @@ export type PrepareCreatorProductCartInput = {
   selectedProductionMethod?: unknown;
   productionMethod?: unknown;
   quantity?: unknown;
+  nonReturnAcknowledged?: unknown;
+  termsAccepted?: unknown;
 };
 
 export type PrepareNativeCreatorProductCartInput = {
@@ -776,6 +782,7 @@ export function creatorProductSetupFromRecord(product: CreatorProductRecord) {
     setup.designMode !== "creator_design" ||
     setup.isCreatorProduct !== true ||
     !setup.fixedColor ||
+    !setup.productionMethod ||
     !setup.placementCount ||
     !setup.copyrightAccepted
   ) {
@@ -829,12 +836,15 @@ async function cleanCreatorProductSetup(
     setup.fixedProductionMethod ||
     setup.productionMethod ||
     setup.selectedProductionMethod;
-  const productionMethod =
-    typeof rawProductionMethod === "string" && rawProductionMethod.trim()
-      ? cleanProductionMethod(rawProductionMethod)
-      : null;
+  if (typeof rawProductionMethod !== "string" || !rawProductionMethod.trim()) {
+    throw new DomainError(
+      "PRODUCTION_METHOD_REQUIRED",
+      "Choose exactly one printing method for this Creator Product.",
+      422,
+    );
+  }
+  const productionMethod = cleanProductionMethod(rawProductionMethod);
   const enabledMethods =
-    productionMethod &&
     database.productionMethodSetting &&
     database.publicProductProductionPricing
       ? await listEnabledProductionMethodCodes(
@@ -842,7 +852,7 @@ async function cleanCreatorProductSetup(
           database as unknown as Parameters<typeof listEnabledProductionMethodCodes>[1],
         )
       : [];
-  if (productionMethod && enabledMethods.length && !enabledMethods.includes(productionMethod)) {
+  if (enabledMethods.length && !enabledMethods.includes(productionMethod)) {
     throw new DomainError(
       "PRODUCTION_METHOD_DISABLED",
       "Choose an enabled printing method.",
@@ -889,7 +899,7 @@ async function cleanCreatorProductSetup(
       422,
     );
   }
-  if (productionMethod && database.publicProductProductionPricing) {
+  if (database.publicProductProductionPricing) {
     const pricing = await getProductionPricing(
       shop,
       shopifyProductId,
@@ -1353,6 +1363,64 @@ export async function createCreatorProductDraft(
     );
   }
   const baseProductVariants = creatorProductBaseVariants(product);
+  const selectedColors = [
+    ...new Set([
+      ...stringArray(input.selectedColors),
+      ...stringArray(input.fixedColor),
+    ]),
+  ];
+  if (selectedColors.length !== 1) {
+    throw new DomainError(
+      "CREATOR_COLOR_REQUIRED",
+      "Choose exactly one product color for this Creator Product.",
+      422,
+    );
+  }
+  const fixedColor = selectedColors[0]!;
+  const colors = baseProductColorValues(baseProductVariants);
+  if (!colors.some((color) => normalizedOptionText(color) === normalizedOptionText(fixedColor))) {
+    throw new DomainError(
+      "CREATOR_COLOR_INVALID",
+      "Choose a color that exists on the base product.",
+      422,
+    );
+  }
+  const productionMethod = cleanProductionMethod(
+    input.fixedProductionMethod ?? input.selectedProductionMethod,
+  );
+  const enabledMethods = database.productionMethodSetting
+    ? await listEnabledProductionMethodCodes(
+        shop,
+        database as unknown as Parameters<typeof listEnabledProductionMethodCodes>[1],
+      )
+    : [];
+  if (enabledMethods.length && !enabledMethods.includes(productionMethod)) {
+    throw new DomainError(
+      "PRODUCTION_METHOD_DISABLED",
+      "Choose an enabled printing method.",
+      422,
+    );
+  }
+  const initialSetup = {
+    schema: "creator_design_setup_v1",
+    flowMode: "CREATOR_DESIGN",
+    interactionMode: "CREATOR_DESIGN",
+    productOrigin: "global",
+    baseProductOrigin: "global",
+    designMode: "creator_design",
+    creatorContext: true,
+    launchContext: "creator_dashboard",
+    isCreatorProduct: true,
+    fixedColor,
+    selectedColors: [fixedColor],
+    productionMethod,
+    fixedProductionMethod: productionMethod,
+    placementCount: 0,
+    placements: [],
+    copyrightAccepted: false,
+    nonReturnAcknowledged: false,
+    savedAt: new Date().toISOString(),
+  };
 
   const creatorProduct = await database.creatorProduct.create({
     data: {
@@ -1367,7 +1435,7 @@ export async function createCreatorProductDraft(
       previewUrl,
       previewUrls: safeJson(previewUrl ? [previewUrl] : []),
       baseProductVariantsJson: safeJson(baseProductVariants),
-      designVariantSelectionsJson: "[]",
+      designVariantSelectionsJson: safeJson(initialSetup),
       status: "DRAFT",
     },
   });
@@ -1383,6 +1451,8 @@ export async function createCreatorProductDraft(
         creatorId: creator.id,
         shopifyProductId: product.id,
         status: "DRAFT",
+        fixedColor,
+        productionMethod,
       }),
     },
   });
@@ -1519,10 +1589,63 @@ export async function attachPitchPrintProjectToCreatorProduct(
   const projectId = cleanProjectId(input.projectId);
   const previewUrls = cleanPreviewUrls(input);
   const previewUrl = previewUrls[0] || existing.previewUrl || null;
+  let lockedSetup: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(existing.designVariantSelectionsJson || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      lockedSetup = parsed as Record<string, unknown>;
+    }
+  } catch {
+    lockedSetup = {};
+  }
+  const requestedSetup = rawCreatorSetup(input);
+  const requestedColors = [
+    ...new Set([
+      ...stringArray(requestedSetup.selectedColors),
+      ...stringArray(requestedSetup.selectedColor),
+      ...stringArray(requestedSetup.fixedColor),
+    ]),
+  ];
+  const lockedColor = cleanOptionalText(lockedSetup.fixedColor, 120);
+  if (
+    lockedColor &&
+    requestedColors.some((color) => normalizedOptionText(color) !== normalizedOptionText(lockedColor))
+  ) {
+    throw new DomainError("CREATOR_COLOR_LOCKED", "The product color is fixed for this Creator Product.", 422);
+  }
+  const lockedMethod = cleanOptionalText(lockedSetup.productionMethod, 40);
+  const requestedMethod = cleanOptionalText(
+    requestedSetup.fixedProductionMethod || requestedSetup.productionMethod || requestedSetup.selectedProductionMethod,
+    40,
+  );
+  if (lockedMethod && requestedMethod && cleanProductionMethod(requestedMethod) !== cleanProductionMethod(lockedMethod)) {
+    throw new DomainError("PRODUCTION_METHOD_LOCKED", "The printing method is fixed for this Creator Product.", 422);
+  }
+  const lockedInput = {
+    ...input,
+    fixedColor: lockedColor || input.fixedColor,
+    selectedColors: lockedColor ? [lockedColor] : input.selectedColors,
+    fixedProductionMethod: lockedMethod || input.fixedProductionMethod,
+    productionMethod: lockedMethod || input.productionMethod,
+    selectedProductionMethod: lockedMethod || input.selectedProductionMethod,
+    creatorSetup: {
+      ...(input.creatorSetup && typeof input.creatorSetup === "object"
+        ? (input.creatorSetup as Record<string, unknown>)
+        : {}),
+      fixedColor: lockedColor || requestedSetup.fixedColor,
+      selectedColor: lockedColor || requestedSetup.selectedColor,
+      selectedColors: lockedColor ? [lockedColor] : requestedSetup.selectedColors,
+      fixedProductionMethod:
+        lockedMethod || requestedSetup.fixedProductionMethod,
+      productionMethod: lockedMethod || requestedSetup.productionMethod,
+      selectedProductionMethod:
+        lockedMethod || requestedSetup.selectedProductionMethod,
+    },
+  };
   const setup = await cleanCreatorProductSetup(
     shop,
     existing.shopifyProductId,
-    input,
+    lockedInput,
     productBaseVariants(existing),
     database,
   );
@@ -1752,14 +1875,14 @@ export async function deleteCreatorProductForCustomer(
     );
   }
   const hasHistory = (await creatorProductHistoryCount(shop, existing.id, database)) > 0;
-  if (hasHistory || existing.status === "ARCHIVED") {
+  if (hasHistory) {
     throw new DomainError(
       "PRODUCT_HAS_ORDER_HISTORY",
       "Designs with order or sales history cannot be permanently deleted.",
       409,
     );
   }
-  if (!["DRAFT", "REJECTED"].includes(existing.status)) {
+  if (!["DRAFT", "REJECTED", "ARCHIVED"].includes(existing.status)) {
     throw new DomainError(
       "INVALID_STATUS_TRANSITION",
       "This design cannot be deleted.",
@@ -1792,6 +1915,73 @@ export async function deleteCreatorProductForCustomer(
     },
   });
   return deleted;
+}
+
+export async function cleanupCreatorProductAsAdmin(
+  shop: string,
+  adminId: string | null,
+  creatorProductId: string,
+  action: "ARCHIVE" | "DELETE",
+  database: CreatorProductDb = db,
+) {
+  const existing = await database.creatorProduct.findFirst({
+    where: { id: cleanCreatorProductId(creatorProductId), shop },
+  });
+  if (!existing) throw new DomainError("CREATOR_PRODUCT_NOT_FOUND", "Creator Product not found.", 404);
+  const [orderItems, sales] = await Promise.all([
+    database.creatorOrderItem?.count({ where: { creatorProductId: existing.id } }) ?? 0,
+    database.creatorSale?.count({ where: { creatorProductId: existing.id } }) ?? 0,
+  ]);
+  const hasHistory = Number(orderItems) > 0 || Number(sales) > 0;
+  if (action === "ARCHIVE") {
+    const archived = await database.creatorProduct.update({
+      where: { id: existing.id },
+      data: { status: "ARCHIVED" },
+    });
+    await database.auditLog?.create({
+      data: {
+        shop,
+        actorType: "ADMIN",
+        actorId: adminId,
+        action: "creator_product.archived_by_admin",
+        entityType: "CreatorProduct",
+        entityId: existing.id,
+        beforeJson: safeJson({ status: existing.status }),
+        afterJson: safeJson({ status: "ARCHIVED", preservedHistory: hasHistory }),
+      },
+    });
+    return { product: archived, hardDeleted: false, hasHistory };
+  }
+  if (hasHistory) {
+    throw new DomainError(
+      "CREATOR_PRODUCT_HISTORY_REQUIRES_ARCHIVE",
+      "This product has order or financial history and must be archived instead of deleted.",
+      409,
+    );
+  }
+  if (!["DRAFT", "REJECTED", "ARCHIVED"].includes(existing.status)) {
+    throw new DomainError(
+      "CREATOR_PRODUCT_REQUIRES_ARCHIVE",
+      "Only draft, rejected, or archived products can be permanently deleted.",
+      409,
+    );
+  }
+  if (typeof database.creatorProduct.delete !== "function") {
+    throw new DomainError("DELETE_UNAVAILABLE", "Product delete is temporarily unavailable.", 503);
+  }
+  await database.creatorProduct.delete({ where: { id: existing.id } });
+  await database.auditLog?.create({
+    data: {
+      shop,
+      actorType: "ADMIN",
+      actorId: adminId,
+      action: "creator_product.deleted_by_admin",
+      entityType: "CreatorProduct",
+      entityId: existing.id,
+      beforeJson: safeJson({ status: existing.status, hasHistory: false }),
+    },
+  });
+  return { product: existing, hardDeleted: true, hasHistory: false };
 }
 
 export async function archiveCreatorProductForCustomer(
@@ -2314,9 +2504,34 @@ export async function prepareCreatorProductCart(
     );
   }
   const setup = requireCreatorProductSetup(product);
-  const productionMethod = cleanProductionMethod(
-    input.selectedProductionMethod ?? input.productionMethod ?? setup.productionMethod,
-  );
+  const productionMethod = cleanProductionMethod(setup.productionMethod);
+  const clientProductionMethod =
+    input.selectedProductionMethod ?? input.productionMethod;
+  if (
+    typeof clientProductionMethod === "string" &&
+    clientProductionMethod.trim() &&
+    cleanProductionMethod(clientProductionMethod) !== productionMethod
+  ) {
+    throw new DomainError(
+      "PRODUCTION_METHOD_LOCKED",
+      "The printing method is fixed for this Creator Product.",
+      422,
+    );
+  }
+  if (!booleanTrue(input.nonReturnAcknowledged)) {
+    throw new DomainError(
+      "NON_RETURN_ACKNOWLEDGEMENT_REQUIRED",
+      "Confirm that this customized made-to-order product cannot be returned.",
+      422,
+    );
+  }
+  if (!booleanTrue(input.termsAccepted)) {
+    throw new DomainError(
+      "TERMS_ACCEPTANCE_REQUIRED",
+      "Accept the Terms and Conditions before adding this customized product to cart.",
+      422,
+    );
+  }
   const enabledMethods = database.productionMethodSetting
     ? await listEnabledProductionMethodCodes(
         shop,
@@ -2453,6 +2668,8 @@ export async function prepareCreatorProductCart(
     "Creator": product.creator.displayName,
     "Color": setup.fixedColor,
     "Printing method": productionMethod,
+    "Customized product acknowledgement": "Accepted",
+    "Terms & Conditions": "Accepted",
   };
   const feeQuantity = quantity * setup.placementCount;
   const feeItem =

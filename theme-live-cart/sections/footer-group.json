@@ -58,6 +58,13 @@
             "text": "VILLKOR",
             "url": "shopify://pages/privacy-policy"
           }
+        },
+        "utility_link_creator": {
+          "type": "utility_link",
+          "settings": {
+            "text": "BECOME A CREATOR",
+            "url": "shopify://pages/become-a-creator"
+          }
         }
       },
       "block_order": [
@@ -66,7 +73,8 @@
         "social_icon_gWMU4T",
         "utility_link_riBndg",
         "utility_link_jEztLx",
-        "utility_link_XQ6xgY"
+        "utility_link_XQ6xgY",
+        "utility_link_creator"
       ],
       "name": "t:names.footer",
       "settings": {

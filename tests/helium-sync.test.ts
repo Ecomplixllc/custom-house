@@ -124,6 +124,7 @@ function creator(overrides: Partial<Creator> = {}): Creator {
     approvedAt: null,
     rejectedAt: null,
     suspendedAt: null,
+    welcomeEmailSentAt: null,
     rejectionReason: null,
     suspensionReason: null,
     createdAt: new Date(0),
