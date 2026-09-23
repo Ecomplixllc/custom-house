@@ -14,6 +14,7 @@ import {
   proxyContext,
 } from "../services/proxy.server";
 import { enforceRateLimit } from "../services/rate-limit.server";
+import { changeCreatorStatus } from "../services/creator.server";
 
 function cleanText(value: unknown, limit: number) {
   const text = typeof value === "string" ? value.trim() : "";
@@ -59,7 +60,8 @@ function parseStringList(value: string | null) {
 
 export async function action({ request }: ActionFunctionArgs) {
   try {
-    const { shop, customerId } = await proxyContext(request);
+    const context = await proxyContext(request);
+    const { shop, customerId } = context;
     enforceRateLimit(`${shop}:${customerId}:profile-update`, 20, 60 * 60 * 1000);
     const body = await jsonBody(request);
     const customerGid = normalizeCustomerGid(customerId!);
@@ -68,6 +70,31 @@ export async function action({ request }: ActionFunctionArgs) {
     });
     if (!creator)
       throw new DomainError("CREATOR_NOT_FOUND", "Creator profile not found.", 404);
+
+    if (request.method.toUpperCase() === "DELETE") {
+      if (creator.status !== "APPROVED") {
+        throw new DomainError("INVALID_STATUS", "Only an active Creator account can be deactivated.", 409);
+      }
+      await changeCreatorStatus(
+        shop,
+        creator.id,
+        "SUSPENDED",
+        context.client,
+        "Deactivated by Creator",
+      );
+      await db.auditLog.create({
+        data: {
+          shop,
+          actorType: "CUSTOMER",
+          actorId: customerGid,
+          action: "creator.account.deactivated",
+          entityType: "Creator",
+          entityId: creator.id,
+          afterJson: safeJson({ status: "SUSPENDED", shopifyCustomerPreserved: true }),
+        },
+      });
+      return apiData({ deactivated: true, shopifyCustomerPreserved: true });
+    }
 
     const displayName = cleanText(body.displayName, 80);
     const legalName = cleanText(body.legalName, 120);
@@ -102,10 +129,10 @@ export async function action({ request }: ActionFunctionArgs) {
           city,
           bio,
           portfolioUrl,
-          socialLinksJson,
+          socialLinksJson: socialLinksJson ?? "[]",
           termsAcceptedAt,
-          primaryPlatform,
-          primaryProfileUrl,
+          primaryPlatform: primaryPlatform ?? null,
+          primaryProfileUrl: primaryProfileUrl ?? null,
           audienceRange,
           categoriesJson: categories.length ? safeJson(categories) : undefined,
           aboutWork,
