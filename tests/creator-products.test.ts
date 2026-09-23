@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import {
   type CreatorProductRecord,
   attachPitchPrintProjectToCreatorProduct,
-  createCreatorProductDraft,
+  cleanupCreatorProductAsAdmin,
+  createCreatorProductDraft as createCreatorProductDraftService,
   getCreatorProductForCustomer,
   getPublishedCreatorProductForHandle,
   getPublishedCreatorProduct,
@@ -12,7 +13,7 @@ import {
   listPublishedCreatorProductsForHandle,
   listCreatorProductsForCustomer,
   moderateCreatorProductAsAdmin,
-  prepareCreatorProductCart,
+  prepareCreatorProductCart as prepareCreatorProductCartService,
   publicCreatorProductDetail,
   archiveCreatorProductForCustomer,
   deleteCreatorProductForCustomer,
@@ -35,6 +36,40 @@ import {
 } from "../app/services/production-method-pricing.server.ts";
 
 const shop = "customhouse.test";
+
+function createCreatorProductDraft(
+  ...args: Parameters<typeof createCreatorProductDraftService>
+) {
+  const [shopKey, customerId, input, client, database] = args;
+  return createCreatorProductDraftService(
+    shopKey,
+    customerId,
+    {
+      fixedColor: "White",
+      selectedProductionMethod: "DTF",
+      ...input,
+    },
+    client,
+    database,
+  );
+}
+
+function prepareCreatorProductCart(
+  ...args: Parameters<typeof prepareCreatorProductCartService>
+) {
+  const [shopKey, input, client, cloner, database] = args;
+  return prepareCreatorProductCartService(
+    shopKey,
+    {
+      nonReturnAcknowledged: true,
+      termsAccepted: true,
+      ...input,
+    },
+    client,
+    cloner,
+    database,
+  );
+}
 const baseProduct = {
   id: "gid://shopify/Product/1001",
   title: "Global Hoodie",
@@ -764,7 +799,7 @@ test("authenticated Creator A can attach a PitchPrint project to their own Draft
     isCreatorProduct: true,
     fixedColor: "White",
     selectedColors: ["White"],
-    productionMethod: null,
+    productionMethod: "DTF",
     placementCount: 1,
     placements: ["Front"],
     copyrightAccepted: true,
@@ -797,7 +832,7 @@ test("Creator Product stores current Shopify size variants from the base product
   );
 });
 
-test("PitchPrint Creator save stores one fixed color without requiring production method", async () => {
+test("PitchPrint Creator save preserves the fixed color and production method", async () => {
   const db = fakeDb();
   const draft = await createCreatorProductDraft(
     shop,
@@ -829,7 +864,7 @@ test("PitchPrint Creator save stores one fixed color without requiring productio
   assert.equal(setup.launchContext, "creator_dashboard");
   assert.equal(setup.fixedColor, "White");
   assert.deepEqual(setup.selectedColors, ["White"]);
-  assert.equal(setup.productionMethod, null);
+  assert.equal(setup.productionMethod, "DTF");
   assert.equal(setup.placementCount, 1);
 });
 
@@ -861,7 +896,7 @@ test("PitchPrint save requires exactly one selected Creator color", async () => 
         },
         db,
       ),
-    /exactly one product color/,
+    /product color is fixed/,
   );
 });
 
@@ -895,7 +930,7 @@ test("PitchPrint save rejects colors outside the base product", async () => {
         },
         db,
       ),
-    /exists on the base product/,
+    /product color is fixed/,
   );
 });
 
@@ -1604,9 +1639,9 @@ test("published material PitchPrint edit returns CreatorProduct to review before
       }),
       creatorSetup: {
         ...pitchPrintPayload({ projectId: "pp_project_material_edit" }).creatorSetup,
-        selectedProductionMethod: "DTF",
-        productionMethod: "DTF",
-        fixedProductionMethod: "DTF",
+        selectedProductionMethod: "EMBROIDERY",
+        productionMethod: "EMBROIDERY",
+        fixedProductionMethod: "EMBROIDERY",
       },
     },
     db,
@@ -1614,7 +1649,7 @@ test("published material PitchPrint edit returns CreatorProduct to review before
 
   assert.equal(updated.status, "PENDING");
   assert.equal(updated.pitchprintProjectId, "pp_project_material_edit");
-  assert.equal(JSON.parse(updated.designVariantSelectionsJson).productionMethod, "DTF");
+  assert.equal(JSON.parse(updated.designVariantSelectionsJson).productionMethod, "EMBROIDERY");
   assert.ok(updated.submittedAt);
   await assert.rejects(
     () =>
@@ -1629,7 +1664,7 @@ test("published material PitchPrint edit returns CreatorProduct to review before
   );
 });
 
-test("draft and rejected products without history can be deleted by owner only", async () => {
+test("draft rejected and archived products without history can be deleted by owner only", async () => {
   const db = fakeDb();
   const draft = await createCreatorProductDraft(
     shop,
@@ -1646,6 +1681,14 @@ test("draft and rejected products without history can be deleted by owner only",
     db,
   );
   rejected.status = "REJECTED";
+  const archived = await createCreatorProductDraft(
+    shop,
+    "gid://shopify/Customer/1",
+    { shopifyProductId: baseProduct.id, title: "Archived delete" },
+    fakeClient(),
+    db,
+  );
+  archived.status = "ARCHIVED";
 
   await assert.rejects(
     () => deleteCreatorProductForCustomer(shop, "gid://shopify/Customer/2", draft.id, db),
@@ -1653,9 +1696,11 @@ test("draft and rejected products without history can be deleted by owner only",
   );
   await deleteCreatorProductForCustomer(shop, "gid://shopify/Customer/1", draft.id, db);
   await deleteCreatorProductForCustomer(shop, "gid://shopify/Customer/1", rejected.id, db);
+  await deleteCreatorProductForCustomer(shop, "gid://shopify/Customer/1", archived.id, db);
 
   assert.equal(db.products.some((product) => product.id === draft.id), false);
   assert.equal(db.products.some((product) => product.id === rejected.id), false);
+  assert.equal(db.products.some((product) => product.id === archived.id), false);
 });
 
 test("published and history-linked products cannot be hard deleted", async () => {
@@ -1712,6 +1757,28 @@ test("pending product withdraws to draft before deletion", async () => {
     db,
   );
   assert.equal(withdrawn.status, "DRAFT");
+});
+
+test("admin cleanup archives safely and blocks hard deletion when history exists", async () => {
+  const db = fakeDb();
+  const product = await createCreatorProductDraft(
+    shop,
+    "gid://shopify/Customer/1",
+    { shopifyProductId: baseProduct.id, title: "Admin cleanup" },
+    fakeClient(),
+    db,
+  ) as CreatorProductRecord & { __saleHistory?: boolean; __orderHistory?: boolean };
+  product.__saleHistory = true;
+  product.__orderHistory = true;
+
+  const archived = await cleanupCreatorProductAsAdmin(shop, "admin-1", product.id, "ARCHIVE", db);
+  assert.equal(archived.product.status, "ARCHIVED");
+  assert.equal(archived.hardDeleted, false);
+  assert.equal(archived.hasHistory, true);
+  await assert.rejects(
+    () => cleanupCreatorProductAsAdmin(shop, "admin-1", product.id, "DELETE", db),
+    /must be archived instead of deleted/,
+  );
 });
 
 test("archive removes published product from public collection detail and cart while preserving rows", async () => {
@@ -2326,7 +2393,6 @@ test("creator buy-only detail and cart use shared creator production pricing", a
       where: { shopKey_shopifyProductId: { shopifyProductId: string } };
     }).where.shopKey_shopifyProductId.shopifyProductId;
     lookedUpKeys.push(key);
-    assert.equal(key, CREATOR_PRODUCTION_PRICING_PRODUCT_ID);
     return {
       id: "creator-pricing-1",
       shopKey: shop,
@@ -2379,18 +2445,21 @@ test("creator buy-only detail and cart use shared creator production pricing", a
       creatorHandle: "creator-a",
       creatorProductId: draft.id,
       selectedVariantId: "gid://shopify/ProductVariant/2001",
-      productionMethod: "DTG",
+      productionMethod: "DTF",
     },
     fakePublicProductClient(),
     async () => "pp_order_creator_pricing",
     db,
   );
 
-  assert.deepEqual([...new Set(lookedUpKeys)], [CREATOR_PRODUCTION_PRICING_PRODUCT_ID]);
-  assert.equal(cart.production.method, "DTG");
-  assert.equal(cart.production.surchargeMinor, "2000");
-  assert.equal(cart.production.feeVariantId, "9103");
-  assert.equal(cart.properties["Printing method"], "DTG");
+  assert.deepEqual([...new Set(lookedUpKeys)], [
+    baseProduct.id,
+    CREATOR_PRODUCTION_PRICING_PRODUCT_ID,
+  ]);
+  assert.equal(cart.production.method, "DTF");
+  assert.equal(cart.production.surchargeMinor, "3000");
+  assert.equal(cart.production.feeVariantId, "9102");
+  assert.equal(cart.properties["Printing method"], "DTF");
 });
 
 test("creator cart prep resyncs stale shared creator fee variants", async () => {
@@ -2446,7 +2515,7 @@ test("creator cart prep resyncs stale shared creator fee variants", async () => 
       if (query.includes("CustomHouseProductionFeeVariant")) {
         return {
           node: {
-            id: "gid://shopify/ProductVariant/9103",
+            id: "gid://shopify/ProductVariant/9102",
             availableForSale: false,
             product: { status: "ACTIVE" },
           },
@@ -2466,6 +2535,8 @@ test("creator cart prep resyncs stale shared creator fee variants", async () => 
               variants: {
                 nodes: [
                   { id: "gid://shopify/ProductVariant/9201", title: "Embroidery Production Fee" },
+                  { id: "gid://shopify/ProductVariant/9204", title: "Embroidery Text Production Fee" },
+                  { id: "gid://shopify/ProductVariant/9205", title: "Embroidery Image or Logo Production Fee" },
                   { id: "gid://shopify/ProductVariant/9202", title: "DTF Production Fee" },
                   { id: "gid://shopify/ProductVariant/9203", title: "DTG Production Fee" },
                 ],
@@ -2496,7 +2567,7 @@ test("creator cart prep resyncs stale shared creator fee variants", async () => 
       creatorHandle: "creator-a",
       creatorProductId: draft.id,
       selectedVariantId: "gid://shopify/ProductVariant/2001",
-      productionMethod: "DTG",
+      productionMethod: "DTF",
     },
     client,
     async () => "pp_order_resynced_fee",
@@ -2504,9 +2575,9 @@ test("creator cart prep resyncs stale shared creator fee variants", async () => 
   );
 
   assert.equal(feeSyncCount, 1);
-  assert.equal(cart.production.method, "DTG");
-  assert.equal(cart.production.feeVariantId, "9203");
-  assert.equal(cart.items[1].id, "9203");
+  assert.equal(cart.production.method, "DTF");
+  assert.equal(cart.production.feeVariantId, "9202");
+  assert.equal(cart.items[1].id, "9202");
 });
 test("cart prep rejects manually submitted variants outside the saved fixed color", async () => {
   const db = fakeDb();
@@ -2600,7 +2671,7 @@ test("cart prep rejects manually submitted variants outside the saved fixed colo
       creatorHandle: "creator-a",
       creatorProductId: draft.id,
       selectedVariantId: "gid://shopify/ProductVariant/3001",
-      productionMethod: "DTF",
+      productionMethod: "EMBROIDERY",
     } as unknown as Parameters<typeof prepareCreatorProductCart>[1],
     blackWhiteClient,
     async () => "pp_black_order",
@@ -2608,7 +2679,7 @@ test("cart prep rejects manually submitted variants outside the saved fixed colo
   );
 
   assert.equal(cart.properties["Color"], "Black");
-  assert.equal(cart.properties._production_method, "DTF");
+  assert.equal(cart.properties._production_method, "EMBROIDERY");
   await assert.rejects(
     () =>
       prepareCreatorProductCart(
@@ -2617,7 +2688,7 @@ test("cart prep rejects manually submitted variants outside the saved fixed colo
           creatorHandle: "creator-a",
           creatorProductId: draft.id,
           selectedVariantId: "gid://shopify/ProductVariant/3002",
-          productionMethod: "DTF",
+          productionMethod: "EMBROIDERY",
         },
         blackWhiteClient,
         async () => "pp_white_order",
@@ -2772,7 +2843,7 @@ test("cart prep falls back to master PitchPrint project when clone service fails
       creatorHandle: "creator-a",
       creatorProductId: draft.id,
       selectedVariantId: "gid://shopify/ProductVariant/2001",
-      selectedProductionMethod: "DTG",
+      selectedProductionMethod: "EMBROIDERY",
     },
     fakePublicProductClient(),
     async () => {

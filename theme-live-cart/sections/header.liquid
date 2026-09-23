@@ -480,8 +480,14 @@
             {% else %}
               <p class="customhouse-header__profile-name">Customer account</p>
               <a href="{{ account_login_redirect_url }}">Log in</a>
-              <a href="{{ account_login_redirect_url }}">Create account</a>
-              <a href="{{ become_creator_login_url }}">Become a creator</a>
+              <a class="customhouse-header__profile-choice" href="{{ account_login_redirect_url }}">
+                <strong>Create account</strong>
+                <small>Create a customer account to manage your orders and purchases.</small>
+              </a>
+              <a class="customhouse-header__profile-choice" href="{{ become_creator_login_url }}">
+                <strong>Become a creator</strong>
+                <small>Apply to become a Creator and publish your designs on CustomHouse.</small>
+              </a>
             {% endif %}
           </div>
         </details>
@@ -903,6 +909,28 @@
     color: #111111;
     background: #9bd21a;
     outline: none;
+  }
+
+  .customhouse-header__profile-choice {
+    display: grid;
+    gap: 3px;
+  }
+
+  .customhouse-header__profile-choice strong {
+    font: inherit;
+  }
+
+  .customhouse-header__profile-choice small {
+    color: rgb(255 255 255 / 0.68);
+    font-size: 0.72rem;
+    font-weight: 500;
+    line-height: 1.35;
+    text-transform: none;
+  }
+
+  .customhouse-header__profile-choice:hover small,
+  .customhouse-header__profile-choice:focus-visible small {
+    color: #111111;
   }
 
   .customhouse-header__profile-name {

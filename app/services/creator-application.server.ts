@@ -21,6 +21,7 @@ import {
 } from "./creator-referral.server";
 import type { ShopifyGraphqlClient } from "./shopify-graphql.server";
 import { throwUserErrors } from "./shopify-graphql.server";
+import { sendCreatorWelcomeEmail } from "./creator-welcome-email.server";
 
 export type CreatorApplicationState =
   | { state: "LOGGED_OUT"; loggedIn: false }
@@ -332,12 +333,6 @@ export async function getCreatorApplicationState(
 }
 
 function requireNativeFields(input: CreatorApplicationInput) {
-  if (!input.primaryPlatform) {
-    throw new DomainError("PLATFORM_REQUIRED", "Choose your primary platform.");
-  }
-  if (!input.primaryProfileUrl) {
-    throw new DomainError("PROFILE_URL_REQUIRED", "Enter your primary profile URL.");
-  }
   if (!input.categories?.length) {
     throw new DomainError("CATEGORIES_REQUIRED", "Choose at least one creator category.");
   }
@@ -738,6 +733,7 @@ export async function approveCreatorApplication(
   client: ShopifyGraphqlClient,
 ) {
   const now = new Date();
+  let approvedTransition = false;
   const creator = await db.$transaction(async (tx) => {
     const existing = await tx.creator.findFirst({ where: { id: creatorId, shop } });
     if (!existing) throw new DomainError("CREATOR_NOT_FOUND", "Creator not found.", 404);
@@ -745,6 +741,7 @@ export async function approveCreatorApplication(
     if (existing.status !== "PENDING") {
       throw new DomainError("INVALID_STATUS", "Only pending creators can be approved.", 409);
     }
+    approvedTransition = true;
     const updated = await tx.creator.update({
       where: { id: existing.id },
       data: {
@@ -777,5 +774,21 @@ export async function approveCreatorApplication(
     await syncCustomerStatus(creator.customerId, "APPROVED", client);
   }
   await ensureShopifyCreatorCollection(shop, creator.id, client);
+  if (approvedTransition) {
+    try {
+      await sendCreatorWelcomeEmail(shop, creator.id);
+    } catch {
+      await db.auditLog.create({
+        data: {
+          shop,
+          actorType: "SYSTEM",
+          action: "creator.welcome_email.delivery_failed",
+          entityType: "Creator",
+          entityId: creator.id,
+          afterJson: safeJson({ retryable: true }),
+        },
+      });
+    }
+  }
   return { creator };
 }

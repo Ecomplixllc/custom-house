@@ -184,10 +184,9 @@ function validateClient(value) {
   const errors = {};
   if (value.displayName.trim().length < 2) errors.displayName = "Enter your creator display name.";
   if (value.legalName && value.legalName.trim().length < 2) errors.legalName = "Enter your legal name.";
-  if (value.bio.trim().length < 10) errors.bio = "Write at least 10 characters.";
+  if (value.bio.trim() && value.bio.trim().length < 10) errors.bio = "Write at least 10 characters or leave this optional field blank.";
   if (value.bio.trim().length > 500) errors.bio = "Keep your bio under 500 characters.";
-  if (!value.primaryPlatform) errors.primaryPlatform = "Choose your primary platform.";
-  if (!/^https:\/\/[^ ]+\.[^ ]+/i.test(value.primaryProfileUrl.trim())) errors.primaryProfileUrl = "Enter a valid HTTPS profile URL.";
+  if (value.primaryProfileUrl && !/^https:\/\/[^ ]+\.[^ ]+/i.test(value.primaryProfileUrl.trim())) errors.primaryProfileUrl = "Enter a valid HTTPS profile URL.";
   if (!value.categories.length) errors.categories = "Choose at least one category.";
   if (value.portfolioUrl && !/^https:\/\/[^ ]+\.[^ ]+/i.test(value.portfolioUrl.trim())) errors.portfolioUrl = "Portfolio URL must use HTTPS.";
   if (value.aboutWork.length > 1000) errors.aboutWork = "Keep this under 1000 characters.";
@@ -311,15 +310,15 @@ function renderForm(root, state, step = 0, errors = {}) {
         ${field("City", `<input name="city" value="${escapeHtml(values.city)}" maxlength="100">`, "", false)}
       </div>
       <label class="ch-application__full">
-        <span>Creator Bio *</span>
-        <textarea name="bio" required maxlength="500">${escapeHtml(values.bio)}</textarea>
-        <small class="ch-application__counter"><span>Tell customers about your style and what inspires your work.</span><b>${values.bio.length} / 500</b></small>
+        <span>Creator Bio <small>(optional)</small></span>
+        <textarea name="bio" maxlength="500">${escapeHtml(values.bio)}</textarea>
+        <small class="ch-application__counter"><span>Optional. Tell customers about your style and what inspires your work.</span><b>${values.bio.length} / 500</b></small>
         ${fieldError("bio", errors)}
       </label>
     </div>`,
     `<div class="ch-application__step">
-      ${field("Primary Platform", `<select name="primaryPlatform" required>${selectOptions(options.platforms, values.primaryPlatform)}</select>`, "", true, fieldError("primaryPlatform", errors))}
-      ${field("Primary Profile URL", `<input name="primaryProfileUrl" type="url" inputmode="url" value="${escapeHtml(values.primaryProfileUrl)}" required>`, "Use your most active public profile.", true, fieldError("primaryProfileUrl", errors))}
+      ${field("Primary Platform", `<select name="primaryPlatform">${selectOptions(options.platforms, values.primaryPlatform)}</select>`, "Optional. You can add or change this later in Creator Dashboard → Account.", false, fieldError("primaryPlatform", errors))}
+      ${field("Primary Profile URL", `<input name="primaryProfileUrl" type="url" inputmode="url" value="${escapeHtml(values.primaryProfileUrl)}">`, "Optional. A social presence is not required to apply.", false, fieldError("primaryProfileUrl", errors))}
       ${field("Audience Size", `<select name="audienceRange">${selectOptions(options.audienceRanges, values.audienceRange)}</select>`, "", false)}
       ${field("Portfolio / Website", `<input name="portfolioUrl" type="url" inputmode="url" value="${escapeHtml(values.portfolioUrl)}">`, "Optional, but helpful for review.", false, fieldError("portfolioUrl", errors))}
       <fieldset class="ch-application__full">
