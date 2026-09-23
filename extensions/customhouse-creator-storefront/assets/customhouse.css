@@ -3453,7 +3453,7 @@
   color: #111827;
 }
 
-.customhouse-notification-dot::after {
+.customhouse-notification-dot[data-has-unread="true"]::after {
   content: "";
   position: absolute;
   top: 6px;
@@ -11089,3 +11089,127 @@ body:has([data-customhouse-dashboard]) {
   }
 }
 
+/* Client-final creator account, notification, and fixed setup controls. */
+.customhouse-creator-notifications {
+  position: relative;
+  z-index: 80;
+}
+
+.customhouse-notification-dot {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+[data-dashboard-notification-panel] {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 1000;
+  width: min(320px, calc(100vw - 24px));
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: #111;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+}
+
+[data-dashboard-notification-panel] header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+[data-dashboard-notification-panel] header button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+
+.customhouse-my-designs-heading > button,
+.customhouse-dashboard-empty [data-dashboard-new-product] {
+  min-height: 42px;
+  padding: 0.65rem 1rem;
+  border: 1px solid #c8ff00;
+  border-radius: 8px;
+  background: #000;
+  color: #fff;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.customhouse-base-product-card__setup {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.8rem;
+}
+
+.customhouse-base-product-card__setup label {
+  display: grid;
+  gap: 0.35rem;
+  color: inherit;
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.customhouse-base-product-card__setup select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 0 0.7rem;
+  background: #111;
+  color: #fff;
+}
+
+.customhouse-creator-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 12px;
+  background: rgba(127, 29, 29, 0.12);
+}
+
+.customhouse-creator-danger-zone h4,
+.customhouse-creator-danger-zone p {
+  margin: 0;
+}
+
+.customhouse-creator-danger-zone p {
+  margin-top: 0.35rem;
+}
+
+.customhouse-creator-danger-zone button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  background: transparent;
+  color: #fecaca;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  [data-dashboard-notification-panel] {
+    position: fixed;
+    top: 68px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+
+  .customhouse-creator-danger-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

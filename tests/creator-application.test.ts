@@ -2,10 +2,34 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { validateCreatorApplication, validateProfileImage } from "../app/services/creator-application.ts";
+import {
+  cleanWelcomeEmailContent,
+  DEFAULT_CREATOR_WELCOME_BODY,
+  DEFAULT_CREATOR_WELCOME_SUBJECT,
+} from "../app/services/creator-welcome-email.server.ts";
 
 const valid = { legalName: "Ada Lovelace", displayName: "Ada Creates", country: "Sweden", city: "Stockholm", bio: "A sufficiently long creator biography.", primaryPlatform: "Instagram", primaryProfileUrl: "https://instagram.com/adacreates", audienceRange: "1K-10K", categories: ["Art", "Lifestyle"], portfolioUrl: "https://example.org/portfolio", socialLinks: ["https://example.org/social"], termsAccepted: true, accuracyConfirmed: true };
 
 test("valid creator application is normalized", () => { const value = validateCreatorApplication(valid); assert.equal(value.displayName, "Ada Creates"); assert.equal(value.primaryPlatform, "Instagram"); assert.deepEqual(value.categories, ["Art", "Lifestyle"]); assert.equal(value.socialLinks.length, 2); assert.ok(value.termsAcceptedAt instanceof Date); });
+test("creator application accepts no social presence or bio", () => {
+  const value = validateCreatorApplication({
+    ...valid,
+    bio: "",
+    primaryPlatform: "",
+    primaryProfileUrl: "",
+    portfolioUrl: "",
+    socialLinks: [],
+  });
+  assert.equal(value.bio, undefined);
+  assert.equal(value.primaryPlatform, undefined);
+  assert.equal(value.primaryProfileUrl, undefined);
+  assert.deepEqual(value.socialLinks, []);
+  assert.deepEqual(value.categories, ["Art", "Lifestyle"]);
+});
+test("core creator application fields remain required", () => {
+  assert.throws(() => validateCreatorApplication({ ...valid, displayName: "" }), /Display name/);
+  assert.throws(() => validateCreatorApplication({ ...valid, termsAccepted: false }), /creator terms/i);
+});
 test("creator terms are required", () => assert.throws(() => validateCreatorApplication({ ...valid, termsAccepted: false }), /accept the creator terms/i));
 test("invalid creator application input is rejected", () => assert.throws(() => validateCreatorApplication({ ...valid, legalName: "A" }), /Legal name/));
 test("invalid creator platform is rejected", () => assert.throws(() => validateCreatorApplication({ ...valid, primaryPlatform: "MySpace" }), /Primary platform/));
@@ -14,6 +38,32 @@ test("non-HTTPS portfolio is rejected", () => assert.throws(() => validateCreato
 test("valid PNG signature is accepted", () => assert.doesNotThrow(() => validateProfileImage(Uint8Array.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]), "image/png", 8)));
 test("invalid profile image signature is rejected", () => assert.throws(() => validateProfileImage(Uint8Array.from([1,2,3]), "image/png", 3), /valid JPG/));
 test("oversized profile image is rejected", () => assert.throws(() => validateProfileImage(Uint8Array.from([0xff,0xd8,0xff]), "image/jpeg", 5 * 1024 * 1024 + 1), /5 MB/));
+
+test("Creator welcome email content is editable sanitized text with safe defaults", () => {
+  assert.match(DEFAULT_CREATOR_WELCOME_SUBJECT, /Welcome to CustomHouse Creator/);
+  assert.match(DEFAULT_CREATOR_WELCOME_BODY, /Creator Dashboard/);
+  assert.match(DEFAULT_CREATOR_WELCOME_BODY, /Create your first product/);
+  assert.deepEqual(cleanWelcomeEmailContent("  Hello\u0000 Creator  ", "  Next steps\u0007  "), {
+    subject: "Hello Creator",
+    body: "Next steps",
+  });
+  assert.throws(() => cleanWelcomeEmailContent("", "Body"), /subject and body are required/);
+});
+
+test("Creator approval invokes the welcome email only on the pending-to-approved transition", () => {
+  const service = readFileSync("app/services/creator-application.server.ts", "utf8");
+  const welcome = readFileSync("app/services/creator-welcome-email.server.ts", "utf8");
+  const settings = readFileSync("app/routes/app.settings.tsx", "utf8");
+  assert.match(service, /let approvedTransition = false/);
+  assert.match(service, /if \(existing\.status === "APPROVED"\) return existing/);
+  assert.match(service, /approvedTransition = true/);
+  assert.match(service, /if \(approvedTransition\) \{[\s\S]*sendCreatorWelcomeEmail\(shop, creator\.id\)/);
+  assert.match(welcome, /creator\.welcomeEmailSentAt/);
+  assert.match(welcome, /creator\.welcome_email\.sent/);
+  assert.match(settings, /creatorWelcomeEmailSubject/);
+  assert.match(settings, /creatorWelcomeEmailBody/);
+  assert.match(settings, /reset-welcome-email/);
+});
 
 test("storefront creator form submits through the Shopify app proxy", () => {
   const block = readFileSync("extensions/customhouse-creator-storefront/blocks/creator-application.liquid", "utf8");

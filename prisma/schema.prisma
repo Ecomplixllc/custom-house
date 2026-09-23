@@ -255,6 +255,8 @@ model ShopConfig {
   creatorStatusMetafieldKey          String?
   inkybayAllowedHostsJson            String    @default("[]")
   inkybayBuyOnlyHiddenSelectorsJson  String    @default("[]")
+  creatorWelcomeEmailSubject         String    @default("Welcome to CustomHouse Creator")
+  creatorWelcomeEmailBody            String    @default("Welcome to CustomHouse Creator, {{creator_name}}!\n\nNext steps:\n1. Open your Creator Dashboard: {{dashboard_url}}\n2. Complete your profile and collection banner.\n3. Create your first product by choosing one color and one printing method.\n\nTips & tricks: use a clear product title, preview every placement, and submit only artwork you have the rights to use.")
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -297,6 +299,7 @@ model Creator {
   suspendedAt                DateTime?
   rejectionReason            String?
   suspensionReason           String?
+  welcomeEmailSentAt         DateTime?
   createdAt                  DateTime              @default(now())
   updatedAt                  DateTime              @updatedAt
   applications               CreatorApplication[]
@@ -585,9 +588,13 @@ model PublicProductProductionPricing {
   shopKey                String
   shopifyProductId       String
   embroiderySurcharge    Decimal  @default(0) @db.Decimal(10, 2)
+  embroideryTextSurcharge Decimal @default(0) @db.Decimal(10, 2)
+  embroideryImageSurcharge Decimal @default(0) @db.Decimal(10, 2)
   dtfSurcharge           Decimal  @default(0) @db.Decimal(10, 2)
   dtgSurcharge           Decimal  @default(0) @db.Decimal(10, 2)
   embroideryFeeVariantId String?
+  embroideryTextFeeVariantId String?
+  embroideryImageFeeVariantId String?
   dtfFeeVariantId        String?
   dtgFeeVariantId        String?
   createdAt              DateTime @default(now())
