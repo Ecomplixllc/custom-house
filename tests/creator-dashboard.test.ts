@@ -9,6 +9,7 @@ import {
   creatorReviewPresentation,
   creatorSaveSetup,
   chooseCreatorSetupEvent,
+  createCreatorDraftAutosaveController,
   loadDashboardState,
   normalizeCreatorSetupEvent,
   normalizePitchPrintSaveEvent,
@@ -225,7 +226,7 @@ test("storefront dashboard displays total sales and ten percent commission", () 
   assert.match(script, /dataset\.relatedDashboardLoaded !== "true"/);
   assert.doesNotMatch(script, /window\.addEventListener\("pageshow", refreshAfterReturn\)/);
   assert.doesNotMatch(script, /window\.addEventListener\("focus", refreshAfterReturn\)/);
-  assert.doesNotMatch(script, /visibilitychange/);
+  assert.match(script, /document\.addEventListener\("visibilitychange"/);
   assert.match(script, /const bioText = view\.data\.bio \|\| ""/);
   assert.doesNotMatch(script, /root\.dataset\.helium/);
   assert.match(script, /data-dashboard-social-link/);
@@ -472,9 +473,17 @@ test("creator dashboard starts PitchPrint directly and reviews saved designs wit
   assert.match(script, /await root\.__customHouseOpenPitchPrintDesigner\?\.\(created, startButton\)/);
   assert.match(script, /setActionLoading\(startButton, "Preparing designer\.\.\."\)/);
   assert.match(script, /if \(manager\.showAppCalled\) return/);
-  assert.match(script, /client\.showApp\(savedProjectSource \|\| undefined\)/);
+  assert.match(script, /client\.showApp\(\)/);
   assert.match(script, /bindPitchPrintEvent\(client, "project-saved"/);
   assert.match(script, /bindPitchPrintEvent\(client, "session-saved"/);
+  assert.match(script, /bindPitchPrintEvent\(client, "send-client-session"/);
+  assert.match(script, /manager\.client\.fire\("send-source"\)/);
+  assert.match(script, /createCreatorDraftAutosaveController/);
+  assert.match(script, /Saving before closing/);
+  assert.match(script, /flush\(\{ force: true \}\)/);
+  assert.match(script, /requestCurrentCreatorProduct/);
+  assert.match(script, /requestCreatorProducts\(\{ fresh: true \}\)/);
+  assert.match(script, /cache: "no-store"/);
   assert.match(script, /action: "save-draft-session"/);
   assert.match(script, /keepalive: true/);
   assert.match(script, /pendingDraftSessionSave/);
@@ -525,8 +534,8 @@ test("creator dashboard starts PitchPrint directly and reviews saved designs wit
   assert.doesNotMatch(script, /Open PitchPrint/);
   assert.doesNotMatch(script, /bindCreatorProductForm/);
   assert.doesNotMatch(script, /refreshAfterReturn/);
-  assert.doesNotMatch(script, /window\.addEventListener\("focus"/);
-  assert.doesNotMatch(script, /visibilitychange/);
+  assert.match(script, /window\.addEventListener\("focus"/);
+  assert.match(script, /visibilitychange/);
 
   assert.match(script, /Start Design/);
   assert.doesNotMatch(script, /Ready for creator design/);
@@ -596,11 +605,76 @@ test("PitchPrint save flags distinguish autosave and save-for-later events", () 
   });
 });
 
-test("partial saved sessions remain resumable but cannot be submitted", () => {
-  assert.match(script, /addDesignAction\("Continue Designing"\)/);
+test("Creator draft autosave debounces repeated dirty signals", async () => {
+  const timers = new Map<number, () => void>();
+  let timerId = 0;
+  let saves = 0;
+  const controller = createCreatorDraftAutosaveController({
+    onSave: async () => {
+      saves += 1;
+    },
+    debounceMs: 25,
+    setTimer: (callback: () => void) => {
+      timerId += 1;
+      timers.set(timerId, callback);
+      return timerId;
+    },
+    clearTimer: (id: number) => timers.delete(id),
+  });
+
+  controller.markDirty();
+  controller.markDirty();
+  assert.equal(timers.size, 1);
+  timers.values().next().value?.();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(saves, 1);
+  assert.equal(controller.isDirty(), false);
+});
+
+test("Creator draft autosave serializes a change made during an active save", async () => {
+  let releaseFirstSave = () => {};
+  let saves = 0;
+  const controller = createCreatorDraftAutosaveController({
+    onSave: async () => {
+      saves += 1;
+      if (saves === 1) {
+        await new Promise<void>((resolve) => {
+          releaseFirstSave = resolve;
+        });
+      }
+    },
+    setTimer: () => 1,
+    clearTimer: () => {},
+  });
+
+  controller.markDirty();
+  const firstFlush = controller.flush();
+  await Promise.resolve();
+  controller.markDirty();
+  releaseFirstSave();
+  await firstFlush;
+  assert.equal(saves, 2);
+  assert.equal(controller.isDirty(), false);
+});
+
+test("Creator draft source saves accept repeated completion for one project ID", () => {
   assert.doesNotMatch(
     script,
-    /addDesignAction\(product\.pitchprintProjectId \? "Edit Design" : "Continue Designing"\)/,
+    /if \(saveEvent\.projectId === manager\.lastPersistedDraftProjectId\) return/,
+  );
+  assert.doesNotMatch(
+    script,
+    /pending\.saveEvent\.projectId === manager\.lastPersistedDraftProjectId\)[\s\S]{0,40}continue/,
+  );
+  assert.match(script, /A repeated ID is a real successful save, not a no-op/);
+  assert.match(script, /manager\.draftSaveSequence \+= 1/);
+});
+
+test("partial saved sessions remain resumable but cannot be submitted", () => {
+  assert.match(script, /addDesignAction\("Continue Design"\)/);
+  assert.doesNotMatch(
+    script,
+    /addDesignAction\(product\.pitchprintProjectId \? "Edit Design" : "Continue Design"\)/,
   );
   assert.match(
     script,
@@ -1086,10 +1160,9 @@ test("creator dashboard PitchPrint bridge uses Creator setup contract instead of
   assert.match(script, /creatorContext: true/);
   assert.match(script, /launchContext: "creator_dashboard"/);
   assert.match(script, /const launchConfig = creatorPitchPrintLaunchConfig\(product\)/);
-  assert.match(script, /const projectId = replaceUnavailableProject \? "" : launchConfig\.projectId/);
-  assert.match(script, /const mode = replaceUnavailableProject \? "new" : launchConfig\.mode/);
-  assert.match(script, /requestCreatorPitchPrintProjectSource\(product\.id\)/);
-  assert.match(script, /mode: savedProjectSource \? "new" : mode/);
+  assert.match(script, /const projectId = launchConfig\.projectId/);
+  assert.match(script, /const mode = launchConfig\.mode/);
+  assert.doesNotMatch(script, /requestCreatorPitchPrintProjectSource\(product\.id\)/);
   assert.match(script, /const clientOptions = creatorPitchPrintClientOptions\(\{/);
   const accountPathIndex = script.indexOf(
     'window.PPCLIENT.userAccountPath = "/pages/creator-dashboard";',
@@ -1099,12 +1172,11 @@ test("creator dashboard PitchPrint bridge uses Creator setup contract instead of
   assert.ok(accountPathIndex < clientConstructionIndex);
   assert.match(script, /designId,/);
   assert.match(script, /projectId,/);
-  assert.match(script, /\.\.\.\(!savedProjectSource && projectId \? \{ projectId \} : \{\}\)/);
-  assert.match(script, /client\.showApp\(savedProjectSource \|\| undefined\)/);
-  assert.match(script, /error\?\.code === "PITCHPRINT_PROJECT_UNAVAILABLE"/);
-  assert.match(script, /title: "Saved design is unavailable"/);
-  assert.match(script, /confirm: "Start Replacement"/);
-  assert.match(script, /replaceUnavailableProject: true/);
+  assert.match(script, /\.\.\.\(projectId \? \{ projectId \} : \{\}\)/);
+  assert.match(script, /client\.showApp\(\)/);
+  assert.doesNotMatch(script, /title: "Saved design is unavailable"/);
+  assert.doesNotMatch(script, /confirm: "Start Replacement"/);
+  assert.doesNotMatch(script, /replaceUnavailableProject/);
   assert.doesNotMatch(
     script,
     /PITCHPRINT_PROJECT_UNAVAILABLE[\s\S]{0,1200}createCreatorProductDraft\(/,
