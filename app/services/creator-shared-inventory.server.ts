@@ -5,7 +5,7 @@ import type { ShopifyGraphqlClient } from "./shopify-graphql.server.ts";
 
 type SelectedOption = { name: string; value: string };
 
-type CreatorProductRelationshipRecord = {
+export type CreatorProductRelationshipRecord = {
   id: string;
   status: string;
   shopifyProductId: string;
@@ -342,13 +342,28 @@ export async function convertCreatorVariantToSharedInventory(input: {
   if (!product) {
     throw new DomainError("CREATOR_PRODUCT_NOT_FOUND", "Creator Product not found.", 404);
   }
+  return convertKnownCreatorVariantToSharedInventory({
+    product,
+    creatorVariantId: input.creatorVariantId,
+    client: input.client,
+  });
+}
+
+async function convertKnownCreatorVariantToSharedInventory(input: {
+  product: CreatorProductRelationshipRecord;
+  creatorVariantId: string;
+  client: ShopifyGraphqlClient;
+  eligibleForBundles?: boolean;
+}) {
+  const product = input.product;
   const mapping = parsedMapping(product.baseVariantMappingJson);
   const baseVariantId = mapping?.[input.creatorVariantId] || null;
   if (!baseVariantId) {
     return result(product, input.creatorVariantId, null,
       "BLOCKED_MAPPING_MISMATCH", "Creator variant has no canonical Base mapping.");
   }
-  const eligibleForBundles = await bundlesEligible(input.client);
+  const eligibleForBundles = input.eligibleForBundles ??
+    await bundlesEligible(input.client);
   const before = await inspectRelationship({
     product,
     creatorVariantId: input.creatorVariantId,
@@ -401,4 +416,31 @@ export async function convertCreatorVariantToSharedInventory(input: {
   }
   return result(product, input.creatorVariantId, baseVariantId,
     "CONVERTED", "Creator variant now uses the expected Base component at quantity one.", after.parentPrice);
+}
+
+export async function ensureCreatorProductSharedInventoryRelationships(input: {
+  product: CreatorProductRelationshipRecord;
+  client: ShopifyGraphqlClient;
+}) {
+  const mapping = parsedMapping(input.product.baseVariantMappingJson);
+  if (!mapping || !Object.keys(mapping).length) {
+    return [result(
+      input.product,
+      null,
+      null,
+      "BLOCKED_MAPPING_INVALID",
+      "Published CreatorProduct has no valid variant mapping.",
+    )];
+  }
+  const eligibleForBundles = await bundlesEligible(input.client);
+  const results: CreatorSharedInventoryResult[] = [];
+  for (const creatorVariantId of Object.keys(mapping)) {
+    results.push(await convertKnownCreatorVariantToSharedInventory({
+      product: input.product,
+      creatorVariantId,
+      eligibleForBundles,
+      client: input.client,
+    }));
+  }
+  return results;
 }
