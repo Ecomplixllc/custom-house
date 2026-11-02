@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   synchronizeBakedCreatorProductPricing,
   type CreatorProductForPublish,
@@ -223,4 +224,21 @@ test("republishing an already baked product does not compound prices", async () 
     state.products.get(publishedProductId)?.map((variant) => variant.price),
     ["300.00", "320.00"],
   );
+});
+
+test("publishing verifies shared inventory before database publication and storefront exposure", () => {
+  const source = readFileSync(
+    new URL("../app/services/creator-product-publishing.server.ts", import.meta.url),
+    "utf8",
+  );
+  const publishFlow = source.slice(source.indexOf("export async function publishCreatorProductToShopify"));
+  const activate = publishFlow.indexOf("await activateProduct");
+  const inventory = publishFlow.indexOf("await ensureCreatorProductSharedInventoryRelationships");
+  const databasePublish = publishFlow.indexOf("database.creatorProduct.update");
+  const storefrontPublish = publishFlow.indexOf("await publishResource");
+  assert.ok(activate >= 0);
+  assert.ok(inventory > activate);
+  assert.ok(databasePublish > inventory);
+  assert.ok(storefrontPublish > databasePublish);
+  assert.match(publishFlow, /CREATOR_SHARED_INVENTORY_SETUP_FAILED/);
 });

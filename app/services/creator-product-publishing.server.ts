@@ -23,6 +23,10 @@ import {
   CREATOR_PRICING_MODE_BAKED_IN_V1,
   type CreatorPublishedPricingPlan,
 } from "./creator-product-pricing.server.ts";
+import {
+  ensureCreatorProductSharedInventoryRelationships,
+  type CreatorProductRelationshipRecord,
+} from "./creator-shared-inventory.server.ts";
 
 type Errors = Array<{ message: string }>;
 
@@ -898,14 +902,36 @@ export async function publishCreatorProductToShopify(
   });
   const { pricingPlan } = synchronized;
   await addToCollection(client, collection.shopifyCollectionId, shopifyProduct.id);
-  await publishResource(client, shopifyProduct.id, publicationId);
-  await publishResource(client, collection.shopifyCollectionId, publicationId);
   const variantMap = Object.fromEntries(
     pricingPlan.variants.map((variant) => [
       variant.publishedVariantId,
       variant.baseVariantId,
     ]),
   );
+  await activateProduct(client, shopifyProduct.id);
+  const inventoryRelationships =
+    await ensureCreatorProductSharedInventoryRelationships({
+      product: {
+        id: product.id,
+        status: "PUBLISHED",
+        shopifyProductId: product.shopifyProductId,
+        publishedShopifyProductId: shopifyProduct.id,
+        baseVariantMappingJson: safeJson(variantMap),
+      } satisfies CreatorProductRelationshipRecord,
+      client,
+    });
+  const inventoryFailure = inventoryRelationships.find(
+    (relationship) =>
+      relationship.status !== "CONVERTED" &&
+      relationship.status !== "ALREADY_CORRECT",
+  );
+  if (inventoryFailure) {
+    throw new DomainError(
+      "CREATOR_SHARED_INVENTORY_SETUP_FAILED",
+      `Creator shared inventory setup is incomplete: ${inventoryFailure.status}.`,
+      409,
+    );
+  }
   const now = new Date();
   const updated = await database.creatorProduct.update({
     where: { id: product.id },
@@ -922,7 +948,8 @@ export async function publishCreatorProductToShopify(
       creatorPricingMode: CREATOR_PRICING_MODE_BAKED_IN_V1,
     },
   } as unknown);
-  await activateProduct(client, shopifyProduct.id);
+  await publishResource(client, shopifyProduct.id, publicationId);
+  await publishResource(client, collection.shopifyCollectionId, publicationId);
   await database.auditLog?.create({
     data: {
       shop,
@@ -944,6 +971,11 @@ export async function publishCreatorProductToShopify(
           publishedVariantId: variant.publishedVariantId,
           basePrice: variant.basePrice,
           finalPrice: variant.finalPrice,
+        })),
+        sharedInventoryRelationships: inventoryRelationships.map((relationship) => ({
+          creatorVariantId: relationship.creatorVariantId,
+          baseVariantId: relationship.baseVariantId,
+          status: relationship.status,
         })),
       }),
     },
