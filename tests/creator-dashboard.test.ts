@@ -477,6 +477,13 @@ test("creator dashboard starts PitchPrint directly and reviews saved designs wit
   assert.match(script, /bindPitchPrintEvent\(client, "session-saved"/);
   assert.match(script, /action: "save-draft-session"/);
   assert.match(script, /keepalive: true/);
+  assert.match(script, /pendingDraftSessionSave/);
+  assert.match(script, /lastPersistedDraftProjectId/);
+  assert.match(script, /while \(manager\.pendingDraftSessionSave\)/);
+  assert.doesNotMatch(
+    script,
+    /manager\.projectSaved \|\| manager\.draftSessionSaved \|\| token !== manager\.token/,
+  );
   assert.match(script, /window\.addEventListener\("beforeunload"/);
   assert.match(script, /manager\.projectSaved/);
   assert.match(script, /saveCreatorProductPitchPrintProject/);

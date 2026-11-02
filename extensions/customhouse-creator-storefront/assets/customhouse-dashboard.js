@@ -1959,7 +1959,11 @@ function bindPitchPrintManager(root) {
     showAppCalled: false,
     designerVisible: false,
     projectSaved: false,
+    finalProjectSavePending: false,
     draftSessionSaved: false,
+    draftSessionSavePromise: null,
+    pendingDraftSessionSave: null,
+    lastPersistedDraftProjectId: "",
     draftSessionNoticeShown: false,
     saveFailureNotified: false,
     pendingCreatorSetup: null,
@@ -1982,7 +1986,11 @@ function bindPitchPrintManager(root) {
     manager.showAppCalled = false;
     manager.designerVisible = false;
     manager.projectSaved = false;
+    manager.finalProjectSavePending = false;
     manager.draftSessionSaved = false;
+    manager.draftSessionSavePromise = null;
+    manager.pendingDraftSessionSave = null;
+    manager.lastPersistedDraftProjectId = "";
     manager.draftSessionNoticeShown = false;
     manager.saveFailureNotified = false;
     manager.pendingCreatorSetup = null;
@@ -2015,6 +2023,10 @@ function bindPitchPrintManager(root) {
   };
   const savePendingCreatorProduct = async (product, token) => {
     if (manager.projectSaved || token !== manager.token) return;
+    if (manager.draftSessionSavePromise) {
+      await manager.draftSessionSavePromise;
+      if (manager.projectSaved || token !== manager.token) return;
+    }
     let savePayload;
     try {
       savePayload = buildCreatorSavePayload(
@@ -2023,6 +2035,7 @@ function bindPitchPrintManager(root) {
         manager.pendingPitchPrintSave,
       );
     } catch (error) {
+      manager.finalProjectSavePending = false;
       manager.saveFailureNotified = true;
       showCreatorToast(
         root,
@@ -2048,6 +2061,7 @@ function bindPitchPrintManager(root) {
         ),
       });
       if (!creatorProductProductionMethod(product)) {
+        manager.finalProjectSavePending = false;
         manager.saveFailureNotified = true;
         showCreatorToast(
           root,
@@ -2061,6 +2075,7 @@ function bindPitchPrintManager(root) {
         manager.pendingCreatorSetup?.creatorSetup &&
         !manager.saveFailureNotified
       ) {
+        manager.finalProjectSavePending = false;
         manager.saveFailureNotified = true;
         showCreatorToast(
           root,
@@ -2082,6 +2097,7 @@ function bindPitchPrintManager(root) {
       openDesignReviewModal(root, updated);
     } catch (error) {
       manager.projectSaved = false;
+      manager.finalProjectSavePending = false;
       showCreatorToast(
         root,
         error instanceof Error ? error.message : "Design could not be saved.",
@@ -2100,31 +2116,70 @@ function bindPitchPrintManager(root) {
     await savePendingCreatorProduct(product, token);
   };
   const handlePitchPrintDraftSessionSaved = async (product, event, token) => {
-    if (manager.projectSaved || manager.draftSessionSaved || token !== manager.token) return;
+    if (
+      manager.projectSaved ||
+      manager.finalProjectSavePending ||
+      token !== manager.token
+    ) return;
     const saveEvent = normalizePitchPrintSaveEvent(event);
     if (!saveEvent.projectId) return;
-    const persistSession = saveCreatorProductPitchPrintDraftSession(product.id, {
-      projectId: saveEvent.projectId,
-      designId: saveEvent.designId || product.pitchprintDesignId || "",
-    });
-    try {
-      const updated = await persistSession;
-      if (token !== manager.token) return;
-      manager.activeProjectId = saveEvent.projectId;
-      manager.draftSessionSaved = true;
-      updateCreatorProductInState(root, updated);
-      if (!manager.draftSessionNoticeShown) {
-        manager.draftSessionNoticeShown = true;
-        showCreatorToast(root, "Draft saved. You can continue later.");
-      }
-    } catch (error) {
-      if (token !== manager.token) return;
-      showCreatorToast(
-        root,
-        error instanceof Error ? error.message : "Design draft could not be saved.",
-        true,
-      );
+    if (saveEvent.projectId === manager.lastPersistedDraftProjectId) return;
+    manager.pendingDraftSessionSave = { product, saveEvent, token };
+    if (manager.draftSessionSavePromise) {
+      await manager.draftSessionSavePromise;
+      return;
     }
+    const persistLatestDraftSession = async () => {
+      while (manager.pendingDraftSessionSave) {
+        const pending = manager.pendingDraftSessionSave;
+        manager.pendingDraftSessionSave = null;
+        if (
+          manager.projectSaved ||
+          manager.finalProjectSavePending ||
+          pending.token !== manager.token
+        ) return;
+        if (pending.saveEvent.projectId === manager.lastPersistedDraftProjectId) {
+          continue;
+        }
+        try {
+          const updated = await saveCreatorProductPitchPrintDraftSession(
+            pending.product.id,
+            {
+              projectId: pending.saveEvent.projectId,
+              designId:
+                pending.saveEvent.designId ||
+                pending.product.pitchprintDesignId ||
+                "",
+            },
+          );
+          if (pending.token !== manager.token) return;
+          manager.activeProjectId = pending.saveEvent.projectId;
+          manager.lastPersistedDraftProjectId = pending.saveEvent.projectId;
+          manager.draftSessionSaved = true;
+          updateCreatorProductInState(root, updated);
+          if (!manager.draftSessionNoticeShown) {
+            manager.draftSessionNoticeShown = true;
+            showCreatorToast(root, "Draft saved. You can continue later.");
+          }
+        } catch (error) {
+          if (pending.token !== manager.token) return;
+          showCreatorToast(
+            root,
+            error instanceof Error
+              ? error.message
+              : "Design draft could not be saved.",
+            true,
+          );
+        }
+      }
+    };
+    const persistPromise = persistLatestDraftSession();
+    manager.draftSessionSavePromise = persistPromise;
+    await persistPromise.finally(() => {
+      if (manager.draftSessionSavePromise === persistPromise) {
+        manager.draftSessionSavePromise = null;
+      }
+    });
   };
   const handlePitchPrintProjectSaved = async (product, event, token) => {
     if (manager.projectSaved || token !== manager.token) return;
@@ -2133,6 +2188,8 @@ function bindPitchPrintManager(root) {
       await handlePitchPrintDraftSessionSaved(product, event, token);
       return;
     }
+    manager.finalProjectSavePending = true;
+    manager.pendingDraftSessionSave = null;
     const setupEvent = normalizeCreatorSetupEvent(event);
     manager.pendingCreatorSetup = chooseCreatorSetupEvent(
       manager.pendingCreatorSetup,
@@ -2238,6 +2295,7 @@ function bindPitchPrintManager(root) {
       const projectId = replaceUnavailableProject ? "" : launchConfig.projectId;
       const mode = replaceUnavailableProject ? "new" : launchConfig.mode;
       manager.activeProjectId = projectId;
+      manager.lastPersistedDraftProjectId = projectId;
       const apiKey = root.dataset.pitchprintApiKey || "";
       if (!apiKey) throw new Error("PitchPrint public API key is not configured.");
       pitchPrintDiagnostics(root, "config", {

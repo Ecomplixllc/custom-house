@@ -206,6 +206,7 @@ type FakeCreatorProductWhereArgs = {
     creatorId?: string;
     status?: string;
     publishedShopifyProductId?: string;
+    pitchprintProjectId?: string;
   };
 };
 
@@ -453,6 +454,8 @@ function fakeDb() {
             product.shop === args.where.shop &&
             (!args.where.creatorId || product.creatorId === args.where.creatorId) &&
             (!("status" in args.where) || product.status === args.where.status) &&
+            (!args.where.pitchprintProjectId ||
+              product.pitchprintProjectId === args.where.pitchprintProjectId) &&
             (!args.where.publishedShopifyProductId ||
               product.publishedShopifyProductId === args.where.publishedShopifyProductId),
         ) || null;
@@ -1196,6 +1199,83 @@ test("authenticated creator can persist an owned PitchPrint draft session withou
   assert.equal(updated.designVariantSelectionsJson, originalSetup);
 });
 
+test("PitchPrint draft-session persistence is idempotent for the current project ID", async () => {
+  const database = fakeDb();
+  const draft = await createCreatorProductDraft(
+    shop,
+    "gid://shopify/Customer/1",
+    { shopifyProductId: baseProduct.id },
+    fakeClient(),
+    database,
+  );
+  database.products[0].pitchprintProjectId = "pp_existing_draft";
+  let fetchCalls = 0;
+  let updateCalls = 0;
+  const originalUpdate = database.creatorProduct.update;
+  database.creatorProduct.update = async (args) => {
+    updateCalls += 1;
+    return originalUpdate(args);
+  };
+
+  const updated = await savePitchPrintDraftSessionForCustomer(
+    shop,
+    "gid://shopify/Customer/1",
+    draft.id,
+    { projectId: "pp_existing_draft" },
+    database,
+    async () => {
+      fetchCalls += 1;
+      throw new Error("idempotent save must not refetch PitchPrint");
+    },
+  );
+
+  assert.equal(updated.pitchprintProjectId, "pp_existing_draft");
+  assert.equal(fetchCalls, 0);
+  assert.equal(updateCalls, 0);
+  assert.equal(updated.status, "DRAFT");
+});
+
+test("PitchPrint draft sessions keep projects isolated between Creator drafts", async () => {
+  const database = fakeDb();
+  const firstDraft = await createCreatorProductDraft(
+    shop,
+    "gid://shopify/Customer/1",
+    { shopifyProductId: baseProduct.id },
+    fakeClient(),
+    database,
+  );
+  const secondDraft = await createCreatorProductDraft(
+    shop,
+    "gid://shopify/Customer/1",
+    { shopifyProductId: baseProduct.id },
+    fakeClient(),
+    database,
+  );
+  database.products[0].pitchprintProjectId = "pp_first_draft";
+
+  await assert.rejects(
+    () =>
+      savePitchPrintDraftSessionForCustomer(
+        shop,
+        "gid://shopify/Customer/1",
+        secondDraft.id,
+        { projectId: "pp_first_draft" },
+        database,
+        async () => ({
+          _author: `customhouse:${shop}:creator:creator-a`,
+          designId: "pp_design_global_hoodie",
+          pages: [{ id: "front" }],
+        }),
+      ),
+    (error) =>
+      error instanceof DomainError &&
+      error.code === "PITCHPRINT_PROJECT_ALREADY_ATTACHED" &&
+      error.status === 409,
+  );
+  assert.equal(firstDraft.pitchprintProjectId, "pp_first_draft");
+  assert.equal(secondDraft.pitchprintProjectId, null);
+});
+
 test("PitchPrint draft sessions reject another creator's project and mismatched designs", async () => {
   const database = fakeDb();
   const draft = await createCreatorProductDraft(
@@ -1246,6 +1326,41 @@ test("PitchPrint draft sessions reject another creator's project and mismatched 
       error.status === 409,
   );
   assert.equal(database.products[0].pitchprintProjectId, null);
+});
+
+test("PitchPrint draft sessions reject non-editable Creator Product lifecycles", async () => {
+  const database = fakeDb();
+  const draft = await createCreatorProductDraft(
+    shop,
+    "gid://shopify/Customer/1",
+    { shopifyProductId: baseProduct.id },
+    fakeClient(),
+    database,
+  );
+  database.products[0].status = "PENDING";
+  let fetchCalls = 0;
+
+  await assert.rejects(
+    () =>
+      savePitchPrintDraftSessionForCustomer(
+        shop,
+        "gid://shopify/Customer/1",
+        draft.id,
+        { projectId: "pp_pending_product" },
+        database,
+        async () => {
+          fetchCalls += 1;
+          return {};
+        },
+      ),
+    (error) =>
+      error instanceof DomainError &&
+      error.code === "CREATOR_PRODUCT_NOT_EDITABLE" &&
+      error.status === 409,
+  );
+  assert.equal(fetchCalls, 0);
+  assert.equal(database.products[0].pitchprintProjectId, null);
+  assert.equal(database.products[0].status, "PENDING");
 });
 
 test("creator product action routes draft-session saves separately from completed design saves", async () => {
