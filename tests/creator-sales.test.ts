@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   CREATOR_COMMISSION_BASIS_POINTS,
+  bundleLineMatchesCreatorProduct,
   creatorEarning,
   parsePaidOrder,
   parseRefund,
@@ -112,6 +113,155 @@ test("signed creator attribution survives order parsing and rejects tampering", 
     "cmcreatorproduct00000001",
   );
   assert.equal(verifyCreatorAttribution(`${token}tampered`), null);
+});
+
+test("grouped bundle sale uses parent attributes and component line identity", () => {
+  const token = signCreatorAttribution({
+    creatorProductId: "cmcreatorproduct00000001",
+    creatorId: "creator-a",
+    creatorCollectionId: "collection-a",
+    baseProductId: "gid://shopify/Product/301",
+    baseVariantId: "gid://shopify/ProductVariant/401",
+    pitchprintProjectId: "pp_bundle",
+  });
+  const [line] = parsePaidOrder(
+    {
+      id: 101,
+      currency: "SEK",
+      line_items: [{
+        id: 201,
+        product_id: 301,
+        variant_id: 401,
+        title: "Base shirt",
+        quantity: 2,
+        price: "100.00",
+      }],
+    },
+    [{
+      shopifyLineItemId: "201",
+      componentProductId: "gid://shopify/Product/301",
+      componentVariantId: "gid://shopify/ProductVariant/401",
+      bundleGroupId: "gid://shopify/LineItemGroup/901",
+      parentProductId: "gid://shopify/Product/501",
+      parentVariantId: "gid://shopify/ProductVariant/601",
+      parentQuantity: 2,
+      allocatedTotal: "180.00",
+      currencyCode: "SEK",
+      customAttributes: [
+        { key: "_creator_product_id", value: "cmcreatorproduct00000001" },
+        { key: "_creator_collection_id", value: "cmcreatorcollection00001" },
+        { key: "_customhouse_attribution", value: token },
+      ],
+    }],
+  );
+
+  assert.equal(line?.shopifyLineItemId, "201");
+  assert.equal(line?.creatorProductId, "cmcreatorproduct00000001");
+  assert.equal(line?.attributionToken, token);
+  assert.equal(line?.bundleParentProductId, "gid://shopify/Product/501");
+  assert.equal(line?.bundleParentVariantId, "gid://shopify/ProductVariant/601");
+  assert.equal(line?.bundleParentQuantity, 2);
+  assert.equal(line?.quantity, 2);
+  assert.equal(line?.unitPrice.toFixed(2), "90.00");
+  assert.equal(line?.grossSalesAmount.toFixed(2), "180.00");
+});
+
+test("grouped bundle sale preserves full and partial Shopify discount allocation", () => {
+  const payload = {
+    id: 101,
+    currency: "SEK",
+    line_items: [{
+      id: 201,
+      product_id: 301,
+      variant_id: 401,
+      quantity: 1,
+      price: "599.00",
+    }],
+  };
+  const context = {
+    shopifyLineItemId: "201",
+    componentProductId: "gid://shopify/Product/301",
+    componentVariantId: "gid://shopify/ProductVariant/401",
+    bundleGroupId: "gid://shopify/LineItemGroup/901",
+    parentProductId: "gid://shopify/Product/501",
+    parentVariantId: "gid://shopify/ProductVariant/601",
+    parentQuantity: 1,
+    allocatedTotal: "499.00",
+    currencyCode: "SEK",
+    customAttributes: [],
+  };
+  assert.equal(
+    parsePaidOrder(payload, [context])[0]?.grossSalesAmount.toFixed(2),
+    "499.00",
+  );
+  assert.equal(
+    parsePaidOrder(payload, [{ ...context, allocatedTotal: "0.00" }])[0]
+      ?.grossSalesAmount.toFixed(2),
+    "0.00",
+  );
+});
+
+test("grouped bundle sale fails closed when GraphQL component identity differs", () => {
+  const lines = parsePaidOrder(
+    {
+      id: 101,
+      currency: "SEK",
+      line_items: [{
+        id: 201,
+        product_id: 301,
+        variant_id: 401,
+        quantity: 1,
+        price: "599.00",
+      }],
+    },
+    [{
+      shopifyLineItemId: "201",
+      componentProductId: "gid://shopify/Product/301",
+      componentVariantId: "gid://shopify/ProductVariant/999",
+      bundleGroupId: "gid://shopify/LineItemGroup/901",
+      parentProductId: "gid://shopify/Product/501",
+      parentVariantId: "gid://shopify/ProductVariant/601",
+      parentQuantity: 1,
+      allocatedTotal: "599.00",
+      currencyCode: "SEK",
+      customAttributes: [],
+    }],
+  );
+  assert.deepEqual(lines, []);
+});
+
+test("bundle Creator attribution requires the canonical parent-to-component mapping", () => {
+  const line = {
+    bundleGroupId: "gid://shopify/LineItemGroup/901",
+    bundleParentProductId: "gid://shopify/Product/501",
+    bundleParentVariantId: "gid://shopify/ProductVariant/601",
+    bundleParentQuantity: 1,
+    shopifyProductId: "gid://shopify/Product/301",
+    shopifyVariantId: "gid://shopify/ProductVariant/401",
+    quantity: 1,
+  };
+  const product = {
+    shopifyProductId: "gid://shopify/Product/301",
+    publishedShopifyProductId: "gid://shopify/Product/501",
+    baseVariantMappingJson: JSON.stringify({
+      "gid://shopify/ProductVariant/601": "gid://shopify/ProductVariant/401",
+    }),
+  };
+  assert.equal(bundleLineMatchesCreatorProduct(line, product), true);
+  assert.equal(
+    bundleLineMatchesCreatorProduct(
+      { ...line, shopifyVariantId: "gid://shopify/ProductVariant/999" },
+      product,
+    ),
+    false,
+  );
+  assert.equal(
+    bundleLineMatchesCreatorProduct(
+      { ...line, bundleParentVariantId: "gid://shopify/ProductVariant/999" },
+      product,
+    ),
+    false,
+  );
 });
 
 

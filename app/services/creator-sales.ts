@@ -86,7 +86,65 @@ export type CreatorPaidLine = {
   unitPrice: Prisma.Decimal;
   grossSalesAmount: Prisma.Decimal;
   paidAt: Date | null;
+  bundleGroupId: string | null;
+  bundleParentProductId: string | null;
+  bundleParentVariantId: string | null;
+  bundleParentQuantity: number | null;
 };
+
+export type CreatorBundleLineContext = {
+  shopifyLineItemId: string;
+  componentProductId: string;
+  componentVariantId: string;
+  bundleGroupId: string;
+  parentProductId: string;
+  parentVariantId: string;
+  parentQuantity: number;
+  allocatedTotal: string;
+  currencyCode: string;
+  customAttributes: Array<{ key: string; value: string }>;
+};
+
+export function bundleLineMatchesCreatorProduct(
+  line: Pick<
+    CreatorPaidLine,
+    | "bundleGroupId"
+    | "bundleParentProductId"
+    | "bundleParentVariantId"
+    | "bundleParentQuantity"
+    | "shopifyProductId"
+    | "shopifyVariantId"
+    | "quantity"
+  >,
+  product: {
+    shopifyProductId: string;
+    publishedShopifyProductId: string | null;
+    baseVariantMappingJson: string;
+  },
+) {
+  if (!line.bundleGroupId) return true;
+  if (
+    !line.bundleParentProductId ||
+    !line.bundleParentVariantId ||
+    !line.shopifyVariantId ||
+    line.bundleParentProductId !== product.publishedShopifyProductId ||
+    line.shopifyProductId !== product.shopifyProductId ||
+    line.bundleParentQuantity !== line.quantity
+  ) {
+    return false;
+  }
+  try {
+    const mapping = JSON.parse(product.baseVariantMappingJson || "{}");
+    return Boolean(
+      mapping &&
+      typeof mapping === "object" &&
+      !Array.isArray(mapping) &&
+      mapping[line.bundleParentVariantId] === line.shopifyVariantId,
+    );
+  } catch {
+    return false;
+  }
+}
 
 function lineProperty(
   properties: Array<{ name?: string; value?: string }> | undefined,
@@ -143,7 +201,10 @@ function customerDisplayName(order: PaidOrderPayload) {
   return (name || email || null)?.slice(0, 255) || null;
 }
 
-export function parsePaidOrder(payload: unknown): CreatorPaidLine[] {
+export function parsePaidOrder(
+  payload: unknown,
+  bundleContexts: CreatorBundleLineContext[] = [],
+): CreatorPaidLine[] {
   const order = (payload || {}) as PaidOrderPayload;
   const shopifyOrderId = gid(
     "Order",
@@ -162,17 +223,58 @@ export function parsePaidOrder(payload: unknown): CreatorPaidLine[] {
     return [];
   }
 
+  const bundleByLineItemId = new Map(
+    bundleContexts.map((context) => [context.shopifyLineItemId, context]),
+  );
+
   return (Array.isArray(order.line_items) ? order.line_items : []).flatMap(
     (line): CreatorPaidLine[] => {
       const shopifyLineItemId = String(line.id || "").trim();
       const shopifyProductId = gid("Product", line.product_id);
       const shopifyVariantId = gid("ProductVariant", line.variant_id) || null;
       const quantity = safeQuantity(line.quantity);
-      const unitPrice = decimal(line.price);
-      if (!shopifyLineItemId || !shopifyProductId || !quantity || !unitPrice) {
+      const bundle = bundleByLineItemId.get(shopifyLineItemId);
+      const bundleParentProductId = bundle
+        ? gid("Product", bundle.parentProductId)
+        : "";
+      const bundleParentVariantId = bundle
+        ? gid("ProductVariant", bundle.parentVariantId)
+        : "";
+      const bundleParentQuantity = bundle
+        ? safeQuantity(bundle.parentQuantity)
+        : 0;
+      const bundleProperties = bundle?.customAttributes.map((attribute) => ({
+        name: attribute.key,
+        value: attribute.value,
+      }));
+      const properties = bundle ? bundleProperties : line.properties;
+      const allocatedTotal = bundle ? decimal(bundle.allocatedTotal) : null;
+      const unitPrice = bundle && allocatedTotal && quantity
+        ? allocatedTotal.div(quantity)
+        : decimal(line.price);
+      if (
+        !shopifyLineItemId ||
+        !shopifyProductId ||
+        !quantity ||
+        !unitPrice ||
+        (bundle && (
+          bundle.componentProductId !== shopifyProductId ||
+          bundle.componentVariantId !== shopifyVariantId ||
+          !bundle.bundleGroupId ||
+          !bundleParentProductId ||
+          !bundleParentVariantId ||
+          !bundleParentQuantity ||
+          bundleParentQuantity !== quantity ||
+          bundle.currencyCode.toUpperCase() !== currencyCode ||
+          !allocatedTotal
+        ))
+      ) {
         return [];
       }
-      const lineTotal = Prisma.Decimal.max(unitPrice.mul(quantity), 0);
+      const lineTotal = Prisma.Decimal.max(
+        bundle && allocatedTotal ? allocatedTotal : unitPrice.mul(quantity),
+        0,
+      );
       return [
         {
           shopifyOrderId,
@@ -181,30 +283,30 @@ export function parsePaidOrder(payload: unknown): CreatorPaidLine[] {
           shopifyProductId,
           shopifyVariantId,
           creatorProductId: lineProperty(
-            line.properties,
+            properties,
             "_creator_product_id",
           ),
           creatorCollectionId: lineProperty(
-            line.properties,
+            properties,
             "_creator_collection_id",
           ),
           pitchprintProjectId: lineStringProperty(
-            line.properties,
+            properties,
             "_pitchprint",
           ),
           creatorPreviewUrl: lineHttpsProperty(
-            line.properties,
+            properties,
             "_creator_preview_url",
           ),
           creatorDesignTitle: publicLineStringProperty(
-            line.properties,
+            properties,
             "_creator_design_title",
-          ) || publicLineStringProperty(line.properties, "Creator Design"),
+          ) || publicLineStringProperty(properties, "Creator Design"),
           creatorName:
-            publicLineStringProperty(line.properties, "_creator_name") ||
-            publicLineStringProperty(line.properties, "Creator"),
+            publicLineStringProperty(properties, "_creator_name") ||
+            publicLineStringProperty(properties, "Creator"),
           attributionToken: lineStringProperty(
-            line.properties,
+            properties,
             "_customhouse_attribution",
           ),
           productTitle: String(line.title || "Creator product")
@@ -224,6 +326,10 @@ export function parsePaidOrder(payload: unknown): CreatorPaidLine[] {
           unitPrice,
           grossSalesAmount: lineTotal,
           paidAt,
+          bundleGroupId: bundle?.bundleGroupId || null,
+          bundleParentProductId: bundleParentProductId || null,
+          bundleParentVariantId: bundleParentVariantId || null,
+          bundleParentQuantity: bundleParentQuantity || null,
         },
       ];
     },

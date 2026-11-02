@@ -3,9 +3,11 @@ import db from "../db.server";
 import type { ShopifyGraphqlClient } from "./shopify-graphql.server";
 import {
   CREATOR_COMMISSION_BASIS_POINTS,
+  bundleLineMatchesCreatorProduct,
   creatorEarning,
   parsePaidOrder,
   parseRefund,
+  type CreatorBundleLineContext,
   type CreatorPaidLine,
 } from "./creator-sales";
 import { ensureCreatorOrderItemForPaidLine } from "./creator-orders.server";
@@ -65,6 +67,32 @@ type ProductCollectionMembershipNode = {
   collections: { nodes: Array<{ id: string }> };
 };
 
+type BundleOrderQuery = {
+  order: {
+    lineItems: {
+      nodes: Array<{
+        id: string;
+        quantity: number;
+        product: { id: string } | null;
+        variant: { id: string } | null;
+        discountedTotalSet: {
+          shopMoney: { amount: string; currencyCode: string };
+        } | null;
+        originalTotalSet: {
+          shopMoney: { amount: string; currencyCode: string };
+        } | null;
+        lineItemGroup: {
+          id: string;
+          productId: string | null;
+          variantId: string | null;
+          quantity: number;
+          customAttributes: Array<{ key: string; value: string }>;
+        } | null;
+      }>;
+    };
+  } | null;
+};
+
 function webhookLineItemId(value: string) {
   const id = value.trim();
   return id.startsWith("gid://shopify/LineItem/")
@@ -88,6 +116,73 @@ function graphqlOrderLineMoney(line: {
   } | null;
 }) {
   return line.originalTotalSet?.shopMoney || line.discountedTotalSet?.shopMoney;
+}
+
+function lineItemIdFromGraphqlId(value: string) {
+  const id = value.trim();
+  return id.startsWith("gid://shopify/LineItem/")
+    ? id.split("/").pop() || ""
+    : id;
+}
+
+async function bundleLineContextsForPaidOrder(
+  orderId: string,
+  client: ShopifyGraphqlClient,
+): Promise<CreatorBundleLineContext[]> {
+  const result = await client.request<BundleOrderQuery>(
+    `#graphql query CreatorBundlePaidOrder($id: ID!) {
+      order(id: $id) {
+        lineItems(first: 250) {
+          nodes {
+            id
+            quantity
+            product { id }
+            variant { id }
+            discountedTotalSet { shopMoney { amount currencyCode } }
+            originalTotalSet { shopMoney { amount currencyCode } }
+            lineItemGroup {
+              id
+              productId
+              variantId
+              quantity
+              customAttributes { key value }
+            }
+          }
+        }
+      }
+    }`,
+    { id: orderId },
+  );
+  if (!result.order) return [];
+  return result.order.lineItems.nodes.flatMap((line) => {
+    const group = line.lineItemGroup;
+    const money = line.discountedTotalSet?.shopMoney ||
+      line.originalTotalSet?.shopMoney;
+    const shopifyLineItemId = lineItemIdFromGraphqlId(line.id);
+    if (
+      !group?.id ||
+      !group.productId ||
+      !group.variantId ||
+      !shopifyLineItemId ||
+      !line.product?.id ||
+      !line.variant?.id ||
+      !money
+    ) {
+      return [];
+    }
+    return [{
+      shopifyLineItemId,
+      componentProductId: line.product.id,
+      componentVariantId: line.variant.id,
+      bundleGroupId: group.id,
+      parentProductId: group.productId,
+      parentVariantId: group.variantId,
+      parentQuantity: group.quantity,
+      allocatedTotal: money.amount,
+      currencyCode: money.currencyCode,
+      customAttributes: group.customAttributes,
+    }];
+  });
 }
 
 function addCandidate(
@@ -255,6 +350,7 @@ async function resolveCreatorProductLineOwners(
       creatorId: true,
       shopifyProductId: true,
       publishedShopifyProductId: true,
+      baseVariantMappingJson: true,
     },
   });
   const byId = new Map(products.map((product) => [product.id, product]));
@@ -266,8 +362,17 @@ async function resolveCreatorProductLineOwners(
         !product ||
         ![product.publishedShopifyProductId, product.shopifyProductId].includes(
           line.shopifyProductId,
-        )
+        ) ||
+        !bundleLineMatchesCreatorProduct(line, product)
       ) {
+        if (line.bundleGroupId) {
+          console.warn("creator_bundle_attribution_rejected", {
+            shop,
+            shopifyOrderId: line.shopifyOrderId,
+            shopifyLineItemId: line.shopifyLineItemId,
+            reason: "canonical_mapping_mismatch",
+          });
+        }
         return [];
       }
       return [[line.shopifyLineItemId, {
@@ -299,6 +404,8 @@ async function resolveSignedLineOwners(
       id: true,
       creatorId: true,
       shopifyProductId: true,
+      publishedShopifyProductId: true,
+      baseVariantMappingJson: true,
     },
   });
   const byId = new Map(products.map((product) => [product.id, product]));
@@ -325,8 +432,17 @@ async function resolveSignedLineOwners(
           payload.creatorCollectionId ||
         product.shopifyProductId !== payload.baseProductId ||
         line.shopifyProductId !== payload.baseProductId ||
-        line.shopifyVariantId !== payload.baseVariantId
+        line.shopifyVariantId !== payload.baseVariantId ||
+        !bundleLineMatchesCreatorProduct(line, product)
       ) {
+        if (line.bundleGroupId) {
+          console.warn("creator_bundle_attribution_rejected", {
+            shop,
+            shopifyOrderId: line.shopifyOrderId,
+            shopifyLineItemId: line.shopifyLineItemId,
+            reason: "signed_mapping_mismatch",
+          });
+        }
         return [];
       }
       return [
@@ -444,7 +560,16 @@ export async function recordPaidCreatorSales(input: {
   webhookId: string;
   client?: ShopifyGraphqlClient;
 }) {
-  const lines = parsePaidOrder(input.payload);
+  const ordinaryLines = parsePaidOrder(input.payload);
+  const bundleContexts = ordinaryLines.length && input.client
+    ? await bundleLineContextsForPaidOrder(
+        ordinaryLines[0]!.shopifyOrderId,
+        input.client,
+      )
+    : [];
+  const lines = bundleContexts.length
+    ? parsePaidOrder(input.payload, bundleContexts)
+    : ordinaryLines;
   if (!lines.length) return { created: 0, skipped: 0 };
   const productIds = [...new Set(lines.map((line) => line.shopifyProductId))];
   const [lineOwners, owners] = await Promise.all([
@@ -459,7 +584,7 @@ export async function recordPaidCreatorSales(input: {
     const owner =
       signedLineOwners.get(line.shopifyLineItemId) ||
       lineOwners.get(line.shopifyLineItemId) ||
-      owners.get(line.shopifyProductId);
+      (line.bundleGroupId ? undefined : owners.get(line.shopifyProductId));
     if (!owner) continue;
     const lineData = {
       shopifyOrderId: line.shopifyOrderId,
