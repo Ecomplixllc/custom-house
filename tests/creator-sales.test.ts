@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   CREATOR_COMMISSION_BASIS_POINTS,
   bundleLineMatchesCreatorProduct,
+  creatorProductForBundleLine,
   creatorEarning,
   parsePaidOrder,
   parseRefund,
@@ -262,6 +263,47 @@ test("bundle Creator attribution requires the canonical parent-to-component mapp
     ),
     false,
   );
+});
+
+test("native bundle parent identity attributes without custom group attributes", () => {
+  const [line] = parsePaidOrder(
+    {
+      id: 101,
+      currency: "SEK",
+      financial_status: "paid",
+      line_items: [{
+        id: 201,
+        product_id: 301,
+        variant_id: 401,
+        quantity: 1,
+        price: "110.00",
+      }],
+    },
+    [{
+      shopifyLineItemId: "201",
+      componentProductId: "gid://shopify/Product/301",
+      componentVariantId: "gid://shopify/ProductVariant/401",
+      bundleGroupId: "gid://shopify/LineItemGroup/901",
+      parentProductId: "gid://shopify/Product/501",
+      parentVariantId: "gid://shopify/ProductVariant/601",
+      parentQuantity: 1,
+      allocatedTotal: "110.00",
+      currencyCode: "SEK",
+      customAttributes: [],
+    }],
+  );
+  assert.ok(line);
+  assert.equal(line.creatorProductId, null);
+  const creatorProduct = creatorProductForBundleLine(line, [{
+    id: "cmcreatorproduct00000001",
+    creatorId: "cmcreator000000000000001",
+    shopifyProductId: "gid://shopify/Product/301",
+    publishedShopifyProductId: "gid://shopify/Product/501",
+    baseVariantMappingJson: JSON.stringify({
+      "gid://shopify/ProductVariant/601": "gid://shopify/ProductVariant/401",
+    }),
+  }]);
+  assert.equal(creatorProduct?.id, "cmcreatorproduct00000001");
 });
 
 

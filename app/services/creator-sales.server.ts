@@ -4,6 +4,7 @@ import type { ShopifyGraphqlClient } from "./shopify-graphql.server";
 import {
   CREATOR_COMMISSION_BASIS_POINTS,
   bundleLineMatchesCreatorProduct,
+  creatorProductForBundleLine,
   creatorEarning,
   parsePaidOrder,
   parseRefund,
@@ -383,6 +384,54 @@ async function resolveCreatorProductLineOwners(
   );
 }
 
+async function resolveBundleParentLineOwners(
+  shop: string,
+  lines: CreatorPaidLine[],
+) {
+  const parentProductIds = [
+    ...new Set(
+      lines
+        .filter((line) => Boolean(line.bundleGroupId))
+        .map((line) => line.bundleParentProductId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (!parentProductIds.length) return new Map<string, LineOwner>();
+  const products = await db.creatorProduct.findMany({
+    where: {
+      shop,
+      status: "PUBLISHED",
+      publishedShopifyProductId: { in: parentProductIds },
+    },
+    select: {
+      id: true,
+      creatorId: true,
+      shopifyProductId: true,
+      publishedShopifyProductId: true,
+      baseVariantMappingJson: true,
+    },
+  });
+  return new Map(
+    lines.flatMap((line): Array<[string, LineOwner]> => {
+      if (!line.bundleGroupId) return [];
+      const product = creatorProductForBundleLine(line, products);
+      if (!product) {
+        console.warn("creator_bundle_attribution_rejected", {
+          shop,
+          shopifyOrderId: line.shopifyOrderId,
+          shopifyLineItemId: line.shopifyLineItemId,
+          reason: "native_parent_mapping_mismatch",
+        });
+        return [];
+      }
+      return [[line.shopifyLineItemId, {
+        creatorId: product.creatorId,
+        creatorProductId: product.id,
+      }]];
+    }),
+  );
+}
+
 async function resolveSignedLineOwners(
   shop: string,
   lines: CreatorPaidLine[],
@@ -572,8 +621,9 @@ export async function recordPaidCreatorSales(input: {
     : ordinaryLines;
   if (!lines.length) return { created: 0, skipped: 0 };
   const productIds = [...new Set(lines.map((line) => line.shopifyProductId))];
-  const [lineOwners, owners] = await Promise.all([
+  const [lineOwners, bundleParentOwners, owners] = await Promise.all([
     resolveCreatorProductLineOwners(input.shop, lines),
+    resolveBundleParentLineOwners(input.shop, lines),
     resolveCreatorOwners(input.shop, productIds, input.client),
   ]);
   const signedLineOwners = await resolveSignedLineOwners(input.shop, lines);
@@ -583,6 +633,7 @@ export async function recordPaidCreatorSales(input: {
   for (const line of lines) {
     const owner =
       signedLineOwners.get(line.shopifyLineItemId) ||
+      bundleParentOwners.get(line.shopifyLineItemId) ||
       lineOwners.get(line.shopifyLineItemId) ||
       (line.bundleGroupId ? undefined : owners.get(line.shopifyProductId));
     if (!owner) continue;

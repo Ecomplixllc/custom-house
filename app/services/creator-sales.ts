@@ -146,6 +146,34 @@ export function bundleLineMatchesCreatorProduct(
   }
 }
 
+export function creatorProductForBundleLine<
+  T extends {
+    shopifyProductId: string;
+    publishedShopifyProductId: string | null;
+    baseVariantMappingJson: string;
+  },
+>(
+  line: Pick<
+    CreatorPaidLine,
+    | "bundleGroupId"
+    | "bundleParentProductId"
+    | "bundleParentVariantId"
+    | "bundleParentQuantity"
+    | "shopifyProductId"
+    | "shopifyVariantId"
+    | "quantity"
+  >,
+  products: T[],
+) {
+  if (!line.bundleGroupId || !line.bundleParentProductId) return null;
+  const matches = products.filter(
+    (product) =>
+      product.publishedShopifyProductId === line.bundleParentProductId &&
+      bundleLineMatchesCreatorProduct(line, product),
+  );
+  return matches.length === 1 ? matches[0]! : null;
+}
+
 function lineProperty(
   properties: Array<{ name?: string; value?: string }> | undefined,
   key: string,
