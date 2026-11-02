@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   convertCreatorVariantToSharedInventory,
   dryRunCreatorSharedInventory,
+  ensureCreatorProductSharedInventoryRelationships,
   evaluateCreatorSharedInventoryRelationship,
 } from "../app/services/creator-shared-inventory.server.ts";
 import type { ShopifyGraphqlClient } from "../app/services/shopify-graphql.server.ts";
@@ -227,6 +228,122 @@ test("conversion fixes current parent price and retry does not mutate again", as
   assert.equal(retry.status, "ALREADY_CORRECT");
   assert.equal(retry.parentPrice, "599.00");
   assert.equal(mutationCalls, 1);
+});
+
+test("future publishing creates every size relationship and retries idempotently", async () => {
+  const secondParentId = "gid://shopify/ProductVariant/6002";
+  const secondBaseId = "gid://shopify/ProductVariant/2002";
+  const publishingProduct = {
+    ...product,
+    baseVariantMappingJson: JSON.stringify({
+      [parentId]: baseId,
+      [secondParentId]: secondBaseId,
+    }),
+  };
+  const converted = new Map<string, string>();
+  const parentPrices = new Map([
+    [parentId, "599.00"],
+    [secondParentId, "629.00"],
+  ]);
+  let mutationCalls = 0;
+  const client: ShopifyGraphqlClient = {
+    async request<T>(query: string, variables?: Record<string, unknown>) {
+      if (query.includes("CreatorSharedInventoryEligibility")) {
+        return { shop: { features: { bundles: { eligibleForBundles: true } } } } as T;
+      }
+      if (query.includes("CreatorSharedInventoryVariants")) {
+        const [requestedParentId, requestedBaseId] = variables?.ids as string[];
+        const size = requestedParentId === parentId ? "M" : "L";
+        const componentId = converted.get(requestedParentId);
+        return { nodes: [
+          variant({
+            id: requestedParentId,
+            productId: parentProductId,
+            price: parentPrices.get(requestedParentId),
+            selectedOptions: [
+              { name: "Color", value: "Green" },
+              { name: "Size", value: size },
+            ],
+            requiresComponents: Boolean(componentId),
+            components: componentId ? [{ id: componentId, quantity: 1 }] : [],
+          }),
+          variant({
+            id: requestedBaseId,
+            productId: baseProductId,
+            selectedOptions: [
+              { name: "Color", value: "Green" },
+              { name: "Size", value: size },
+            ],
+          }),
+        ] } as T;
+      }
+      if (query.includes("ConvertCreatorVariantToSharedInventory")) {
+        mutationCalls += 1;
+        const [update] = variables?.input as Array<{
+          parentProductVariantId: string;
+          productVariantRelationshipsToCreate: Array<{ id: string; quantity: number }>;
+          priceInput: { calculation: string; price: string };
+        }>;
+        assert.equal(update.productVariantRelationshipsToCreate[0]?.quantity, 1);
+        assert.equal(update.priceInput.calculation, "FIXED");
+        assert.equal(update.priceInput.price, parentPrices.get(update.parentProductVariantId));
+        converted.set(
+          update.parentProductVariantId,
+          update.productVariantRelationshipsToCreate[0]!.id,
+        );
+        return {
+          productVariantRelationshipBulkUpdate: {
+            parentProductVariants: [{ id: update.parentProductVariantId }],
+            userErrors: [],
+          },
+        } as T;
+      }
+      throw new Error("Unexpected query");
+    },
+  };
+
+  const first = await ensureCreatorProductSharedInventoryRelationships({
+    product: publishingProduct,
+    client,
+  });
+  const retry = await ensureCreatorProductSharedInventoryRelationships({
+    product: publishingProduct,
+    client,
+  });
+
+  assert.deepEqual(first.map((row) => row.status), ["CONVERTED", "CONVERTED"]);
+  assert.deepEqual(retry.map((row) => row.status), ["ALREADY_CORRECT", "ALREADY_CORRECT"]);
+  assert.deepEqual([...converted.entries()], [
+    [parentId, baseId],
+    [secondParentId, secondBaseId],
+  ]);
+  assert.deepEqual([...parentPrices.values()], ["599.00", "629.00"]);
+  assert.equal(mutationCalls, 2);
+});
+
+test("future publishing leaves an untracked Base relationship blocked", async () => {
+  let mutationCalls = 0;
+  const client: ShopifyGraphqlClient = {
+    async request<T>(query: string) {
+      if (query.includes("CreatorSharedInventoryEligibility")) {
+        return { shop: { features: { bundles: { eligibleForBundles: true } } } } as T;
+      }
+      if (query.includes("CreatorSharedInventoryVariants")) {
+        return { nodes: [
+          variant({ id: parentId, productId: parentProductId }),
+          variant({ id: baseId, productId: baseProductId, tracked: false }),
+        ] } as T;
+      }
+      mutationCalls += 1;
+      throw new Error("Blocked relationship attempted a mutation");
+    },
+  };
+  const results = await ensureCreatorProductSharedInventoryRelationships({
+    product,
+    client,
+  });
+  assert.equal(results[0]?.status, "BLOCKED_BASE_INVENTORY_UNTRACKED");
+  assert.equal(mutationCalls, 0);
 });
 
 test("dry run includes eligible mappings and skips legacy rows without mutation", async () => {
