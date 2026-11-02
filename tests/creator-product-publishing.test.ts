@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  publishCreatorProductToShopify,
   synchronizeBakedCreatorProductPricing,
   type CreatorProductForPublish,
 } from "../app/services/creator-product-publishing.server.ts";
+import { ensureCreatorProductSharedInventoryRelationships } from "../app/services/creator-shared-inventory.server.ts";
 import { parseSurchargeInput } from "../app/services/production-method-pricing.server.ts";
 import type { ShopifyGraphqlClient } from "../app/services/shopify-graphql.server.ts";
 
@@ -241,4 +243,266 @@ test("publishing verifies shared inventory before database publication and store
   assert.ok(databasePublish > inventory);
   assert.ok(storefrontPublish > databasePublish);
   assert.match(publishFlow, /CREATOR_SHARED_INVENTORY_SETUP_FAILED/);
+});
+
+test("new Creator publish automatically creates and verifies native shared inventory", async () => {
+  const qaBaseProductId = "gid://shopify/Product/9000";
+  const qaBaseVariantId = "gid://shopify/ProductVariant/9001";
+  const qaCreatorProductId = "creator-product-future-smoke-1";
+  const qaPublishedProductId = "gid://shopify/Product/9900";
+  const qaCreatorVariantId = "gid://shopify/ProductVariant/9901";
+  const collectionId = "gid://shopify/Collection/7000";
+  const publicationId = "gid://shopify/Publication/1";
+  const selectedOptions = [
+    { name: "Color", value: "Green" },
+    { name: "Size", value: "M" },
+  ];
+  const draft: CreatorProductForPublish = {
+    ...product,
+    id: qaCreatorProductId,
+    shopifyProductId: qaBaseProductId,
+    title: "QA Future Shared Inventory",
+    designVariantSelectionsJson: JSON.stringify(setup),
+  };
+  let saved = { ...draft };
+  const collection = {
+    id: "collection-qa-1",
+    shop: draft.shop,
+    creatorId: draft.creatorId,
+    publicId: "public-qa-1",
+    publicHandle: "qa-creator",
+    displayName: "QA Creator Designs",
+    status: "ACTIVE",
+    shopifyCollectionId: collectionId,
+    shopifyCollectionHandle: "qa-creator",
+    shopifyCollectionUrl: "/collections/qa-creator",
+    shopifyPublishedAt: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const pricingRecord = {
+    id: "pricing-qa-1",
+    shopKey: draft.shop,
+    shopifyProductId: qaBaseProductId,
+    currency: "SEK",
+    methodConfigurations: null,
+    ...pricing,
+  };
+  const database = {
+    creator: {
+      async findFirst() {
+        return {
+          id: draft.creatorId,
+          shop: draft.shop,
+          displayName: "QA Creator",
+          handle: "qa-creator",
+          status: "APPROVED",
+        };
+      },
+      async updateMany() { return { count: 1 }; },
+    },
+    creatorCollection: {
+      async findUnique() { return collection; },
+      async findFirst() { return null; },
+      async create() { return collection; },
+      async update(args: { data: Record<string, unknown> }) {
+        Object.assign(collection, args.data);
+        return collection;
+      },
+    },
+    creatorProduct: {
+      async findFirst() { return saved; },
+      async update(args: { data: Partial<CreatorProductForPublish> }) {
+        saved = { ...saved, ...args.data };
+        return saved;
+      },
+    },
+    shopConfig: {
+      async findUnique() { return { onlineStorePublicationId: publicationId }; },
+    },
+    productionMethodSetting: {
+      async findMany() { return []; },
+    },
+    publicProductProductionPricing: {
+      async findUnique() { return pricingRecord; },
+    },
+    auditLog: {
+      async create() { return {}; },
+    },
+  };
+
+  let creatorPrice = "200.00";
+  let pricingMode = "";
+  let validation: unknown = null;
+  let relationship: { id: string; quantity: number } | null = null;
+  let relationshipMutations = 0;
+  const calls: string[] = [];
+  const variantNode = (id: string) => ({
+    id,
+    price: id === qaCreatorVariantId ? creatorPrice : "100.00",
+    inventoryPolicy: "DENY",
+    requiresComponents: id === qaCreatorVariantId && Boolean(relationship),
+    selectedOptions,
+    inventoryItem: { tracked: true },
+    product: {
+      id: id === qaCreatorVariantId ? qaPublishedProductId : qaBaseProductId,
+      status: "ACTIVE",
+      isGiftCard: false,
+      combinedListingRole: null,
+      requiresSellingPlan: false,
+    },
+    productParents: { nodes: [] },
+    productVariantComponents: {
+      nodes: id === qaCreatorVariantId && relationship
+        ? [{
+            id: "gid://shopify/ProductVariantComponent/1",
+            quantity: relationship.quantity,
+            productVariant: { id: relationship.id },
+          }]
+        : [],
+    },
+  });
+  const client: ShopifyGraphqlClient = {
+    async request<T>(query: string, variables?: Record<string, unknown>) {
+      calls.push(query);
+      if (query.includes("NativeCreatorCollection($id")) {
+        return { collection: {
+          id: collectionId,
+          handle: "qa-creator",
+          title: "QA Creator Designs",
+          creatorId: { value: draft.creatorId },
+          creatorCollectionId: { value: collection.id },
+          collectionType: { value: "creator" },
+        } } as T;
+      }
+      if (query.includes("NativeCreatorCollectionMetafields")) {
+        return { metafieldsSet: { userErrors: [] } } as T;
+      }
+      if (query.includes("NativeCreatorPublication")) {
+        return { publishablePublish: { userErrors: [] } } as T;
+      }
+      if (query.includes("NativeCreatorProductByMetafield")) {
+        return { products: { nodes: [] } } as T;
+      }
+      if (query.includes("NativeCreatorProductDuplicate")) {
+        return { productDuplicate: {
+          newProduct: { id: qaPublishedProductId, handle: "qa-future-shared-inventory" },
+          userErrors: [],
+        } } as T;
+      }
+      if (query.includes("NativeCreatorProductUpdate")) {
+        return { productUpdate: {
+          product: { id: qaPublishedProductId, handle: "qa-future-shared-inventory" },
+          userErrors: [],
+        } } as T;
+      }
+      if (query.includes("NativeCreatorProductCustomizationCleanup")) {
+        return { metafieldsDelete: { userErrors: [] } } as T;
+      }
+      if (query.includes("NativeCreatorProductMetafields")) {
+        return { metafieldsSet: { userErrors: [] } } as T;
+      }
+      if (query.includes("NativeCreatorProductVariants")) {
+        const id = String(variables?.id || "");
+        return { product: { variants: {
+          nodes: id === qaBaseProductId
+            ? [{ id: qaBaseVariantId, price: "100.00", selectedOptions }]
+            : [{ id: qaCreatorVariantId, price: creatorPrice, selectedOptions }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        } } } as T;
+      }
+      if (query.includes("BakeNativeCreatorVariantPrices")) {
+        const updates = variables?.variants as Array<{ id: string; price: string }>;
+        creatorPrice = updates[0]!.price;
+        return { productVariantsBulkUpdate: { userErrors: [] } } as T;
+      }
+      if (query.includes("NativeCreatorProductPricingMetafields")) {
+        const metafields = variables?.metafields as Array<{ key: string; value: string }>;
+        pricingMode = metafields.find((item) => item.key === "creator_pricing_mode")?.value || "";
+        validation = JSON.parse(
+          metafields.find((item) => item.key === "creator_cart_validation")?.value || "null",
+        );
+        return { metafieldsSet: { userErrors: [] } } as T;
+      }
+      if (query.includes("VerifyNativeCreatorProductPricing")) {
+        return { product: {
+          pricingMode: { value: pricingMode },
+          validation: { jsonValue: validation },
+        } } as T;
+      }
+      if (query.includes("NativeCreatorCollectionHasProduct")) {
+        return { collection: { hasProduct: false } } as T;
+      }
+      if (query.includes("NativeCreatorCollectionMembership")) {
+        return { collectionAddProductsV2: { job: { id: "job-1" }, userErrors: [] } } as T;
+      }
+      if (query.includes("NativeCreatorProductActivate")) {
+        return { productUpdate: { userErrors: [] } } as T;
+      }
+      if (query.includes("CreatorSharedInventoryEligibility")) {
+        return { shop: { features: { bundles: { eligibleForBundles: true } } } } as T;
+      }
+      if (query.includes("CreatorSharedInventoryVariants")) {
+        const ids = variables?.ids as string[];
+        return { nodes: ids.map(variantNode) } as T;
+      }
+      if (query.includes("ConvertCreatorVariantToSharedInventory")) {
+        relationshipMutations += 1;
+        const [input] = variables?.input as Array<{
+          parentProductVariantId: string;
+          productVariantRelationshipsToCreate: Array<{ id: string; quantity: number }>;
+          priceInput: { calculation: string; price: string };
+        }>;
+        assert.equal(input.parentProductVariantId, qaCreatorVariantId);
+        assert.deepEqual(input.productVariantRelationshipsToCreate, [
+          { id: qaBaseVariantId, quantity: 1 },
+        ]);
+        assert.deepEqual(input.priceInput, {
+          calculation: "FIXED",
+          price: creatorPrice,
+        });
+        relationship = input.productVariantRelationshipsToCreate[0]!;
+        return { productVariantRelationshipBulkUpdate: {
+          parentProductVariants: [{ id: qaCreatorVariantId }],
+          userErrors: [],
+        } } as T;
+      }
+      if (query.includes("NativeCreatorProductPublish")) {
+        return { publishablePublish: { userErrors: [] } } as T;
+      }
+      throw new Error(`Unexpected GraphQL operation: ${query.slice(0, 80)}`);
+    },
+  };
+
+  const published = await publishCreatorProductToShopify(
+    draft.shop,
+    draft.id,
+    client,
+    database as never,
+  );
+  const priceAfterPublish = creatorPrice;
+  const retry = await ensureCreatorProductSharedInventoryRelationships({
+    product: {
+      id: published.id,
+      status: published.status,
+      shopifyProductId: published.shopifyProductId,
+      publishedShopifyProductId: published.publishedShopifyProductId || null,
+      baseVariantMappingJson: published.baseVariantMappingJson || "{}",
+    },
+    client,
+  });
+
+  assert.equal(published.status, "PUBLISHED");
+  assert.equal(published.publishedShopifyProductId, qaPublishedProductId);
+  assert.deepEqual(JSON.parse(published.baseVariantMappingJson || "{}"), {
+    [qaCreatorVariantId]: qaBaseVariantId,
+  });
+  assert.deepEqual(relationship, { id: qaBaseVariantId, quantity: 1 });
+  assert.equal(creatorPrice, priceAfterPublish);
+  assert.equal(priceAfterPublish, "200.00");
+  assert.equal(retry[0]?.status, "ALREADY_CORRECT");
+  assert.equal(retry[0]?.parentPrice, "200.00");
+  assert.equal(relationshipMutations, 1);
+  assert.ok(calls.find((query) => query.includes("CreatorSharedInventoryVariants")));
+  assert.ok(calls.find((query) => query.includes("NativeCreatorProductPublish")));
 });
