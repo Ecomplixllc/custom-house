@@ -13,8 +13,6 @@ node_modules
 /prisma/dev.sqlite-journal
 database.sqlite
 
-.env
-.env.*
 
 
 
@@ -44,3 +42,4 @@ temp_interactive_push.bat
 /theme-live-referral-check/
 /theme-live-referral-verify/
 /theme-source/
+config.bat
