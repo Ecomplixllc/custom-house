@@ -45,14 +45,30 @@ import {
 const shop = "customhouse.test";
 const { nonFixedColorVariantIds } = creatorPublishing;
 
-test("PitchPrint project ownership rejects foreign and missing authors", () => {
+test("PitchPrint project ownership accepts metadata or serialized authors and rejects conflicts", () => {
   assert.doesNotThrow(() =>
     assertPitchPrintProjectOwner(shop, "creator-a", {
       _author: `customhouse:${shop}:creator:creator-a`,
     }),
   );
+  assert.doesNotThrow(() =>
+    assertPitchPrintProjectOwner(shop, "creator-a", {
+      author: `customhouse:${shop}:creator:creator-a`,
+    }),
+  );
+  assert.doesNotThrow(() =>
+    assertPitchPrintProjectOwner(shop, "creator-a", {
+      _author: `customhouse:${shop}:creator:creator-a`,
+      author: `customhouse:${shop}:creator:creator-a`,
+    }),
+  );
   for (const source of [
     { _author: `customhouse:${shop}:creator:creator-b` },
+    { author: `customhouse:${shop}:creator:creator-b` },
+    {
+      _author: `customhouse:${shop}:creator:creator-a`,
+      author: `customhouse:${shop}:creator:creator-b`,
+    },
     {},
   ]) {
     assert.throws(

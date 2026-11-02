@@ -2045,8 +2045,13 @@ export function assertPitchPrintProjectOwner(
   source: Record<string, unknown>,
 ) {
   const expectedAuthor = creatorPitchPrintUserId(shop, creatorId);
-  const sourceAuthor = cleanOptionalText(source._author, 300);
-  if (sourceAuthor !== expectedAuthor) {
+  const metadataAuthor = cleanOptionalText(source._author, 300);
+  const serializedAuthor = cleanOptionalText(source.author, 300);
+  const sourceAuthor = metadataAuthor || serializedAuthor;
+  if (
+    (metadataAuthor && serializedAuthor && metadataAuthor !== serializedAuthor) ||
+    sourceAuthor !== expectedAuthor
+  ) {
     throw new DomainError(
       "PITCHPRINT_PROJECT_OWNER_MISMATCH",
       "This saved design does not belong to the authenticated creator.",
