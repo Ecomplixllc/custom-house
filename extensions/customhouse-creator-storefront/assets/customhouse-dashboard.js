@@ -2020,42 +2020,6 @@ export function closeCreatorDesignerSession(
   showProducts();
 }
 
-function ensureCreatorDraftSaveStatus(root) {
-  let status = root.__customHouseDraftSaveStatus ||
-    document.querySelector("[data-creator-draft-save-status]");
-  if (status) return status;
-  status = document.createElement("div");
-  status.dataset.creatorDraftSaveStatus = "true";
-  status.setAttribute("role", "status");
-  status.setAttribute("aria-live", "polite");
-  Object.assign(status.style, {
-    position: "fixed",
-    top: "18px",
-    right: "18px",
-    zIndex: "2147483000",
-    display: "none",
-    padding: "9px 13px",
-    borderRadius: "999px",
-    background: "rgba(20, 24, 31, 0.92)",
-    color: "#fff",
-    font: "600 13px/1.2 system-ui, sans-serif",
-    boxShadow: "0 4px 18px rgba(0, 0, 0, 0.22)",
-    pointerEvents: "none",
-  });
-  document.body.append(status);
-  root.__customHouseDraftSaveStatus = status;
-  return status;
-}
-
-function setCreatorDraftSaveStatus(root, message = "", isError = false) {
-  const status = ensureCreatorDraftSaveStatus(root);
-  status.textContent = message;
-  status.style.display = message ? "block" : "none";
-  status.style.background = isError
-    ? "rgba(155, 28, 28, 0.94)"
-    : "rgba(20, 24, 31, 0.92)";
-}
-
 function bindPitchPrintManager(root) {
   if (root.__customHousePitchPrintManagerBound) return;
   root.__customHousePitchPrintManagerBound = true;
@@ -2075,7 +2039,7 @@ function bindPitchPrintManager(root) {
     draftSessionSavePromise: null,
     pendingDraftSessionSave: null,
     lastPersistedDraftProjectId: "",
-    draftSessionNoticeShown: false,
+    draftSaveFailureNotified: false,
     saveFailureNotified: false,
     pendingCreatorSetup: null,
     pendingPitchPrintSave: null,
@@ -2122,7 +2086,6 @@ function bindPitchPrintManager(root) {
     manager.draftSaveSequence = 0;
     manager.nativeCloseApp = null;
     manager.draftClosePromise = null;
-    setCreatorDraftSaveStatus(root);
     if (manager.creatorSetupAbortController) {
       manager.creatorSetupAbortController.abort();
       manager.creatorSetupAbortController = null;
@@ -2136,7 +2099,7 @@ function bindPitchPrintManager(root) {
     manager.draftSessionSavePromise = null;
     manager.pendingDraftSessionSave = null;
     manager.lastPersistedDraftProjectId = "";
-    manager.draftSessionNoticeShown = false;
+    manager.draftSaveFailureNotified = false;
     manager.saveFailureNotified = false;
     manager.pendingCreatorSetup = null;
     manager.pendingPitchPrintSave = null;
@@ -2183,11 +2146,14 @@ function bindPitchPrintManager(root) {
     manager.draftSourceSaveResolve = null;
     manager.draftSourceSaveReject = null;
     if (error) {
-      setCreatorDraftSaveStatus(root, "Draft save failed", true);
+      if (!manager.draftSaveFailureNotified) {
+        manager.draftSaveFailureNotified = true;
+        showCreatorToast(root, "We couldn't save your draft. Please try again.", true);
+      }
       reject?.(error);
       return;
     }
-    setCreatorDraftSaveStatus(root, "Saved");
+    manager.draftSaveFailureNotified = false;
     resolve?.(true);
   };
   const requestPitchPrintDraftSourceSave = (product, token) => {
@@ -2200,7 +2166,6 @@ function bindPitchPrintManager(root) {
     if (!manager.client || typeof manager.client.fire !== "function") {
       return Promise.reject(new Error("PitchPrint draft saving is unavailable."));
     }
-    setCreatorDraftSaveStatus(root, "Saving…");
     manager.draftSourceSavePromise = new Promise((resolve, reject) => {
       manager.draftSourceSaveResolve = resolve;
       manager.draftSourceSaveReject = reject;
@@ -2332,11 +2297,6 @@ function bindPitchPrintManager(root) {
       manager.draftSessionSaved = true;
       manager.draftSaveSequence += 1;
       if (updated) updateCreatorProductInState(root, updated);
-      if (!manager.draftSessionNoticeShown) {
-        manager.draftSessionNoticeShown = true;
-        showCreatorToast(root, "Draft saved. You can continue later.");
-      }
-      setCreatorDraftSaveStatus(root, "Saved");
     };
     if (saveEvent.projectId === manager.lastPersistedDraftProjectId) {
       // The project identity remains stable while PitchPrint overwrites its
@@ -2375,11 +2335,6 @@ function bindPitchPrintManager(root) {
           manager.draftSessionSaved = true;
           manager.draftSaveSequence += 1;
           updateCreatorProductInState(root, updated);
-          if (!manager.draftSessionNoticeShown) {
-            manager.draftSessionNoticeShown = true;
-            showCreatorToast(root, "Draft saved. You can continue later.");
-          }
-          setCreatorDraftSaveStatus(root, "Saved");
         } catch (error) {
           if (pending.token !== manager.token) return;
           showCreatorToast(
@@ -2571,7 +2526,6 @@ function bindPitchPrintManager(root) {
       if (manager.draftClosePromise) return manager.draftClosePromise;
       const initialSaveSequence = manager.draftSaveSequence;
       manager.draftClosePromise = (async () => {
-        setCreatorDraftSaveStatus(root, "Saving before closing…");
         if (manager.draftSessionSavePromise) {
           await manager.draftSessionSavePromise;
         }
@@ -2583,7 +2537,6 @@ function bindPitchPrintManager(root) {
         manager.draftClosePromise = null;
         manager.isDesignerOpening = false;
         restoreButton();
-        setCreatorDraftSaveStatus(root, "Draft save failed — editor kept open", true);
         showCreatorToast(
           root,
           error instanceof Error
