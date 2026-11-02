@@ -479,7 +479,12 @@ test("creator dashboard starts PitchPrint directly and reviews saved designs wit
   assert.match(script, /bindPitchPrintEvent\(client, "send-client-session"/);
   assert.match(script, /manager\.client\.fire\("send-source"\)/);
   assert.match(script, /createCreatorDraftAutosaveController/);
-  assert.match(script, /Saving before closing/);
+  assert.doesNotMatch(script, /data-creator-draft-save-status/);
+  assert.doesNotMatch(script, /setCreatorDraftSaveStatus/);
+  assert.doesNotMatch(script, /"Saving…"/);
+  assert.doesNotMatch(script, /Saving before closing/);
+  assert.doesNotMatch(script, /"Draft saved\. You can continue later\."/);
+  assert.match(script, /We couldn't save your draft\. Please try again\./);
   assert.match(script, /flush\(\{ force: true \}\)/);
   assert.match(script, /requestCurrentCreatorProduct/);
   assert.match(script, /requestCreatorProducts\(\{ fresh: true \}\)/);
