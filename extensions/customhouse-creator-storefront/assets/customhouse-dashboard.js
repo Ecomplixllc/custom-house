@@ -13,8 +13,91 @@ const REFERRAL_CLAIM_ENDPOINT = "/apps/customhouse/api/referral/claim";
 const PENDING_REFERRAL_COOKIE = "customhouse_referral_pending";
 const PITCHPRINT_CLIENT_SRC = "https://pitchprint.io/rsc/js/client.js";
 const JQUERY_SRC = "https://code.jquery.com/jquery-3.7.1.min.js";
+const CREATOR_DRAFT_AUTOSAVE_DEBOUNCE_MS = 3500;
+const CREATOR_DRAFT_AUTOSAVE_HEARTBEAT_MS = 12000;
+const CREATOR_DRAFT_SAVE_TIMEOUT_MS = 30000;
 let creatorProductsLoadPromise = null;
 let creatorBaseProductsLoadPromise = null;
+
+/**
+ * @param {{
+ *   onSave?: (context: {force: boolean, revision: number}) => unknown,
+ *   debounceMs?: number,
+ *   setTimer?: (callback: () => void, delay: number) => number,
+ *   clearTimer?: (timer: number) => void,
+ * }} [options]
+ */
+export function createCreatorDraftAutosaveController({
+  onSave,
+  debounceMs = CREATOR_DRAFT_AUTOSAVE_DEBOUNCE_MS,
+  setTimer = (callback, delay) => window.setTimeout(callback, delay),
+  clearTimer = (timer) => window.clearTimeout(timer),
+} = {}) {
+  if (typeof onSave !== "function") {
+    throw new TypeError("Creator draft autosave requires an onSave callback.");
+  }
+  let timer = null;
+  let dirty = false;
+  let revision = 0;
+  let savedRevision = 0;
+  let savePromise = null;
+
+  const cancelScheduledSave = () => {
+    if (timer === null) return;
+    clearTimer(timer);
+    timer = null;
+  };
+  const flush = async ({ force = false } = {}) => {
+    cancelScheduledSave();
+    if (savePromise) {
+      if (force) dirty = true;
+      await savePromise;
+      if (dirty) return flush({ force: false });
+      return true;
+    }
+    if (!force && !dirty) return false;
+    const targetRevision = revision;
+    dirty = false;
+    savePromise = Promise.resolve(onSave({ force, revision: targetRevision }))
+      .then(() => {
+        savedRevision = Math.max(savedRevision, targetRevision);
+        return true;
+      })
+      .catch((error) => {
+        dirty = true;
+        throw error;
+      })
+      .finally(() => {
+        savePromise = null;
+      });
+    await savePromise;
+    if (dirty) return flush({ force: false });
+    return true;
+  };
+  const markDirty = () => {
+    dirty = true;
+    revision += 1;
+    cancelScheduledSave();
+    timer = setTimer(() => {
+      timer = null;
+      void flush().catch(() => {});
+    }, debounceMs);
+    return revision;
+  };
+  const dispose = () => {
+    cancelScheduledSave();
+    dirty = false;
+  };
+
+  return {
+    markDirty,
+    flush,
+    dispose,
+    isDirty: () => dirty,
+    isSaving: () => Boolean(savePromise),
+    state: () => ({ dirty, revision, savedRevision, saving: Boolean(savePromise) }),
+  };
+}
 
 export function resolveDashboardState(data) {
   if (!data || typeof data !== "object") return { state: "CREATOR_RECORD_MISSING", message: "No creator application was found." };
@@ -196,11 +279,15 @@ async function removeProfilePhoto(root, message) {
   }
 }
 
-async function requestCreatorProducts() {
+async function requestCreatorProducts(options = {}) {
+  if (options.fresh && creatorProductsLoadPromise) {
+    await creatorProductsLoadPromise.catch(() => {});
+  }
   if (!creatorProductsLoadPromise) {
     creatorProductsLoadPromise = (async () => {
       const response = await fetch(CREATOR_PRODUCTS_ENDPOINT, {
         credentials: "same-origin",
+        cache: "no-store",
         headers: { Accept: "application/json" },
       });
       const body = await response.json();
@@ -211,6 +298,13 @@ async function requestCreatorProducts() {
     });
   }
   return creatorProductsLoadPromise;
+}
+
+async function requestCurrentCreatorProduct(productId) {
+  const products = await requestCreatorProducts({ fresh: true });
+  const product = products.find((item) => item?.id === productId);
+  if (!product) throw new Error("Creator Product could not be loaded.");
+  return { product, products };
 }
 
 async function savePayoutMethod(payload) {
@@ -967,7 +1061,7 @@ function renderCreatorProducts(list, empty, products) {
       addDesignButton(actions, label, { creatorProductDesign: product.id }, "ch-design-card__button--primary");
     };
     if (statusValue === "DRAFT") {
-      addDesignAction("Continue Designing");
+      addDesignAction("Continue Design");
     } else if (statusValue === "REJECTED") {
       addDesignAction("Edit Design");
     } else if (statusValue === "PENDING") {
@@ -1926,6 +2020,42 @@ export function closeCreatorDesignerSession(
   showProducts();
 }
 
+function ensureCreatorDraftSaveStatus(root) {
+  let status = root.__customHouseDraftSaveStatus ||
+    document.querySelector("[data-creator-draft-save-status]");
+  if (status) return status;
+  status = document.createElement("div");
+  status.dataset.creatorDraftSaveStatus = "true";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  Object.assign(status.style, {
+    position: "fixed",
+    top: "18px",
+    right: "18px",
+    zIndex: "2147483000",
+    display: "none",
+    padding: "9px 13px",
+    borderRadius: "999px",
+    background: "rgba(20, 24, 31, 0.92)",
+    color: "#fff",
+    font: "600 13px/1.2 system-ui, sans-serif",
+    boxShadow: "0 4px 18px rgba(0, 0, 0, 0.22)",
+    pointerEvents: "none",
+  });
+  document.body.append(status);
+  root.__customHouseDraftSaveStatus = status;
+  return status;
+}
+
+function setCreatorDraftSaveStatus(root, message = "", isError = false) {
+  const status = ensureCreatorDraftSaveStatus(root);
+  status.textContent = message;
+  status.style.display = message ? "block" : "none";
+  status.style.background = isError
+    ? "rgba(155, 28, 28, 0.94)"
+    : "rgba(20, 24, 31, 0.92)";
+}
+
 function bindPitchPrintManager(root) {
   if (root.__customHousePitchPrintManagerBound) return;
   root.__customHousePitchPrintManagerBound = true;
@@ -1949,6 +2079,17 @@ function bindPitchPrintManager(root) {
     saveFailureNotified: false,
     pendingCreatorSetup: null,
     pendingPitchPrintSave: null,
+    draftAutosaveController: null,
+    draftAutosaveHeartbeatTimer: null,
+    draftActivityAbortController: null,
+    draftIframeActive: false,
+    draftSourceSavePromise: null,
+    draftSourceSaveResolve: null,
+    draftSourceSaveReject: null,
+    draftSourceSaveTimeout: null,
+    draftSaveSequence: 0,
+    nativeCloseApp: null,
+    draftClosePromise: null,
   };
   root.__customHousePitchPrintManager = manager;
 
@@ -1959,6 +2100,29 @@ function bindPitchPrintManager(root) {
   };
   const cleanupPitchPrintSession = () => {
     clearValidationTimer();
+    manager.draftAutosaveController?.dispose();
+    manager.draftAutosaveController = null;
+    if (manager.draftAutosaveHeartbeatTimer) {
+      window.clearInterval(manager.draftAutosaveHeartbeatTimer);
+      manager.draftAutosaveHeartbeatTimer = null;
+    }
+    if (manager.draftActivityAbortController) {
+      manager.draftActivityAbortController.abort();
+      manager.draftActivityAbortController = null;
+    }
+    if (manager.draftSourceSaveTimeout) {
+      window.clearTimeout(manager.draftSourceSaveTimeout);
+      manager.draftSourceSaveTimeout = null;
+    }
+    manager.draftSourceSaveResolve?.(false);
+    manager.draftSourceSavePromise = null;
+    manager.draftSourceSaveResolve = null;
+    manager.draftSourceSaveReject = null;
+    manager.draftIframeActive = false;
+    manager.draftSaveSequence = 0;
+    manager.nativeCloseApp = null;
+    manager.draftClosePromise = null;
+    setCreatorDraftSaveStatus(root);
     if (manager.creatorSetupAbortController) {
       manager.creatorSetupAbortController.abort();
       manager.creatorSetupAbortController = null;
@@ -1979,7 +2143,13 @@ function bindPitchPrintManager(root) {
     manager.isDesignerOpening = false;
   };
   window.addEventListener("beforeunload", (event) => {
-    if (!manager.designerVisible || manager.projectSaved) return;
+    if (
+      !manager.designerVisible ||
+      manager.projectSaved ||
+      (!manager.draftAutosaveController?.isDirty() &&
+        !manager.draftAutosaveController?.isSaving() &&
+        !manager.draftSourceSavePromise)
+    ) return;
     event.preventDefault();
     event.returnValue = "";
   });
@@ -2001,6 +2171,58 @@ function bindPitchPrintManager(root) {
       });
       handler?.(event);
     });
+  };
+  const settleDraftSourceSave = (error = null) => {
+    if (manager.draftSourceSaveTimeout) {
+      window.clearTimeout(manager.draftSourceSaveTimeout);
+      manager.draftSourceSaveTimeout = null;
+    }
+    const resolve = manager.draftSourceSaveResolve;
+    const reject = manager.draftSourceSaveReject;
+    manager.draftSourceSavePromise = null;
+    manager.draftSourceSaveResolve = null;
+    manager.draftSourceSaveReject = null;
+    if (error) {
+      setCreatorDraftSaveStatus(root, "Draft save failed", true);
+      reject?.(error);
+      return;
+    }
+    setCreatorDraftSaveStatus(root, "Saved");
+    resolve?.(true);
+  };
+  const requestPitchPrintDraftSourceSave = (product, token) => {
+    if (
+      manager.projectSaved ||
+      manager.finalProjectSavePending ||
+      token !== manager.token
+    ) return Promise.resolve(false);
+    if (manager.draftSourceSavePromise) return manager.draftSourceSavePromise;
+    if (!manager.client || typeof manager.client.fire !== "function") {
+      return Promise.reject(new Error("PitchPrint draft saving is unavailable."));
+    }
+    setCreatorDraftSaveStatus(root, "Saving…");
+    manager.draftSourceSavePromise = new Promise((resolve, reject) => {
+      manager.draftSourceSaveResolve = resolve;
+      manager.draftSourceSaveReject = reject;
+      manager.draftSourceSaveTimeout = window.setTimeout(() => {
+        if (token !== manager.token) return;
+        settleDraftSourceSave(new Error("PitchPrint did not confirm the draft save."));
+      }, CREATOR_DRAFT_SAVE_TIMEOUT_MS);
+      try {
+        // PitchPrint's supported lightweight source save serializes the active
+        // canvas into the same project without running the final-submit flow.
+        manager.client.fire("send-source");
+        pitchPrintDiagnostics(root, "creator-draft-source-save-requested", {
+          creatorProductId: product.id,
+          hasProjectId: Boolean(manager.activeProjectId),
+        });
+      } catch (error) {
+        settleDraftSourceSave(
+          error instanceof Error ? error : new Error("Draft saving failed."),
+        );
+      }
+    });
+    return manager.draftSourceSavePromise;
   };
   const savePendingCreatorProduct = async (product, token) => {
     if (manager.projectSaved || token !== manager.token) return;
@@ -2104,7 +2326,24 @@ function bindPitchPrintManager(root) {
     ) return;
     const saveEvent = normalizePitchPrintSaveEvent(event);
     if (!saveEvent.projectId) return;
-    if (saveEvent.projectId === manager.lastPersistedDraftProjectId) return;
+    const recordDraftSave = (updated = null) => {
+      manager.activeProjectId = saveEvent.projectId;
+      manager.lastPersistedDraftProjectId = saveEvent.projectId;
+      manager.draftSessionSaved = true;
+      manager.draftSaveSequence += 1;
+      if (updated) updateCreatorProductInState(root, updated);
+      if (!manager.draftSessionNoticeShown) {
+        manager.draftSessionNoticeShown = true;
+        showCreatorToast(root, "Draft saved. You can continue later.");
+      }
+      setCreatorDraftSaveStatus(root, "Saved");
+    };
+    if (saveEvent.projectId === manager.lastPersistedDraftProjectId) {
+      // The project identity remains stable while PitchPrint overwrites its
+      // serialized source. A repeated ID is a real successful save, not a no-op.
+      recordDraftSave();
+      return;
+    }
     manager.pendingDraftSessionSave = { product, saveEvent, token };
     if (manager.draftSessionSavePromise) {
       await manager.draftSessionSavePromise;
@@ -2119,9 +2358,6 @@ function bindPitchPrintManager(root) {
           manager.finalProjectSavePending ||
           pending.token !== manager.token
         ) return;
-        if (pending.saveEvent.projectId === manager.lastPersistedDraftProjectId) {
-          continue;
-        }
         try {
           const updated = await saveCreatorProductPitchPrintDraftSession(
             pending.product.id,
@@ -2137,11 +2373,13 @@ function bindPitchPrintManager(root) {
           manager.activeProjectId = pending.saveEvent.projectId;
           manager.lastPersistedDraftProjectId = pending.saveEvent.projectId;
           manager.draftSessionSaved = true;
+          manager.draftSaveSequence += 1;
           updateCreatorProductInState(root, updated);
           if (!manager.draftSessionNoticeShown) {
             manager.draftSessionNoticeShown = true;
             showCreatorToast(root, "Draft saved. You can continue later.");
           }
+          setCreatorDraftSaveStatus(root, "Saved");
         } catch (error) {
           if (pending.token !== manager.token) return;
           showCreatorToast(
@@ -2151,6 +2389,7 @@ function bindPitchPrintManager(root) {
               : "Design draft could not be saved.",
             true,
           );
+          throw error;
         }
       }
     };
@@ -2162,11 +2401,24 @@ function bindPitchPrintManager(root) {
       }
     });
   };
+  const completePitchPrintDraftSave = (product, event, token) => {
+    void handlePitchPrintDraftSessionSaved(product, event, token)
+      .then(() => {
+        const saveEvent = normalizePitchPrintSaveEvent(event);
+        if (saveEvent.projectId) settleDraftSourceSave();
+      })
+      .catch((error) => {
+        settleDraftSourceSave(
+          error instanceof Error ? error : new Error("Draft saving failed."),
+        );
+      });
+  };
   const handlePitchPrintProjectSaved = async (product, event, token) => {
     if (manager.projectSaved || token !== manager.token) return;
     const saveFlags = pitchPrintSaveFlags(event);
     if (saveFlags.autoSaved || saveFlags.saveForLater) {
       await handlePitchPrintDraftSessionSaved(product, event, token);
+      if (normalizePitchPrintSaveEvent(event).projectId) settleDraftSourceSave();
       return;
     }
     manager.finalProjectSavePending = true;
@@ -2253,6 +2505,97 @@ function bindPitchPrintManager(root) {
       { signal: controller.signal },
     );
   };
+  const pitchPrintFrame = () =>
+    Array.from(document.querySelectorAll("iframe")).find((iframe) => {
+      try {
+        return new URL(iframe.src, window.location.origin).origin === "https://pitchprint.io";
+      } catch {
+        return false;
+      }
+    }) || null;
+  const markCreatorDraftDirty = () => {
+    if (!manager.designerVisible || manager.projectSaved) return;
+    manager.draftAutosaveController?.markDirty();
+  };
+  const startCreatorDraftAutosaveTracking = (token) => {
+    if (token !== manager.token || manager.draftActivityAbortController) return;
+    const controller = new AbortController();
+    manager.draftActivityAbortController = controller;
+    const frame = pitchPrintFrame();
+    if (frame) {
+      frame.addEventListener("pointerenter", () => {
+        manager.draftIframeActive = true;
+        markCreatorDraftDirty();
+      }, { signal: controller.signal });
+      frame.addEventListener("pointerleave", () => {
+        manager.draftIframeActive = false;
+        markCreatorDraftDirty();
+      }, { signal: controller.signal });
+    }
+    window.addEventListener("blur", () => {
+      window.setTimeout(() => {
+        if (token !== manager.token) return;
+        if (document.activeElement === frame) {
+          manager.draftIframeActive = true;
+          markCreatorDraftDirty();
+        }
+      }, 0);
+    }, { signal: controller.signal });
+    window.addEventListener("focus", () => {
+      manager.draftIframeActive = false;
+    }, { signal: controller.signal });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "hidden") return;
+      void manager.draftAutosaveController?.flush({ force: true }).catch(() => {});
+    }, { signal: controller.signal });
+    manager.draftAutosaveHeartbeatTimer = window.setInterval(() => {
+      if (
+        token === manager.token &&
+        manager.designerVisible &&
+        (manager.draftIframeActive || document.activeElement === frame)
+      ) {
+        markCreatorDraftDirty();
+      }
+    }, CREATOR_DRAFT_AUTOSAVE_HEARTBEAT_MS);
+  };
+  const installControlledPitchPrintClose = (client, product, token, restoreButton) => {
+    if (typeof client.closeApp !== "function") return;
+    const nativeCloseApp = client.closeApp.bind(client);
+    manager.nativeCloseApp = nativeCloseApp;
+    client.closeApp = (...args) => {
+      if (
+        manager.projectSaved ||
+        manager.finalProjectSavePending ||
+        token !== manager.token
+      ) return nativeCloseApp(...args);
+      if (manager.draftClosePromise) return manager.draftClosePromise;
+      const initialSaveSequence = manager.draftSaveSequence;
+      manager.draftClosePromise = (async () => {
+        setCreatorDraftSaveStatus(root, "Saving before closing…");
+        if (manager.draftSessionSavePromise) {
+          await manager.draftSessionSavePromise;
+        }
+        if (manager.draftSaveSequence === initialSaveSequence) {
+          await manager.draftAutosaveController?.flush({ force: true });
+        }
+        return nativeCloseApp(...args);
+      })().catch((error) => {
+        manager.draftClosePromise = null;
+        manager.isDesignerOpening = false;
+        restoreButton();
+        setCreatorDraftSaveStatus(root, "Draft save failed — editor kept open", true);
+        showCreatorToast(
+          root,
+          error instanceof Error
+            ? error.message
+            : "Draft could not be saved. The editor remains open.",
+          true,
+        );
+        return false;
+      });
+      return manager.draftClosePromise;
+    };
+  };
   const openPitchPrintDesigner = async (product, sourceButton = null) => {
     if (!product?.id || manager.isDesignerOpening) return;
     cleanupPitchPrintSession();
@@ -2307,6 +2650,10 @@ function bindPitchPrintManager(root) {
         ...(projectId ? { projectId } : {}),
       });
       manager.client = client;
+      manager.draftAutosaveController = createCreatorDraftAutosaveController({
+        onSave: () => requestPitchPrintDraftSourceSave(product, token),
+      });
+      installControlledPitchPrintClose(client, product, token, restoreButton);
       for (const ready of ['lib-ready', 'before-show', 'app-shown', 'editor-shown']) {
         bindPitchPrintEvent(client, ready, token, resendCreatorConfig);
       }
@@ -2315,15 +2662,27 @@ function bindPitchPrintManager(root) {
       bindPitchPrintEvent(client, "app-shown", token, () => {
         manager.isDesignerOpening = false;
         manager.designerVisible = true;
+        startCreatorDraftAutosaveTracking(token);
         restoreButton();
       });
       bindPitchPrintEvent(client, "editor-shown", token, () => {
         manager.isDesignerOpening = false;
         manager.designerVisible = true;
+        startCreatorDraftAutosaveTracking(token);
         restoreButton();
       });
+      for (const eventName of [
+        "page-created",
+        "template-color-changed",
+        "app-client-canvasResized",
+      ]) {
+        bindPitchPrintEvent(client, eventName, token, markCreatorDraftDirty);
+      }
       bindPitchPrintEvent(client, "session-saved", token, (event) => {
-        void handlePitchPrintDraftSessionSaved(product, event, token);
+        completePitchPrintDraftSave(product, event, token);
+      });
+      bindPitchPrintEvent(client, "send-client-session", token, (event) => {
+        completePitchPrintDraftSave(product, event, token);
       });
       bindPitchPrintEvent(client, "project-saved", token, (event) => {
         void handlePitchPrintProjectSaved(product, event, token);
@@ -2332,6 +2691,7 @@ function bindPitchPrintManager(root) {
         closeCreatorDesignerSession(manager, restoreButton, () => {
           goToMyProductsTab(root);
         });
+        cleanupPitchPrintSession();
       });
       bindPitchPrintEvent(client, "error", token, (event) => {
         clearValidationTimer();
@@ -2462,8 +2822,29 @@ function bindCreatorDesignActions(root) {
 
     const editButton = event.target.closest("[data-creator-product-design]");
     if (!editButton) return;
-    const product = creatorProductById(root, editButton.dataset.creatorProductDesign);
-    if (product) await root.__customHouseOpenPitchPrintDesigner?.(product, editButton);
+    const restoreButton = setActionLoading(editButton, "Loading saved design…");
+    try {
+      const { product, products } = await requestCurrentCreatorProduct(
+        editButton.dataset.creatorProductDesign,
+      );
+      dashboardState(root).creatorProducts = products;
+      root.__customHouseCreatorProducts = products;
+      updateCreatorProductInState(root, product);
+      if (!["DRAFT", "REJECTED"].includes(String(product.status || "").toUpperCase())) {
+        throw new Error("This Creator Product is no longer editable.");
+      }
+      restoreButton();
+      await root.__customHouseOpenPitchPrintDesigner?.(product);
+    } catch (error) {
+      restoreButton();
+      showCreatorToast(
+        root,
+        error instanceof Error
+          ? error.message
+          : "Unable to load the saved design. Please try again.",
+        true,
+      );
+    }
   });
 }
 
