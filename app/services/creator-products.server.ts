@@ -2087,6 +2087,9 @@ export async function savePitchPrintDraftSessionForCustomer(
   }
 
   const projectId = cleanProjectId(input.projectId);
+  if (projectId === existing.pitchprintProjectId) {
+    return existing;
+  }
   const source = await fetchProject(projectId);
   assertPitchPrintProjectOwner(shop, creator.id, source);
 
@@ -2100,6 +2103,17 @@ export async function savePitchPrintDraftSessionForCustomer(
     throw new DomainError(
       "PITCHPRINT_DESIGN_MISMATCH",
       "The saved design does not match this Creator Product.",
+      409,
+    );
+  }
+
+  const attachedProduct = await database.creatorProduct.findFirst({
+    where: { shop, pitchprintProjectId: projectId },
+  });
+  if (attachedProduct && attachedProduct.id !== existing.id) {
+    throw new DomainError(
+      "PITCHPRINT_PROJECT_ALREADY_ATTACHED",
+      "This saved design is already attached to another Creator Product.",
       409,
     );
   }
