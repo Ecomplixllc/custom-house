@@ -115,17 +115,17 @@ test("pending dashboard state", () => {
 });
 
 test("approved dashboard preserves profile and overview data", () => {
-  const data = { state: "APPROVED", displayName: "Ari", status: "APPROVED", collectionUrl: "/apps/customhouse/creators/ari-designs", overview: { totalSales: "USD 100.00", totalEarnings: "USD 10.20", productEarnings: "USD 10.00", referralEarnings: "USD 0.20", commissionRatePercent: 10, collectionsCount: 1, publishedProductsCount: 2 }, topSellingProducts: [], submissions: [{ designName: "Sky", status: "PENDING" }] };
+  const data = { state: "APPROVED", displayName: "Ari", status: "APPROVED", collectionUrl: "/apps/customhouse/creators/ari-designs", overview: { totalSales: "USD 100.00", totalEarnings: "USD 20.40", productEarnings: "USD 20.00", referralEarnings: "USD 0.40", commissionRatePercent: 20, collectionsCount: 1, publishedProductsCount: 2 }, topSellingProducts: [], submissions: [{ designName: "Sky", status: "PENDING" }] };
   const view = resolveDashboardState(data);
   assert.equal(view.state, "APPROVED");
   assert.equal(view.data.displayName, "Ari");
   assert.equal(view.data.collectionUrl, "/apps/customhouse/creators/ari-designs");
   assert.equal(view.data.submissions.length, 1);
   assert.equal(view.data.overview.totalSales, "USD 100.00");
-  assert.equal(view.data.overview.totalEarnings, "USD 10.20");
-  assert.equal(view.data.overview.productEarnings, "USD 10.00");
-  assert.equal(view.data.overview.referralEarnings, "USD 0.20");
-  assert.equal(view.data.overview.commissionRatePercent, 10);
+  assert.equal(view.data.overview.totalEarnings, "USD 20.40");
+  assert.equal(view.data.overview.productEarnings, "USD 20.00");
+  assert.equal(view.data.overview.referralEarnings, "USD 0.40");
+  assert.equal(view.data.overview.commissionRatePercent, 20);
   assert.equal(view.data.overview.collectionsCount, 1);
   assert.equal(view.data.overview.publishedProductsCount, 2);
 });
@@ -146,7 +146,7 @@ test("creator dashboard canonical marketplace links avoid native collection URLs
   assert.match(script, /view\.data\.collectionUrl/);
 });
 
-test("storefront dashboard displays total sales and ten percent commission", () => {
+test("storefront dashboard displays total sales and twenty percent commission", () => {
   const block = readFileSync(
     "extensions/customhouse-creator-storefront/blocks/creator-dashboard.liquid",
     "utf8",
@@ -179,14 +179,22 @@ test("storefront dashboard displays total sales and ten percent commission", () 
     "app/routes/proxy.api.creator-profile.tsx",
     "utf8",
   );
+  const application = readFileSync(
+    "extensions/customhouse-creator-storefront/assets/creator-application.js",
+    "utf8",
+  );
 
   assert.match(block, /data-dashboard-total-sales/);
   assert.match(block, /data-dashboard-total-earnings/);
   assert.match(block, /data-dashboard-product-earnings/);
   assert.match(block, /data-dashboard-referral-earnings-total/);
   assert.match(block, /data-dashboard-commission-rate/);
+  assert.match(block, /data-dashboard-commission-rate>20%/);
+  assert.doesNotMatch(block, /data-dashboard-commission-rate>10%/);
   assert.match(block, /Commission earnings/);
   assert.match(block, /2% referral bonus/);
+  assert.match(application, /Get 20% commission on every sale from your collection/);
+  assert.doesNotMatch(application, /Get 10% commission on every sale from your collection/);
   assert.match(script, /overview\.totalSales/);
   assert.match(script, /overview\.totalEarnings/);
   assert.match(script, /overview\.productEarnings/);

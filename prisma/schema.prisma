@@ -671,7 +671,7 @@ model CreatorSale {
   currencyCode        String
   grossSalesAmount    Decimal                 @db.Decimal(20, 4)
   refundedSalesAmount Decimal                 @default(0) @db.Decimal(20, 4)
-  commissionRateBps   Int                     @default(1000)
+  commissionRateBps   Int                     @default(2000)
   sourceWebhookId     String
   paidAt              DateTime?
   createdAt           DateTime                @default(now())

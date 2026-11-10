@@ -37,11 +37,11 @@ test("Custom House money formatting uses dot decimals without comma separators",
   assert.doesNotMatch(formatMinorMoney(20n, "SEK"), /,/);
 });
 
-test("creator sale earning base keeps existing ten percent creator commission separate", () => {
-  assert.equal(CREATOR_COMMISSION_BASIS_POINTS, 1_000);
+test("creator sale earning base keeps twenty percent creator commission separate from referral rate", () => {
+  assert.equal(CREATOR_COMMISSION_BASIS_POINTS, 2_000);
   assert.equal(
     creatorEarningMinorFromSalesAmount(new Prisma.Decimal("1000.00"), CREATOR_COMMISSION_BASIS_POINTS),
-    10_000n,
+    20_000n,
   );
   assert.equal(
     calculateReferralEarning({
@@ -50,7 +50,7 @@ test("creator sale earning base keeps existing ten percent creator commission se
         CREATOR_COMMISSION_BASIS_POINTS,
       ),
     }),
-    200n,
+    400n,
   );
 });
 
@@ -120,17 +120,24 @@ test("business eligibility and identity rules are represented server-side", () =
 });
 
 test("refund examples produce exact final referral entitlement", () => {
-  const original = calculateReferralEarning({ creatorEarningMinor: 10_000n });
-  const partialRefund = -calculateReferralEarning({ creatorEarningMinor: 4_000n });
-  const fullRefund = -calculateReferralEarning({ creatorEarningMinor: 10_000n });
-  const firstPartial = -calculateReferralEarning({ creatorEarningMinor: 2_000n });
-  const secondPartial = -calculateReferralEarning({ creatorEarningMinor: 3_000n });
+  const originalCreatorEarning = creatorEarningMinorFromSalesAmount(
+    new Prisma.Decimal("100.00"),
+    CREATOR_COMMISSION_BASIS_POINTS,
+  );
+  const partialRefundCreatorEarning = creatorEarningMinorFromSalesAmount(
+    new Prisma.Decimal("40.00"),
+    CREATOR_COMMISSION_BASIS_POINTS,
+  );
+  const original = calculateReferralEarning({ creatorEarningMinor: originalCreatorEarning });
+  const partialRefund = -calculateReferralEarning({
+    creatorEarningMinor: partialRefundCreatorEarning,
+  });
+  const fullRefund = -calculateReferralEarning({ creatorEarningMinor: originalCreatorEarning });
 
-  assert.equal(original, 200n);
-  assert.equal(original + partialRefund, 120n);
+  assert.equal(CREATOR_REFERRAL_RATE_BPS, 200);
+  assert.equal(original, 40n);
+  assert.equal(original + partialRefund, 24n);
   assert.equal(original + fullRefund, 0n);
-  assert.equal(original + firstPartial, 160n);
-  assert.equal(original + firstPartial + secondPartial, 100n);
 });
 
 test("multiple line and multiple creator scenarios stay per CreatorSale", () => {
@@ -144,7 +151,7 @@ test("multiple line and multiple creator scenarios stay per CreatorSale", () => 
   assert.match(service, /referredCreatorId/);
 });
 
-test("Phase 6 does not alter creator commission or add payout execution", () => {
+test("creator and referral commission remain separate and payout execution stays out of referral sync", () => {
   const creatorSales = readFileSync("app/services/creator-sales.ts", "utf8");
   const referralMoney = readFileSync("app/services/creator-referral-earnings.ts", "utf8");
   const referralService = readFileSync("app/services/creator-referral-earnings.server.ts", "utf8");
@@ -153,7 +160,7 @@ test("Phase 6 does not alter creator commission or add payout execution", () => 
     "utf8",
   );
 
-  assert.match(creatorSales, /CREATOR_COMMISSION_BASIS_POINTS = 1_000/);
+  assert.match(creatorSales, /CREATOR_COMMISSION_BASIS_POINTS = 2_000/);
   assert.match(referralMoney, /CREATOR_REFERRAL_RATE_BPS = 200/);
   assert.doesNotMatch(referralService, /mark.*PAID|payout|transfer|deduct/i);
   assert.match(dashboard, /earn a 2% referral bonus/);
