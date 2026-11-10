@@ -1213,7 +1213,7 @@ export async function creatorSalesOverview(creatorId: string) {
   const itemsSoldCount = commerceMetrics?.itemsSoldCount || 0;
   const totals = new Map<
     string,
-    { sales: Prisma.Decimal; earnings: Prisma.Decimal }
+    { sales: Prisma.Decimal }
   >();
   for (const group of currencyGroups) {
     const amount = netSales({
@@ -1223,7 +1223,6 @@ export async function creatorSalesOverview(creatorId: string) {
     });
     totals.set(group.currencyCode, {
       sales: amount,
-      earnings: creatorEarning(amount),
     });
   }
   const formatted = [...totals.entries()].sort(([a], [b]) =>

@@ -82,7 +82,7 @@ function renderSidebar(root, state = {}) {
       <h2>Why Join Custom House?</h2>
       <ul class="ch-application__benefits">
         <li>${icon("storefront")}<span><strong>Build Your Brand</strong>Create your own collection and showcase unique designs.</span></li>
-        <li>${icon("trending_up")}<span><strong>Earn More</strong>Get 10% commission on every sale from your collection.</span></li>
+        <li>${icon("trending_up")}<span><strong>Earn More</strong>Get 20% commission on every sale from your collection.</span></li>
         <li>${icon("public")}<span><strong>Global Exposure</strong>Reach customers who love original designs.</span></li>
         <li>${icon("verified")}<span><strong>Full Support</strong>Our team helps you grow your creator journey.</span></li>
       </ul>

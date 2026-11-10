@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { Prisma } from "@prisma/client";
+import { creatorEarning } from "../app/services/creator-sales.ts";
 
 test("manual payout schema is additive and future ready", () => {
   const schema = readFileSync("prisma/schema.prisma", "utf8");
@@ -63,6 +65,22 @@ test("balance formula supports paid reserved and negative carry-forward", () => 
   assert.equal(available(10_200n, 4_000n, 2_000n), 4_200n);
   assert.equal(available(6_120n, 10_200n, 0n), -4_080n);
   assert.equal(available(16_120n, 10_200n, 0n), 5_920n);
+});
+
+test("payout product sources use each sale's snapshotted creator commission rate", () => {
+  const gross = new Prisma.Decimal("100.00");
+  const partialRefund = new Prisma.Decimal("40.00");
+  const fullRefund = new Prisma.Decimal("100.00");
+  const partialNet = Prisma.Decimal.max(gross.minus(partialRefund), 0);
+  const fullNet = Prisma.Decimal.max(gross.minus(fullRefund), 0);
+
+  assert.equal(creatorEarning(partialNet, 2_000).toFixed(2), "12.00");
+  assert.equal(creatorEarning(partialNet, 1_000).toFixed(2), "6.00");
+  assert.equal(creatorEarning(fullNet, 2_000).toFixed(2), "0.00");
+
+  const service = readFileSync("app/services/payouts.server.ts", "utf8");
+  assert.match(service, /commissionRateBps: true/);
+  assert.match(service, /creatorEarning\(netSaleAmount\(sale\), sale\.commissionRateBps\)/);
 });
 
 test("payout service preserves manual execution and source allocation boundaries", () => {

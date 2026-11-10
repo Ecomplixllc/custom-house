@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-export const CREATOR_COMMISSION_BASIS_POINTS = 1_000;
+export const CREATOR_COMMISSION_BASIS_POINTS = 2_000;
 
 type MoneyInput = string | number | null | undefined;
 

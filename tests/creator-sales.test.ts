@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { Prisma } from "@prisma/client";
 import {
   CREATOR_COMMISSION_BASIS_POINTS,
   bundleLineMatchesCreatorProduct,
@@ -165,6 +166,7 @@ test("grouped bundle sale uses parent attributes and component line identity", (
   assert.equal(line?.quantity, 2);
   assert.equal(line?.unitPrice.toFixed(2), "90.00");
   assert.equal(line?.grossSalesAmount.toFixed(2), "180.00");
+  assert.equal(creatorEarning(line!.grossSalesAmount).toFixed(2), "36.00");
 });
 
 test("grouped bundle sale preserves full and partial Shopify discount allocation", () => {
@@ -326,19 +328,44 @@ test("unpaid order create payloads are not counted as creator sales", () => {
   );
 });
 
-test("creator earnings are exactly ten percent of attributed net sales", () => {
-  const [line] = parsePaidOrder({
-    id: 1,
-    currency: "SEK",
-    line_items: [
-      { id: 2, product_id: 3, quantity: 1, price: "123.45" },
-    ],
-  });
-  assert.equal(CREATOR_COMMISSION_BASIS_POINTS, 1_000);
+test("new creator sales use twenty percent with existing decimal money math", () => {
+  assert.equal(CREATOR_COMMISSION_BASIS_POINTS, 2_000);
+  for (const [sales, expected] of [
+    ["100.00", "20.00"],
+    ["500.00", "100.00"],
+    ["99.00", "19.80"],
+    ["199.00", "39.80"],
+    ["149.50", "29.90"],
+  ]) {
+    assert.equal(
+      creatorEarning(new Prisma.Decimal(sales)).toFixed(2),
+      expected,
+    );
+  }
+});
+
+test("refund netting uses the sale rate and historical ten percent sales stay unchanged", () => {
+  const newSaleRate = CREATOR_COMMISSION_BASIS_POINTS;
+  const historicalSaleRate = 1_000;
+
   assert.equal(
-    creatorEarning(line!.grossSalesAmount).toFixed(3),
-    "12.345",
+    creatorEarning(new Prisma.Decimal("60.00"), newSaleRate).toFixed(2),
+    "12.00",
   );
+  assert.equal(
+    creatorEarning(new Prisma.Decimal("0.00"), newSaleRate).toFixed(2),
+    "0.00",
+  );
+  assert.equal(
+    creatorEarning(new Prisma.Decimal("100.00"), historicalSaleRate).toFixed(2),
+    "10.00",
+  );
+
+  const salesService = readFileSync("app/services/creator-sales.server.ts", "utf8");
+  const payoutService = readFileSync("app/services/payouts.server.ts", "utf8");
+  assert.match(salesService, /sale\.commissionRateBps/);
+  assert.match(payoutService, /creatorEarning\(netSaleAmount\(sale\), sale\.commissionRateBps\)/);
+  assert.doesNotMatch(salesService, /earnings:\s*creatorEarning\(amount\)/);
 });
 
 test("refund line items are normalized for idempotent sales adjustments", () => {
@@ -453,7 +480,13 @@ test("production configuration subscribes to paid sales and refunds", () => {
   assert.match(config, /topics = \["refunds\/create"\]/);
   const schema = readFileSync("prisma/schema.prisma", "utf8");
   assert.match(schema, /@@unique\(\[shop, shopifyLineItemId\]\)/);
-  assert.match(schema, /commissionRateBps\s+Int\s+@default\(1000\)/);
+  assert.match(schema, /commissionRateBps\s+Int\s+@default\(2000\)/);
+  const commissionMigration = readFileSync(
+    "prisma/migrations/20261110000000_creator_commission_twenty_percent/migration.sql",
+    "utf8",
+  );
+  assert.match(commissionMigration, /SET DEFAULT 2000/);
+  assert.doesNotMatch(commissionMigration, /UPDATE|DELETE|TRUNCATE/i);
   const createWebhook = readFileSync("app/routes/webhooks.orders.create.tsx", "utf8");
   const dashboardService = readFileSync("app/services/submission.server.ts", "utf8");
   const salesService = readFileSync("app/services/creator-sales.server.ts", "utf8");
