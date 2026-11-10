@@ -136,6 +136,39 @@ test("runtime scripts do not execute an unrelated obfuscated network loader", ()
     "react-router-serve ./build/server/index.js",
   );
   assert.equal(existsSync(new URL("../api.js", import.meta.url)), false);
+  assert.equal(existsSync(new URL("../init", import.meta.url)), false);
+
+  const functionPackageJson = JSON.parse(
+    readFileSync(
+      new URL(
+        "../extensions/customhouse-creator-cart-validation/package.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as { scripts?: Record<string, string> };
+  assert.equal(
+    functionPackageJson.scripts?.build,
+    "npm exec -- shopify app function build",
+  );
+  assert.equal(
+    existsSync(
+      new URL(
+        "../extensions/customhouse-creator-cart-validation/init",
+        import.meta.url,
+      ),
+    ),
+    false,
+  );
+
+  const restoredThemeAsset = readFileSync(
+    new URL("../theme-live-cart/assets/blog-posts-list.js", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    restoredThemeAsset,
+    /createRequire|child_process|fromCharCode|splitLane|peel/,
+  );
 });
 
 test("correlation IDs accept safe request IDs and reject unsafe values", () => {
