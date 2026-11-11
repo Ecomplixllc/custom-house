@@ -427,6 +427,60 @@ async function submitCreatorProductForReview(productId) {
   return body.data?.product;
 }
 
+export async function completeCreatorFinalSubmission({
+  creatorProductId,
+  savePayload,
+  saveProject = saveCreatorProductPitchPrintProject,
+  submitProduct = submitCreatorProductForReview,
+  reloadProduct = requestCurrentCreatorProduct,
+}) {
+  const productId = String(creatorProductId || "").trim();
+  const expectedProjectId = String(savePayload?.projectId || "").trim();
+  if (!productId) throw new Error("Creator Product is missing from the final submission.");
+  if (!expectedProjectId) throw new Error("PitchPrint did not return a saved project for submission.");
+
+  const saved = await saveProject(productId, savePayload);
+  if (!saved?.id || String(saved.id) !== productId) {
+    throw new Error("PitchPrint saved a different Creator Product.");
+  }
+  if (String(saved.pitchprintProjectId || "").trim() !== expectedProjectId) {
+    throw new Error("The latest PitchPrint project was not persisted for this Creator Product.");
+  }
+
+  const submitted = await submitProduct(productId);
+  if (
+    !submitted?.id ||
+    String(submitted.id) !== productId ||
+    String(submitted.status || "").toUpperCase() !== "PENDING"
+  ) {
+    throw new Error("Creator Product submission did not reach pending review.");
+  }
+
+  let reloaded = null;
+  try {
+    reloaded = await reloadProduct(productId);
+  } catch {
+    // The authenticated submit response already confirms the database update.
+    // Keep the returned PENDING product visible and let a later dashboard load
+    // retry the complete list refresh instead of presenting a false failure.
+  }
+  const reloadedProduct = reloaded?.product;
+  const refreshConfirmed = Boolean(
+    reloadedProduct?.id &&
+    String(reloadedProduct.id) === productId &&
+    String(reloadedProduct.status || "").toUpperCase() === "PENDING"
+  );
+  const confirmed = refreshConfirmed ? reloadedProduct : submitted;
+
+  return {
+    saved,
+    submitted,
+    product: confirmed,
+    products: Array.isArray(reloaded?.products) ? reloaded.products : [confirmed],
+    refreshConfirmed,
+  };
+}
+
 async function updateCreatorProductDetails(productId, payload) {
   const response = await fetch(`${CREATOR_PRODUCTS_ENDPOINT}/${encodeURIComponent(productId)}`, {
     method: "POST",
@@ -1901,8 +1955,8 @@ export function configureCreatorPitchPrintLabels(clientGlobal) {
     ...existing,
     submit_tip: "SUBMIT DESIGN",
     finish_message: "This is how your design will look. Submit it for admin review now?",
-    confirm_design: "Submit design",
-    confirm: "Submit design",
+    confirm_design: "Submit Design",
+    confirm: "Submit Design",
   };
 }
 
@@ -2066,6 +2120,9 @@ function bindPitchPrintManager(root) {
     designerVisible: false,
     projectSaved: false,
     finalProjectSavePending: false,
+    finalSubmitIntent: null,
+    finalSubmitPromise: null,
+    finalCloseDeferred: false,
     draftSessionSaved: false,
     draftSessionSavePromise: null,
     pendingDraftSessionSave: null,
@@ -2126,6 +2183,9 @@ function bindPitchPrintManager(root) {
     manager.designerVisible = false;
     manager.projectSaved = false;
     manager.finalProjectSavePending = false;
+    manager.finalSubmitIntent = null;
+    manager.finalSubmitPromise = null;
+    manager.finalCloseDeferred = false;
     manager.draftSessionSaved = false;
     manager.draftSessionSavePromise = null;
     manager.pendingDraftSessionSave = null;
@@ -2220,11 +2280,42 @@ function bindPitchPrintManager(root) {
     });
     return manager.draftSourceSavePromise;
   };
+  const hasFinalSubmitIntent = (product, token) => Boolean(
+    manager.finalSubmitIntent &&
+    manager.finalSubmitIntent.creatorProductId === String(product?.id || "") &&
+    manager.finalSubmitIntent.token === token &&
+    token === manager.token
+  );
+  const resetFinalSubmitState = () => {
+    manager.finalSubmitIntent = null;
+    manager.finalProjectSavePending = false;
+    manager.pendingCreatorSetup = null;
+    manager.pendingPitchPrintSave = null;
+  };
+  const showFinalSubmitFailure = (error) => {
+    const message = error instanceof Error
+      ? error.message
+      : "Design could not be submitted for review.";
+    manager.projectSaved = false;
+    manager.saveFailureNotified = true;
+    resetFinalSubmitState();
+    if (manager.finalCloseDeferred && typeof manager.client?.showApp === "function") {
+      manager.finalCloseDeferred = false;
+      manager.isDesignerOpening = true;
+      manager.client.showApp();
+    }
+    showCreatorToast(root, message, true);
+    openSubmitFeedbackModal(root, { success: false, message });
+  };
   const savePendingCreatorProduct = async (product, token) => {
-    if (manager.projectSaved || token !== manager.token) return;
+    if (
+      manager.projectSaved ||
+      manager.finalSubmitPromise ||
+      !hasFinalSubmitIntent(product, token)
+    ) return manager.finalSubmitPromise;
     if (manager.draftSessionSavePromise) {
       await manager.draftSessionSavePromise;
-      if (manager.projectSaved || token !== manager.token) return;
+      if (manager.projectSaved || !hasFinalSubmitIntent(product, token)) return;
     }
     let savePayload;
     try {
@@ -2234,13 +2325,7 @@ function bindPitchPrintManager(root) {
         manager.pendingPitchPrintSave,
       );
     } catch (error) {
-      manager.finalProjectSavePending = false;
-      manager.saveFailureNotified = true;
-      showCreatorToast(
-        root,
-        error instanceof Error ? error.message : "Design could not be saved.",
-        true,
-      );
+      showFinalSubmitFailure(error);
       return;
     }
     if (!savePayload) {
@@ -2259,13 +2344,12 @@ function bindPitchPrintManager(root) {
           creatorProductProductionMethod(product),
         ),
       });
+      if (!manager.pendingCreatorSetup || !manager.pendingPitchPrintSave) {
+        return;
+      }
       if (!creatorProductProductionMethod(product)) {
-        manager.finalProjectSavePending = false;
-        manager.saveFailureNotified = true;
-        showCreatorToast(
-          root,
-          "Printing method is missing. Please return to Add Product and start a new design.",
-          true,
+        showFinalSubmitFailure(
+          new Error("Printing method is missing. Please return to Add Product and start a new design."),
         );
         return;
       }
@@ -2274,49 +2358,34 @@ function bindPitchPrintManager(root) {
         manager.pendingCreatorSetup?.creatorSetup &&
         !manager.saveFailureNotified
       ) {
-        manager.finalProjectSavePending = false;
-        manager.saveFailureNotified = true;
-        showCreatorToast(
-          root,
-          "We couldn't load your saved design. Please return to the editor and save the design again.",
-          true,
+        showFinalSubmitFailure(
+          new Error("We couldn't load your saved design. Please return to the editor and save the design again."),
         );
       }
       return;
     }
-    manager.projectSaved = true;
+    const finalSubmitPromise = completeCreatorFinalSubmission({
+      creatorProductId: product.id,
+      savePayload,
+    });
+    manager.finalSubmitPromise = finalSubmitPromise;
     try {
-      const saved = await saveCreatorProductPitchPrintProject(
-        product.id,
-        savePayload,
-      );
-      updateCreatorProductInState(root, saved);
-      try {
-        const submitted = await submitCreatorProductForReview(saved.id);
-        updateCreatorProductInState(root, submitted);
-        hidePitchPrint();
-        showCreatorToast(root, "Design submitted for review.");
-        openSubmitFeedbackModal(root, { success: true });
-      } catch (error) {
-        manager.finalProjectSavePending = false;
-        hidePitchPrint();
-        showCreatorToast(
-          root,
-          error instanceof Error
-            ? `Design saved, but submission failed: ${error.message}`
-            : "Design saved, but it could not be submitted for review.",
-          true,
-        );
-        openDesignReviewModal(root, saved);
-      }
+      const result = await finalSubmitPromise;
+      if (!hasFinalSubmitIntent(product, token)) return;
+      manager.projectSaved = true;
+      manager.saveFailureNotified = false;
+      resetFinalSubmitState();
+      updateCreatorProductInState(root, result.product);
+      hidePitchPrint();
+      showCreatorToast(root, "Design submitted for review.");
+      openSubmitFeedbackModal(root, { success: true });
+      cleanupPitchPrintSession();
     } catch (error) {
-      manager.projectSaved = false;
-      manager.finalProjectSavePending = false;
-      showCreatorToast(
-        root,
-        error instanceof Error ? error.message : "Design could not be saved.",
-        true,
-      );
+      if (token === manager.token) showFinalSubmitFailure(error);
+    } finally {
+      if (manager.finalSubmitPromise === finalSubmitPromise) {
+        manager.finalSubmitPromise = null;
+      }
     }
   };
   const handlePitchPrintCreatorSetupReady = async (product, event, token) => {
@@ -2327,7 +2396,9 @@ function bindPitchPrintManager(root) {
     );
     if (!setupEvent) return;
     manager.pendingCreatorSetup = setupEvent;
-    await savePendingCreatorProduct(product, token);
+    if (hasFinalSubmitIntent(product, token)) {
+      await savePendingCreatorProduct(product, token);
+    }
   };
   const handlePitchPrintDraftSessionSaved = async (product, event, token) => {
     if (
@@ -2337,19 +2408,9 @@ function bindPitchPrintManager(root) {
     ) return;
     const saveEvent = normalizePitchPrintSaveEvent(event);
     if (!saveEvent.projectId) return;
-    const recordDraftSave = (updated = null) => {
-      manager.activeProjectId = saveEvent.projectId;
-      manager.lastPersistedDraftProjectId = saveEvent.projectId;
-      manager.draftSessionSaved = true;
-      manager.draftSaveSequence += 1;
-      if (updated) updateCreatorProductInState(root, updated);
-    };
-    if (saveEvent.projectId === manager.lastPersistedDraftProjectId) {
-      // The project identity remains stable while PitchPrint overwrites its
-      // serialized source. A repeated ID is a real successful save, not a no-op.
-      recordDraftSave();
-      return;
-    }
+    // A repeated ID can contain newer serialized artwork. Queue every
+    // successful save event so the server revalidates the current source and
+    // records the latest save without changing the CreatorProduct lifecycle.
     manager.pendingDraftSessionSave = { product, saveEvent, token };
     if (manager.draftSessionSavePromise) {
       await manager.draftSessionSavePromise;
@@ -2416,8 +2477,7 @@ function bindPitchPrintManager(root) {
   };
   const handlePitchPrintProjectSaved = async (product, event, token) => {
     if (manager.projectSaved || token !== manager.token) return;
-    const saveFlags = pitchPrintSaveFlags(event);
-    if (saveFlags.autoSaved || saveFlags.saveForLater) {
+    if (!hasFinalSubmitIntent(product, token)) {
       await handlePitchPrintDraftSessionSaved(product, event, token);
       if (normalizePitchPrintSaveEvent(event).projectId) settleDraftSourceSave();
       return;
@@ -2493,6 +2553,35 @@ function bindPitchPrintManager(root) {
           });
           return;
         }
+        if (type === "CUSTOMHOUSE_PP_CREATOR_FINAL_SUBMIT_INTENT") {
+          if (!allowedOrigin || !event.source) return;
+          const payload = event?.data?.payload;
+          const creatorProductId = String(payload?.creatorProductId || "").trim();
+          const requestId = String(payload?.requestId || "").trim();
+          if (
+            creatorProductId !== String(product.id) ||
+            !/^[A-Za-z0-9_.:-]{8,120}$/.test(requestId)
+          ) return;
+          manager.finalSubmitIntent = { creatorProductId, requestId, token };
+          manager.finalProjectSavePending = true;
+          manager.finalCloseDeferred = false;
+          manager.saveFailureNotified = false;
+          manager.pendingDraftSessionSave = null;
+          manager.pendingCreatorSetup = null;
+          manager.pendingPitchPrintSave = null;
+          event.source.postMessage(
+            {
+              type: "CUSTOMHOUSE_PP_CREATOR_FINAL_SUBMIT_INTENT_ACK",
+              payload: { creatorProductId, requestId },
+            },
+            event.origin,
+          );
+          pitchPrintDiagnostics(root, "creator-final-submit-intent", {
+            creatorProductId,
+            hasProjectId: Boolean(manager.activeProjectId),
+          });
+          return;
+        }
         if (event?.data?.type !== "CUSTOMHOUSE_PP_CREATOR_SETUP_READY") return;
         void handlePitchPrintCreatorSetupReady(product, event, token);
       },
@@ -2564,11 +2653,17 @@ function bindPitchPrintManager(root) {
     const nativeCloseApp = client.closeApp.bind(client);
     manager.nativeCloseApp = nativeCloseApp;
     client.closeApp = (...args) => {
+      if (token !== manager.token || manager.projectSaved) {
+        return nativeCloseApp(...args);
+      }
       if (
-        manager.projectSaved ||
+        manager.finalSubmitIntent ||
         manager.finalProjectSavePending ||
-        token !== manager.token
-      ) return nativeCloseApp(...args);
+        manager.finalSubmitPromise
+      ) {
+        manager.finalCloseDeferred = true;
+        return false;
+      }
       if (manager.draftClosePromise) return manager.draftClosePromise;
       const initialSaveSequence = manager.draftSaveSequence;
       manager.draftClosePromise = (async () => {
@@ -2688,6 +2783,12 @@ function bindPitchPrintManager(root) {
         void handlePitchPrintProjectSaved(product, event, token);
       });
       bindPitchPrintEvent(client, "after-close-app", token, () => {
+        if (manager.finalSubmitIntent || manager.finalProjectSavePending || manager.finalSubmitPromise) {
+          manager.finalCloseDeferred = true;
+          manager.designerVisible = false;
+          restoreButton();
+          return;
+        }
         closeCreatorDesignerSession(manager, restoreButton, () => {
           goToMyProductsTab(root);
         });
