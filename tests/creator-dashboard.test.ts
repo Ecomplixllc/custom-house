@@ -10,6 +10,7 @@ import {
   creatorReviewPresentation,
   creatorSaveSetup,
   chooseCreatorSetupEvent,
+  completeCreatorFinalSubmission,
   configureCreatorPitchPrintLabels,
   createCreatorDraftAutosaveController,
   loadDashboardState,
@@ -49,8 +50,8 @@ test("creator PitchPrint labels describe the final action as design submission",
     button_label_cancel: "Keep editing",
     submit_tip: "SUBMIT DESIGN",
     finish_message: "This is how your design will look. Submit it for admin review now?",
-    confirm_design: "Submit design",
-    confirm: "Submit design",
+    confirm_design: "Submit Design",
+    confirm: "Submit Design",
   });
 });
 
@@ -479,7 +480,7 @@ test("storefront dashboard displays total sales and twenty percent commission", 
   assert.match(styles, /Hide details -/);
 });
 
-test("creator dashboard starts PitchPrint directly and submits final designs without reloads", () => {
+test("creator dashboard submits final designs and confirms refreshed My Products state", () => {
   const block = readFileSync(
     "extensions/customhouse-creator-storefront/blocks/creator-dashboard.liquid",
     "utf8",
@@ -530,18 +531,19 @@ test("creator dashboard starts PitchPrint directly and submits final designs wit
   assert.match(script, /window\.addEventListener\("beforeunload"/);
   assert.match(script, /manager\.projectSaved/);
   assert.match(script, /saveCreatorProductPitchPrintProject/);
-  assert.match(script, /const saved = await saveCreatorProductPitchPrintProject/);
-  assert.match(script, /const submitted = await submitCreatorProductForReview\(saved\.id\)/);
-  assert.match(script, /updateCreatorProductInState\(root, submitted\)/);
+  assert.match(script, /completeCreatorFinalSubmission/);
+  assert.match(script, /const saved = await saveProject\(productId, savePayload\)/);
+  assert.match(script, /const submitted = await submitProduct\(productId\)/);
+  assert.match(script, /reloaded = await reloadProduct\(productId\)/);
+  assert.match(script, /updateCreatorProductInState\(root, result\.product\)/);
   assert.match(script, /Design submitted for review\./);
   assert.match(script, /openSubmitFeedbackModal\(root, \{ success: true \}\)/);
-  assert.match(script, /Design saved, but submission failed:/);
-  assert.match(script, /openDesignReviewModal\(root, saved\)/);
-  assert.match(script, /if \(saveFlags\.autoSaved \|\| saveFlags\.saveForLater\) \{[\s\S]*handlePitchPrintDraftSessionSaved[\s\S]*return;[\s\S]*manager\.finalProjectSavePending = true;/s);
+  assert.match(script, /openSubmitFeedbackModal\(root, \{ success: false, message \}\)/);
+  assert.match(script, /if \(!hasFinalSubmitIntent\(product, token\)\) \{[\s\S]*handlePitchPrintDraftSessionSaved[\s\S]*return;/s);
   assert.match(script, /configureCreatorPitchPrintLabels\(window\.PPCLIENT\)/);
   assert.match(script, /submit_tip: "SUBMIT DESIGN"/);
-  assert.match(script, /confirm_design: "Submit design"/);
-  assert.match(script, /confirm: "Submit design"/);
+  assert.match(script, /confirm_design: "Submit Design"/);
+  assert.match(script, /confirm: "Submit Design"/);
   assert.match(script, /data-dashboard-review-edit/);
   assert.match(script, /data-dashboard-review-draft/);
   assert.match(script, /data-dashboard-review-submit/);
@@ -634,6 +636,78 @@ test("closing PitchPrint returns to the existing draft without prompting", () =>
   assert.equal(productsShown, 1);
 });
 
+test("explicit Creator final submit saves the same project, calls submit, and reloads PENDING", async () => {
+  const calls: string[] = [];
+  const result = await completeCreatorFinalSubmission({
+    creatorProductId: "creator-product-1",
+    savePayload: { projectId: "ABC123" },
+    saveProject: async (productId, payload) => {
+      calls.push(`save:${productId}:${payload.projectId}`);
+      return {
+        id: productId,
+        status: "DRAFT",
+        pitchprintProjectId: "ABC123",
+      };
+    },
+    submitProduct: async (productId) => {
+      calls.push(`submit:${productId}`);
+      return {
+        id: productId,
+        status: "PENDING",
+        pitchprintProjectId: "ABC123",
+      };
+    },
+    reloadProduct: async (productId) => {
+      calls.push(`reload:${productId}`);
+      return {
+        product: {
+          id: productId,
+          status: "PENDING",
+          pitchprintProjectId: "ABC123",
+        },
+        products: [],
+      };
+    },
+  });
+
+  assert.deepEqual(calls, [
+    "save:creator-product-1:ABC123",
+    "submit:creator-product-1",
+    "reload:creator-product-1",
+  ]);
+  assert.equal(result.product.status, "PENDING");
+  assert.equal(result.product.pitchprintProjectId, "ABC123");
+  assert.equal(result.refreshConfirmed, true);
+});
+
+test("Creator final submit failure never reloads or reports a PENDING product", async () => {
+  const calls: string[] = [];
+  await assert.rejects(
+    () => completeCreatorFinalSubmission({
+      creatorProductId: "creator-product-1",
+      savePayload: { projectId: "ABC123" },
+      saveProject: async (productId) => {
+        calls.push(`save:${productId}`);
+        return {
+          id: productId,
+          status: "DRAFT",
+          pitchprintProjectId: "ABC123",
+        };
+      },
+      submitProduct: async (productId) => {
+        calls.push(`submit:${productId}`);
+        throw new Error("submit rejected");
+      },
+      reloadProduct: async (productId) => {
+        calls.push(`reload:${productId}`);
+        return { product: { id: productId, status: "DRAFT" }, products: [] };
+      },
+    }),
+    /submit rejected/,
+  );
+  assert.deepEqual(calls, ["save:creator-product-1", "submit:creator-product-1"]);
+});
+
 test("PitchPrint save flags distinguish autosave and save-for-later events", () => {
   assert.deepEqual(pitchPrintSaveFlags({ data: { autoSaved: true } }), {
     autoSaved: true,
@@ -708,10 +782,28 @@ test("Creator draft source saves accept repeated completion for one project ID",
   );
   assert.doesNotMatch(
     script,
+    /if \(saveEvent\.projectId === manager\.lastPersistedDraftProjectId\) \{[\s\S]*?recordDraftSave\(\);[\s\S]*?return;[\s\S]*?\}/,
+  );
+  assert.doesNotMatch(
+    script,
     /pending\.saveEvent\.projectId === manager\.lastPersistedDraftProjectId\)[\s\S]{0,40}continue/,
   );
-  assert.match(script, /A repeated ID is a real successful save, not a no-op/);
+  assert.match(script, /A repeated ID can contain newer serialized artwork/);
   assert.match(script, /manager\.draftSaveSequence \+= 1/);
+});
+
+test("Creator final submission requires explicit intent and defers editor close", () => {
+  assert.match(script, /CUSTOMHOUSE_PP_CREATOR_FINAL_SUBMIT_INTENT/);
+  assert.match(script, /manager\.finalSubmitIntent/);
+  assert.match(script, /hasFinalSubmitIntent\(product, token\)/);
+  assert.match(
+    script,
+    /if \(!hasFinalSubmitIntent\(product, token\)\) \{[\s\S]*?handlePitchPrintDraftSessionSaved[\s\S]*?return;/,
+  );
+  assert.match(
+    script,
+    /if \(manager\.finalSubmitIntent \|\| manager\.finalProjectSavePending \|\| manager\.finalSubmitPromise\) \{[\s\S]*?return;/,
+  );
 });
 
 test("partial saved sessions remain resumable but cannot be submitted", () => {
