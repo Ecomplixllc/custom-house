@@ -1,0 +1,55 @@
+{%- doc -%}
+  Adds the Collections discovery route only when the merchant-managed menu does
+  not already contain it.
+
+  @param {object} links - Top-level menu links
+  @param {string} variant - desktop, mobile_bar, or drawer
+  @param {object} [block_settings] - Header block settings for drawer dividers
+{%- enddoc -%}
+
+{% liquid
+  assign discovery_links = links | where: 'url', '/pages/collections'
+  assign discovery_active = false
+  if request.path == '/pages/collections'
+    assign discovery_active = true
+  endif
+%}
+
+{% if discovery_links.size == 0 %}
+  {% case variant %}
+    {% when 'mobile_bar' %}
+      <li>
+        <a
+          href="/pages/collections"
+          id="MenuItem-customhouse-collections-discovery"
+          class="menu-list__item"
+          {% if discovery_active %}aria-current="page"{% endif %}
+        >COLLECTIONS</a>
+      </li>
+    {% when 'drawer' %}
+      <li
+        class="menu-drawer__list-item{% if block_settings.drawer_dividers %} menu-drawer__list-item--divider{% endif %}"
+        style="--menu-drawer-animation-index: {{ links.size | plus: 1 }};"
+      >
+        <a
+          id="HeaderDrawer-customhouse-collections-discovery"
+          href="/pages/collections"
+          class="menu-drawer__menu-item menu-drawer__menu-item--mainlist menu-drawer__animated-element focus-inset{% if discovery_active %} menu-drawer__menu-item--active{% endif %}"
+          {% if discovery_active %}aria-current="page"{% endif %}
+        >
+          <span class="menu-drawer__menu-item-text wrap-text">COLLECTIONS</span>
+        </a>
+      </li>
+    {% else %}
+      <li role="presentation" class="menu-list__list-item">
+        <a
+          href="/pages/collections"
+          data-skip-node-update="true"
+          class="menu-list__link{% if discovery_active %} menu-list__link--active{% endif %}"
+          {% if discovery_active %}aria-current="page"{% endif %}
+        >
+          <span class="menu-list__link-title">COLLECTIONS</span>
+        </a>
+      </li>
+  {% endcase %}
+{% endif %}

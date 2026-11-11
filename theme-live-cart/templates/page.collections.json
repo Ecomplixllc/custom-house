@@ -1,0 +1,61 @@
+/*
+ * Dedicated CustomHouse Collections discovery page.
+ * Assign this template to the Shopify Page with handle "collections".
+ */
+{
+  "sections": {
+    "main": {
+      "type": "customhouse-collections-discovery",
+      "blocks": {
+        "tshirts": {
+          "type": "category",
+          "settings": {
+            "label": "T-SHIRTS",
+            "description": "Everyday premium tees",
+            "collection": "t-shirts"
+          }
+        },
+        "hoodies": {
+          "type": "category",
+          "settings": {
+            "label": "HOODIES",
+            "description": "Heavyweight layers",
+            "collection": "hoodies"
+          }
+        },
+        "pants": {
+          "type": "category",
+          "settings": {
+            "label": "PANTS",
+            "description": "Built for movement",
+            "collection": "pants"
+          }
+        },
+        "caps": {
+          "type": "category",
+          "settings": {
+            "label": "CAPS",
+            "description": "Finish the look",
+            "collection": "caps"
+          }
+        },
+        "accessories": {
+          "type": "category",
+          "settings": {
+            "label": "ACCESSORIES",
+            "description": "Details that stand out",
+            "collection": "accessories"
+          }
+        }
+      },
+      "block_order": ["tshirts", "hoodies", "pants", "caps", "accessories"],
+      "settings": {
+        "base_products_collection": "all",
+        "product_limit": 48,
+        "creator_endpoint": "/apps/customhouse/creators?format=json",
+        "design_studio_url": "/pages/design-studio"
+      }
+    }
+  },
+  "order": ["main"]
+}

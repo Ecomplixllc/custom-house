@@ -1,0 +1,221 @@
+{{ 'customhouse-collections-discovery.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'customhouse-collections-discovery.js' | asset_url }}" defer="defer"></script>
+
+{% liquid
+  assign source_collection = section.settings.base_products_collection
+  assign product_limit = section.settings.product_limit | default: 48 | plus: 0
+  assign hero_image = section.settings.hero_image
+  if hero_image == blank and source_collection.image != blank
+    assign hero_image = source_collection.image
+  endif
+%}
+
+<section
+  id="CustomHouseCollectionsDiscovery-{{ section.id }}"
+  class="customhouse-collections-discovery"
+  data-chd-root
+  data-creator-endpoint="{{ section.settings.creator_endpoint | escape }}"
+>
+  <div class="chd-hero">
+    <div class="chd-container chd-hero__grid">
+      <div class="chd-hero__content">
+        <p class="chd-eyebrow">{{ section.settings.hero_eyebrow | escape }}</p>
+        <h1>
+          <span>{{ section.settings.hero_heading | escape }}</span>
+          <strong>{{ section.settings.hero_accent | escape }}</strong>
+        </h1>
+        <p class="chd-hero__copy">{{ section.settings.hero_copy | escape }}</p>
+        <ul class="chd-value-list" role="list">
+          <li><span aria-hidden="true">◆</span> Premium Quality</li>
+          <li><span aria-hidden="true">◆</span> Your Design</li>
+          <li><span aria-hidden="true">◆</span> Worldwide Shipping</li>
+        </ul>
+        <a class="chd-button chd-button--primary" href="#chd-base-products-{{ section.id }}">Explore base products</a>
+      </div>
+      <div class="chd-hero__visual">
+        {% if hero_image != blank %}
+          {{ hero_image | image_url: width: 1400 | image_tag: loading: 'eager', widths: '600,900,1200,1400', sizes: '(max-width: 767px) 100vw, 48vw', alt: section.settings.hero_image_alt }}
+        {% else %}
+          <div class="chd-hero__placeholder" aria-hidden="true"><span>CH</span></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <nav class="chd-categories" aria-label="Product categories">
+    <div class="chd-container chd-categories__track">
+      {% for block in section.blocks %}
+        {% if block.type == 'category' %}
+          {% assign category_collection = block.settings.collection %}
+          {% if category_collection != blank %}
+            <a class="chd-category" href="{{ category_collection.url }}" {{ block.shopify_attributes }}>
+              <span class="chd-category__icon" aria-hidden="true">{{ forloop.index | prepend: '0' }}</span>
+              <span><strong>{{ block.settings.label | escape }}</strong><small>{{ block.settings.description | escape }}</small></span>
+            </a>
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+    </div>
+  </nav>
+
+  <div id="chd-base-products-{{ section.id }}" class="chd-base chd-container">
+    <header class="chd-section-heading">
+      <div><p class="chd-eyebrow">Build your own</p><h2>Base Products</h2></div>
+      <p>Choose a real CustomHouse base product and open the current PitchPrint customization flow.</p>
+    </header>
+
+    {% if source_collection != blank %}
+      <div class="chd-toolbar" data-chd-toolbar>
+        <button class="chd-filter-toggle" type="button" data-chd-filter-toggle aria-expanded="false">Filters <span data-chd-result-count></span></button>
+        <div class="chd-filter-panel" data-chd-filter-panel>
+          {% assign filter_names = 'category:Category,fit:Fit,brand:Brand,color:Color,method:Print method' | split: ',' %}
+          {% for filter_definition in filter_names %}
+            {% assign filter_parts = filter_definition | split: ':' %}
+            <details class="chd-filter" data-chd-filter="{{ filter_parts[0] }}">
+              <summary>{{ filter_parts[1] }} <span aria-hidden="true">+</span></summary>
+              <div class="chd-filter__options" data-chd-filter-options="{{ filter_parts[0] }}"></div>
+            </details>
+          {% endfor %}
+          <details class="chd-filter chd-filter--price" data-chd-filter="price">
+            <summary>Price <span aria-hidden="true">+</span></summary>
+            <div class="chd-price-range">
+              <label>Min <input type="number" min="0" step="1" inputmode="numeric" data-chd-price-min></label>
+              <label>Max <input type="number" min="0" step="1" inputmode="numeric" data-chd-price-max></label>
+            </div>
+          </details>
+        </div>
+        <label class="chd-sort">Sort
+          <select data-chd-sort>
+            <option value="relevant">Most relevant</option>
+            <option value="newest">Newest</option>
+            <option value="price-asc">Price low to high</option>
+            <option value="price-desc">Price high to low</option>
+          </select>
+        </label>
+      </div>
+      <div class="chd-active-filters" data-chd-active-filters aria-live="polite"></div>
+
+      <div class="chd-product-grid" data-chd-product-grid>
+        {% assign rendered_products = 0 %}
+        {% for product in source_collection.products limit: product_limit %}
+          {% liquid
+            assign product_origin = product.metafields.customhouse.product_origin.value | downcase
+            assign design_mode = product.metafields.customhouse.design_mode.value | downcase
+            assign product_type = product.metafields.customhouse.product_type.value | downcase
+            assign pitchprint_enabled = product.metafields.customhouse.pitchprint_enabled.value
+            assign is_creator_product = false
+            if product_origin == 'creator' or design_mode == 'buy_only' or product_type == 'creator_fixed'
+              assign is_creator_product = true
+            endif
+            assign is_global_product = false
+            if product_origin == 'global' or product_type == 'global_customizable' or design_mode == 'customizable'
+              assign is_global_product = true
+            endif
+          %}
+          {% if is_creator_product == false and is_global_product %}
+            {% assign rendered_products = rendered_products | plus: 1 %}
+            {% capture product_categories %}{% for product_collection in product.collections %}{{ product_collection.handle }}{% unless forloop.last %}||{% endunless %}{% endfor %}{% endcapture %}
+            {% capture product_colors %}{% for option in product.options_with_values %}{% assign normalized_option = option.name | downcase %}{% if normalized_option contains 'color' or normalized_option contains 'colour' %}{% for value in option.values %}{{ value }}{% unless forloop.last %}||{% endunless %}{% endfor %}{% endif %}{% endfor %}{% endcapture %}
+            <article
+              class="chd-product-card"
+              data-chd-product
+              data-index="{{ rendered_products }}"
+              data-title="{{ product.title | escape }}"
+              data-category="{{ product_categories | strip | escape }}"
+              data-fit="{{ product.metafields.customhouse.fit.value | json | escape }}"
+              data-brand="{{ product.vendor | escape }}"
+              data-color="{{ product_colors | strip | escape }}"
+              data-price="{{ product.price_min }}"
+              data-published="{{ product.published_at | date: '%s' }}"
+              data-production-pricing="{{ product.metafields.customhouse.production_method_pricing.value | json | escape }}"
+            >
+              <a class="chd-product-card__media" href="{{ product.url }}" aria-label="View {{ product.title | escape }}">
+                {% if product.featured_image != blank %}
+                  {{ product.featured_image | image_url: width: 720 | image_tag: loading: 'lazy', widths: '320,480,720', sizes: '(max-width: 767px) 50vw, 25vw', alt: product.title }}
+                {% else %}
+                  {{ 'product-apparel-1' | placeholder_svg_tag: 'chd-product-card__placeholder' }}
+                {% endif %}
+              </a>
+              <div class="chd-product-card__body">
+                {% if product.vendor != blank %}<p>{{ product.vendor | escape }}</p>{% endif %}
+                <h3><a href="{{ product.url }}">{{ product.title | escape }}</a></h3>
+                <strong>{{ product.price_min | money }}{% if product.price_varies %}+{% endif %}</strong>
+                <div class="chd-product-card__actions">
+                  {% if pitchprint_enabled == true %}
+                    <a class="chd-button chd-button--primary" href="{{ product.url }}?open_customizer=1">Customize</a>
+                  {% endif %}
+                  <a class="chd-button chd-button--secondary" href="{{ product.url }}">View Product</a>
+                </div>
+              </div>
+            </article>
+          {% endif %}
+        {% endfor %}
+      </div>
+      <div class="chd-empty" data-chd-product-empty hidden>No base products match these filters.</div>
+      {% if rendered_products == 0 %}
+        <div class="chd-setup-note">Select a collection containing products classified as <code>global_customizable</code> in this section's settings.</div>
+      {% endif %}
+    {% else %}
+      <div class="chd-setup-note">Choose the real Base Products collection in the Theme Editor.</div>
+    {% endif %}
+  </div>
+
+  <aside class="chd-cta">
+    <div class="chd-container chd-cta__inner">
+      <div><p class="chd-eyebrow">Make it yours</p><h2>{{ section.settings.cta_heading | escape }}</h2><p>{{ section.settings.cta_copy | escape }}</p></div>
+      <a class="chd-button chd-button--light" href="{{ section.settings.design_studio_url | default: '/pages/design-studio' | escape }}">Start Designing</a>
+    </div>
+  </aside>
+
+  <div class="chd-creators chd-container" data-chd-creators>
+    <header class="chd-section-heading">
+      <div><p class="chd-eyebrow">From the community</p><h2>Creator Content</h2></div>
+      <p>Discover approved CustomHouse creators, their public collections, and published designs.</p>
+    </header>
+    <div class="chd-creator-tools">
+      <label class="chd-search"><span class="visually-hidden">Search creators, collections, and designs</span><input type="search" placeholder="Search creators, collections, designs" autocomplete="off" data-chd-creator-search></label>
+      <label class="chd-sort">Sort
+        <select data-chd-creator-sort><option value="newest">Newest</option><option value="az">A–Z</option></select>
+      </label>
+    </div>
+    <div class="chd-interest-tags" data-chd-interest-tags aria-label="Creator interests"></div>
+    <div class="chd-creator-status" data-chd-creator-status role="status">Loading creator content…</div>
+    <div class="chd-creator-grid" data-chd-creator-grid></div>
+    <div class="chd-design-grid" data-chd-design-grid></div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "Collections discovery",
+  "tag": "section",
+  "class": "customhouse-collections-discovery-section",
+  "settings": [
+    { "type": "collection", "id": "base_products_collection", "label": "Base products collection" },
+    { "type": "range", "id": "product_limit", "label": "Maximum base products", "min": 8, "max": 48, "step": 4, "default": 48 },
+    { "type": "text", "id": "hero_eyebrow", "label": "Hero eyebrow", "default": "CUSTOMHOUSE ORIGINALS" },
+    { "type": "text", "id": "hero_heading", "label": "Hero heading", "default": "BASE PRODUCTS" },
+    { "type": "text", "id": "hero_accent", "label": "Hero accent heading", "default": "DESIGN YOUR OWN" },
+    { "type": "textarea", "id": "hero_copy", "label": "Hero copy", "default": "Premium blank products, ready for your idea. Choose your base and make it unmistakably yours." },
+    { "type": "image_picker", "id": "hero_image", "label": "Hero image" },
+    { "type": "text", "id": "hero_image_alt", "label": "Hero image alt text", "default": "CustomHouse base products" },
+    { "type": "text", "id": "cta_heading", "label": "CTA heading", "default": "CREATE SOMETHING UNIQUE" },
+    { "type": "textarea", "id": "cta_copy", "label": "CTA copy", "default": "Start with a premium base product and bring your next idea to life in the current CustomHouse Design Studio." },
+    { "type": "url", "id": "design_studio_url", "label": "Design Studio link" },
+    { "type": "text", "id": "creator_endpoint", "label": "Creator directory app-proxy endpoint", "default": "/apps/customhouse/creators?format=json" }
+  ],
+  "blocks": [
+    {
+      "type": "category",
+      "name": "Category link",
+      "limit": 5,
+      "settings": [
+        { "type": "text", "id": "label", "label": "Label" },
+        { "type": "text", "id": "description", "label": "Description" },
+        { "type": "collection", "id": "collection", "label": "Collection" }
+      ]
+    }
+  ],
+  "presets": [{ "name": "Collections discovery" }]
+}
+{% endschema %}

@@ -15,6 +15,7 @@ import {
 } from "./creator-storefront-urls.ts";
 import { normalizeCustomerGid } from "./helium-sync.ts";
 import { formatMinorMoney } from "./money.ts";
+import { listPublicCreatorDirectory } from "./creator-discovery.server.ts";
 
 const SAFE_HEADERS = {
   "Cache-Control": "no-store",
@@ -1914,12 +1915,15 @@ export async function handleStorefrontProxy(
             405,
           );
         }
-        return success({
-          route: "creators",
-          ready: false,
-          message: "Creator storefront listings are not connected yet.",
-          customer,
-        });
+        {
+          const directory = await listPublicCreatorDirectory(context.shop);
+          return success({
+            route: "creators",
+            ready: true,
+            ...directory,
+            customer: { loggedIn: customer.loggedIn },
+          });
+        }
       case "creator":
         if (request.method !== "GET") {
           return failure(

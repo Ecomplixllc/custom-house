@@ -1,0 +1,191 @@
+.customhouse-collections-discovery {
+  --chd-bg: #080808;
+  --chd-panel: #121212;
+  --chd-panel-2: #1a1a1a;
+  --chd-text: #f7f7f4;
+  --chd-muted: #a8a8a2;
+  --chd-line: #30302f;
+  --chd-lime: #c7ff2f;
+  --chd-purple: #8a35f2;
+  color: var(--chd-text);
+  background: var(--chd-bg);
+  overflow: clip;
+}
+
+.customhouse-collections-discovery *,
+.customhouse-collections-discovery *::before,
+.customhouse-collections-discovery *::after { box-sizing: border-box; }
+
+.customhouse-collections-discovery a { color: inherit; text-decoration: none; }
+.customhouse-collections-discovery button,
+.customhouse-collections-discovery input,
+.customhouse-collections-discovery select { font: inherit; }
+.customhouse-collections-discovery .chd-container { width: min(1440px, calc(100% - 64px)); margin-inline: auto; }
+.customhouse-collections-discovery .chd-eyebrow { margin: 0 0 12px; color: var(--chd-lime); font-size: 12px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+
+.customhouse-collections-discovery .chd-hero { position: relative; isolation: isolate; background: radial-gradient(circle at 72% 20%, rgba(138,53,242,.35), transparent 34%), #050505; }
+.customhouse-collections-discovery .chd-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: .14; background-image: linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px); background-size: 48px 48px; mask-image: linear-gradient(to bottom, #000, transparent); }
+.customhouse-collections-discovery .chd-hero__grid { min-height: 620px; display: grid; grid-template-columns: minmax(0, .92fr) minmax(420px, 1.08fr); align-items: stretch; gap: clamp(36px, 6vw, 100px); }
+.customhouse-collections-discovery .chd-hero__content { align-self: center; padding-block: 80px; }
+.customhouse-collections-discovery .chd-hero h1 { margin: 0; font-size: clamp(54px, 7vw, 112px); line-height: .84; letter-spacing: -.055em; text-transform: uppercase; }
+.customhouse-collections-discovery .chd-hero h1 span,
+.customhouse-collections-discovery .chd-hero h1 strong { display: block; }
+.customhouse-collections-discovery .chd-hero h1 strong { color: var(--chd-lime); font-weight: 900; }
+.customhouse-collections-discovery .chd-hero__copy { max-width: 620px; margin: 28px 0 24px; color: #d2d2cd; font-size: clamp(17px, 1.5vw, 21px); line-height: 1.55; }
+.customhouse-collections-discovery .chd-value-list { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 0; margin: 0 0 32px; list-style: none; color: #d9d9d5; font-size: 14px; }
+.customhouse-collections-discovery .chd-value-list span { color: var(--chd-purple); margin-right: 7px; }
+.customhouse-collections-discovery .chd-hero__visual { min-height: 620px; position: relative; }
+.customhouse-collections-discovery .chd-hero__visual::after { content: ""; position: absolute; inset: auto -10% 8% 10%; height: 30%; background: var(--chd-purple); filter: blur(70px); opacity: .28; z-index: -1; }
+.customhouse-collections-discovery .chd-hero__visual img { width: 100%; height: 100%; object-fit: cover; object-position: center; filter: saturate(.9) contrast(1.06); }
+.customhouse-collections-discovery .chd-hero__placeholder { height: 100%; min-height: 620px; display: grid; place-items: center; background: linear-gradient(145deg, #171717, #27202e); }
+.customhouse-collections-discovery .chd-hero__placeholder span { font-size: min(20vw, 270px); font-weight: 900; color: rgba(255,255,255,.08); }
+
+.customhouse-collections-discovery .chd-button { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; padding: 11px 20px; border: 1px solid transparent; border-radius: 3px; font-size: 13px; font-weight: 800; letter-spacing: .055em; text-transform: uppercase; transition: transform .18s ease, background-color .18s ease, color .18s ease; }
+.customhouse-collections-discovery .chd-button:hover { transform: translateY(-2px); }
+.customhouse-collections-discovery .chd-button--primary { background: var(--chd-lime); color: #090909; }
+.customhouse-collections-discovery .chd-button--secondary { border-color: var(--chd-line); background: transparent; color: var(--chd-text); }
+.customhouse-collections-discovery .chd-button--light { background: #fff; color: #111; }
+
+.customhouse-collections-discovery .chd-categories { border-block: 1px solid var(--chd-line); background: #0c0c0c; }
+.customhouse-collections-discovery .chd-categories__track { display: grid; grid-template-columns: repeat(5, minmax(160px, 1fr)); }
+.customhouse-collections-discovery .chd-category { min-height: 112px; display: flex; align-items: center; gap: 16px; padding: 20px; border-right: 1px solid var(--chd-line); transition: background-color .18s ease; }
+.customhouse-collections-discovery .chd-category:first-child { border-left: 1px solid var(--chd-line); }
+.customhouse-collections-discovery .chd-category:hover { background: #181818; }
+.customhouse-collections-discovery .chd-category__icon { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border: 1px solid #454545; color: var(--chd-lime); font-size: 12px; font-weight: 800; }
+.customhouse-collections-discovery .chd-category strong,
+.customhouse-collections-discovery .chd-category small { display: block; }
+.customhouse-collections-discovery .chd-category strong { font-size: 13px; letter-spacing: .08em; }
+.customhouse-collections-discovery .chd-category small { margin-top: 5px; color: var(--chd-muted); font-size: 12px; }
+
+.customhouse-collections-discovery .chd-base,
+.customhouse-collections-discovery .chd-creators { padding-block: clamp(64px, 8vw, 116px); }
+.customhouse-collections-discovery .chd-section-heading { display: flex; align-items: end; justify-content: space-between; gap: 32px; margin-bottom: 38px; }
+.customhouse-collections-discovery .chd-section-heading h2 { margin: 0; font-size: clamp(38px, 5vw, 74px); line-height: .95; letter-spacing: -.04em; text-transform: uppercase; }
+.customhouse-collections-discovery .chd-section-heading > p { max-width: 520px; margin: 0; color: var(--chd-muted); line-height: 1.6; }
+
+.customhouse-collections-discovery .chd-toolbar { position: relative; z-index: 4; display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 16px; padding: 14px; border: 1px solid var(--chd-line); background: var(--chd-panel); }
+.customhouse-collections-discovery .chd-filter-toggle { display: none; }
+.customhouse-collections-discovery .chd-filter-panel { display: flex; flex-wrap: wrap; gap: 8px; }
+.customhouse-collections-discovery .chd-filter { position: relative; }
+.customhouse-collections-discovery .chd-filter summary { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 10px 14px; border: 1px solid var(--chd-line); cursor: pointer; list-style: none; font-size: 13px; font-weight: 700; }
+.customhouse-collections-discovery .chd-filter summary::-webkit-details-marker { display: none; }
+.customhouse-collections-discovery .chd-filter[open] summary { border-color: var(--chd-lime); }
+.customhouse-collections-discovery .chd-filter[open] summary span { transform: rotate(45deg); }
+.customhouse-collections-discovery .chd-filter__options,
+.customhouse-collections-discovery .chd-price-range { position: absolute; left: 0; top: calc(100% + 8px); min-width: 230px; max-height: 310px; overflow: auto; padding: 12px; border: 1px solid var(--chd-line); background: #151515; box-shadow: 0 18px 40px rgba(0,0,0,.45); }
+.customhouse-collections-discovery .chd-filter__options label { display: flex; align-items: center; gap: 10px; padding: 8px 5px; color: #deded9; font-size: 13px; }
+.customhouse-collections-discovery .chd-filter__options input { width: 17px; height: 17px; accent-color: var(--chd-lime); }
+.customhouse-collections-discovery .chd-price-range { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.customhouse-collections-discovery .chd-price-range label { color: var(--chd-muted); font-size: 12px; }
+.customhouse-collections-discovery .chd-price-range input,
+.customhouse-collections-discovery .chd-sort select,
+.customhouse-collections-discovery .chd-search input { width: 100%; margin-top: 5px; border: 1px solid var(--chd-line); border-radius: 0; background: #090909; color: var(--chd-text); }
+.customhouse-collections-discovery .chd-price-range input { height: 42px; padding: 8px; }
+.customhouse-collections-discovery .chd-sort { color: var(--chd-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.customhouse-collections-discovery .chd-sort select { min-width: 190px; height: 44px; padding: 0 34px 0 12px; color-scheme: dark; font-size: 13px; text-transform: none; letter-spacing: 0; }
+.customhouse-collections-discovery .chd-active-filters { min-height: 42px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-block: 10px; }
+.customhouse-collections-discovery .chd-filter-chip,
+.customhouse-collections-discovery .chd-interest-tag { border: 1px solid var(--chd-line); background: var(--chd-panel); color: var(--chd-text); cursor: pointer; }
+.customhouse-collections-discovery .chd-filter-chip { padding: 6px 10px; font-size: 12px; }
+.customhouse-collections-discovery .chd-filter-chip span { margin-left: 7px; color: var(--chd-lime); }
+
+.customhouse-collections-discovery .chd-product-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.customhouse-collections-discovery .chd-product-card { min-width: 0; display: flex; flex-direction: column; border: 1px solid #282828; background: var(--chd-panel); }
+.customhouse-collections-discovery .chd-product-card[hidden] { display: none; }
+.customhouse-collections-discovery .chd-product-card__media { aspect-ratio: 4 / 5; display: block; overflow: hidden; background: #e8e8e5; }
+.customhouse-collections-discovery .chd-product-card__media img,
+.customhouse-collections-discovery .chd-product-card__placeholder { width: 100%; height: 100%; object-fit: cover; transition: transform .3s ease; }
+.customhouse-collections-discovery .chd-product-card:hover .chd-product-card__media img { transform: scale(1.025); }
+.customhouse-collections-discovery .chd-product-card__body { flex: 1; display: flex; flex-direction: column; padding: 18px; }
+.customhouse-collections-discovery .chd-product-card__body > p { margin: 0 0 7px; color: var(--chd-muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.customhouse-collections-discovery .chd-product-card h3 { margin: 0 0 12px; font-size: 18px; line-height: 1.25; }
+.customhouse-collections-discovery .chd-product-card__body > strong { margin-top: auto; font-size: 15px; }
+.customhouse-collections-discovery .chd-product-card__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
+.customhouse-collections-discovery .chd-product-card__actions .chd-button:only-child { grid-column: 1 / -1; }
+.customhouse-collections-discovery .chd-empty,
+.customhouse-collections-discovery .chd-setup-note { padding: 28px; border: 1px solid var(--chd-line); background: var(--chd-panel); color: var(--chd-muted); text-align: center; }
+
+.customhouse-collections-discovery .chd-cta { background: linear-gradient(120deg, #752bd5, #9f49ff 64%, #c7ff2f 180%); }
+.customhouse-collections-discovery .chd-cta__inner { min-height: 310px; display: flex; align-items: center; justify-content: space-between; gap: 40px; padding-block: 56px; }
+.customhouse-collections-discovery .chd-cta .chd-eyebrow { color: var(--chd-lime); }
+.customhouse-collections-discovery .chd-cta h2 { margin: 0; max-width: 900px; font-size: clamp(46px, 6vw, 92px); line-height: .9; letter-spacing: -.05em; }
+.customhouse-collections-discovery .chd-cta p:not(.chd-eyebrow) { max-width: 680px; margin: 20px 0 0; line-height: 1.55; }
+
+.customhouse-collections-discovery .chd-creators { background: var(--chd-bg); }
+.customhouse-collections-discovery .chd-creator-tools { display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 14px; margin-bottom: 18px; }
+.customhouse-collections-discovery .chd-search input { height: 52px; margin: 0; padding: 0 16px; font-size: 15px; }
+.customhouse-collections-discovery .chd-interest-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+.customhouse-collections-discovery .chd-interest-tag { padding: 8px 13px; border-radius: 999px; font-size: 12px; }
+.customhouse-collections-discovery .chd-interest-tag[aria-pressed="true"] { border-color: var(--chd-lime); background: var(--chd-lime); color: #090909; }
+.customhouse-collections-discovery .chd-creator-status { padding-block: 20px; color: var(--chd-muted); }
+.customhouse-collections-discovery .chd-creator-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 34px; }
+.customhouse-collections-discovery .chd-creator-card { display: grid; grid-template-columns: 68px minmax(0, 1fr) auto; align-items: center; gap: 14px; min-width: 0; padding: 17px; border: 1px solid var(--chd-line); background: var(--chd-panel); }
+.customhouse-collections-discovery .chd-creator-card__avatar { width: 68px; height: 68px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--chd-purple); font-size: 22px; font-weight: 900; }
+.customhouse-collections-discovery .chd-creator-card__avatar img { width: 100%; height: 100%; object-fit: cover; }
+.customhouse-collections-discovery .chd-creator-card h3 { overflow: hidden; margin: 0 0 4px; font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.customhouse-collections-discovery .chd-creator-card p { overflow: hidden; margin: 0; color: var(--chd-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.customhouse-collections-discovery .chd-creator-card__view { color: var(--chd-lime); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+.customhouse-collections-discovery .chd-design-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.customhouse-collections-discovery .chd-design-card { min-width: 0; border: 1px solid var(--chd-line); background: var(--chd-panel); }
+.customhouse-collections-discovery .chd-design-card__media { aspect-ratio: 1; display: grid; place-items: center; overflow: hidden; background: var(--chd-panel-2); }
+.customhouse-collections-discovery .chd-design-card__media img { width: 100%; height: 100%; object-fit: cover; }
+.customhouse-collections-discovery .chd-design-card__media span { font-size: 50px; font-weight: 900; color: #333; }
+.customhouse-collections-discovery .chd-design-card__body { padding: 15px; }
+.customhouse-collections-discovery .chd-design-card h3 { margin: 0 0 5px; font-size: 16px; }
+.customhouse-collections-discovery .chd-design-card p { margin: 0; color: var(--chd-muted); font-size: 12px; }
+
+@media (max-width: 1279px) {
+  .customhouse-collections-discovery .chd-container { width: min(100% - 40px, 1180px); }
+  .customhouse-collections-discovery .chd-hero__grid { grid-template-columns: 1fr 1fr; min-height: 560px; gap: 34px; }
+  .customhouse-collections-discovery .chd-hero__visual { min-height: 560px; }
+  .customhouse-collections-discovery .chd-categories__track { overflow-x: auto; grid-template-columns: repeat(5, minmax(210px, 1fr)); }
+  .customhouse-collections-discovery .chd-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .customhouse-collections-discovery .chd-toolbar { grid-template-columns: 1fr auto; }
+  .customhouse-collections-discovery .chd-filter-panel { grid-column: 1 / -1; order: 2; }
+  .customhouse-collections-discovery .chd-creator-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .customhouse-collections-discovery .chd-design-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+  .customhouse-collections-discovery .chd-container { width: min(100% - 28px, 680px); }
+  .customhouse-collections-discovery .chd-hero__grid { min-height: 0; display: flex; flex-direction: column; gap: 0; }
+  .customhouse-collections-discovery .chd-hero__content { padding-block: 56px 42px; }
+  .customhouse-collections-discovery .chd-hero h1 { font-size: clamp(48px, 16vw, 74px); }
+  .customhouse-collections-discovery .chd-hero__visual,
+  .customhouse-collections-discovery .chd-hero__placeholder { min-height: 380px; height: 62vw; max-height: 520px; }
+  .customhouse-collections-discovery .chd-categories__track { width: 100%; padding-inline: 14px; scroll-padding-inline: 14px; }
+  .customhouse-collections-discovery .chd-category:first-child { border-left: 0; }
+  .customhouse-collections-discovery .chd-section-heading { display: block; }
+  .customhouse-collections-discovery .chd-section-heading > p { margin-top: 16px; }
+  .customhouse-collections-discovery .chd-toolbar { grid-template-columns: 1fr auto; padding: 10px; }
+  .customhouse-collections-discovery .chd-filter-toggle { min-height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border: 1px solid var(--chd-line); background: transparent; color: var(--chd-text); }
+  .customhouse-collections-discovery .chd-filter-panel { display: none; grid-column: 1 / -1; }
+  .customhouse-collections-discovery .chd-filter-panel.is-open { display: grid; grid-template-columns: 1fr 1fr; }
+  .customhouse-collections-discovery .chd-filter summary { width: 100%; }
+  .customhouse-collections-discovery .chd-filter__options,
+  .customhouse-collections-discovery .chd-price-range { position: static; min-width: 0; width: 100%; box-shadow: none; }
+  .customhouse-collections-discovery .chd-sort select { min-width: 145px; max-width: 44vw; }
+  .customhouse-collections-discovery .chd-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .customhouse-collections-discovery .chd-product-card__body { padding: 12px; }
+  .customhouse-collections-discovery .chd-product-card h3 { font-size: 14px; }
+  .customhouse-collections-discovery .chd-product-card__actions { grid-template-columns: 1fr; }
+  .customhouse-collections-discovery .chd-product-card__actions .chd-button { min-height: 40px; padding: 8px; font-size: 10px; }
+  .customhouse-collections-discovery .chd-cta__inner { display: block; min-height: 0; }
+  .customhouse-collections-discovery .chd-cta .chd-button { margin-top: 28px; }
+  .customhouse-collections-discovery .chd-creator-tools { grid-template-columns: 1fr; }
+  .customhouse-collections-discovery .chd-creator-grid { grid-template-columns: 1fr; }
+  .customhouse-collections-discovery .chd-design-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .customhouse-collections-discovery .chd-creator-card { grid-template-columns: 58px minmax(0, 1fr) auto; }
+  .customhouse-collections-discovery .chd-creator-card__avatar { width: 58px; height: 58px; }
+}
+
+@media (max-width: 420px) {
+  .customhouse-collections-discovery .chd-product-grid { grid-template-columns: 1fr; }
+  .customhouse-collections-discovery .chd-filter-panel.is-open { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .customhouse-collections-discovery *,
+  .customhouse-collections-discovery *::before,
+  .customhouse-collections-discovery *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}

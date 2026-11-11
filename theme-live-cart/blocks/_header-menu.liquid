@@ -58,6 +58,7 @@
                 </a>
               </li>
             {% endfor %}
+            {% render 'customhouse-collections-menu-fallback', links: block_settings.menu.links, variant: 'mobile_bar' %}
           </ul>
         </div>
       </div>
@@ -148,6 +149,7 @@
           {%- endif -%}
         </li>
       {% endfor %}
+      {% render 'customhouse-collections-menu-fallback', links: block_settings.menu.links, variant: 'desktop' %}
       <li
         class="menu-list__list-item"
         role="presentation"
