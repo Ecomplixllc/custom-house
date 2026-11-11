@@ -791,10 +791,13 @@ function creatorProductPreviewUrl(product) {
   );
 }
 
-function creatorProductHasCompletedDesign(product) {
+export function creatorProductHasCompletedDesign(product) {
   const previews = projectPreviewUrls(product);
   const setup = creatorSetupForProduct(product);
-  const hasDesignPreview = previews.some((url) => url.startsWith("https://"));
+  const hasDesignPreview = Boolean(
+    product?.previewUrl?.startsWith("https://") ||
+      previews.some((url) => url.startsWith("https://")),
+  );
   return Boolean(
     product?.pitchprintProjectId &&
       hasDesignPreview &&
@@ -1062,8 +1065,22 @@ function renderCreatorProducts(list, empty, products) {
     };
     if (statusValue === "DRAFT") {
       addDesignAction("Continue Design");
+      if (creatorProductHasCompletedDesign(product)) {
+        addDesignButton(
+          actions,
+          "Submit for Review",
+          { designDirectAction: "review", creatorProductId: product.id },
+          "ch-design-card__button--primary",
+        );
+      }
     } else if (statusValue === "REJECTED") {
       addDesignAction("Edit Design");
+      addDesignButton(
+        actions,
+        "Resubmit for Review",
+        { designDirectAction: "review", creatorProductId: product.id },
+        "ch-design-card__button--primary",
+      );
     } else if (statusValue === "PENDING") {
       const pending = document.createElement("span");
       pending.className = "ch-design-card__locked-action";
@@ -3280,7 +3297,11 @@ function bindMyDesignsUx(root) {
     const directAction = event.target.closest("[data-design-direct-action]");
     if (directAction) {
       const product = creatorProductById(root, directAction.dataset.creatorProductId);
-      openDesignActionModal(root, product, directAction.dataset.designDirectAction, directAction);
+      if (directAction.dataset.designDirectAction === "review") {
+        openDesignReviewModal(root, product);
+      } else {
+        openDesignActionModal(root, product, directAction.dataset.designDirectAction, directAction);
+      }
     }
   });
   root.querySelector("[data-dashboard-design-search]")?.addEventListener("input", (event) => {

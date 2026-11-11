@@ -5,6 +5,7 @@ import * as dashboardModule from "../extensions/customhouse-creator-storefront/a
 import {
   creatorPitchPrintClientOptions,
   creatorPitchPrintLaunchConfig,
+  creatorProductHasCompletedDesign,
   creatorProductProductionMethod,
   creatorReviewPresentation,
   creatorSaveSetup,
@@ -694,6 +695,38 @@ test("partial saved sessions remain resumable but cannot be submitted", () => {
     /statusValue === "DRAFT" && creatorProductHasCompletedDesign\(product\)/,
   );
   assert.match(block, /data-dashboard-action-cancel/);
+});
+
+test("completed Creator drafts accept the canonical single preview URL", () => {
+  const completeProduct = {
+    pitchprintProjectId: "creator-project-1",
+    previewUrl: "https://cdn.example.com/creator-preview.png",
+    previewUrls: "[]",
+    designVariantSelectionsJson: JSON.stringify({
+      schema: "creator_design_setup_v1",
+      productionMethod: "DTF",
+      fixedColor: "Black",
+      placementCount: 1,
+      copyrightAccepted: true,
+    }),
+  };
+
+  assert.equal(creatorProductHasCompletedDesign(completeProduct), true);
+  assert.equal(
+    creatorProductHasCompletedDesign({ ...completeProduct, previewUrl: null }),
+    false,
+  );
+});
+
+test("completed drafts expose a prominent review submission action", () => {
+  assert.match(
+    script,
+    /"Submit for Review",\s*\{ designDirectAction: "review", creatorProductId: product\.id \}/,
+  );
+  assert.match(
+    script,
+    /directAction\.dataset\.designDirectAction === "review"[\s\S]*openDesignReviewModal\(root, product\)/,
+  );
 });
 
 test("creator dashboard renders professional My Designs management UI", () => {
