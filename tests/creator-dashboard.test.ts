@@ -10,6 +10,7 @@ import {
   creatorReviewPresentation,
   creatorSaveSetup,
   chooseCreatorSetupEvent,
+  configureCreatorPitchPrintLabels,
   createCreatorDraftAutosaveController,
   loadDashboardState,
   normalizeCreatorSetupEvent,
@@ -33,6 +34,25 @@ const styles = readFileSync(
   "extensions/customhouse-creator-storefront/assets/customhouse.css",
   "utf8",
 );
+
+test("creator PitchPrint labels describe the final action as design submission", () => {
+  const clientGlobal = {
+    langEdits: {
+      button_label_cancel: "Keep editing",
+      confirm: "Old label",
+    },
+  };
+
+  configureCreatorPitchPrintLabels(clientGlobal);
+
+  assert.deepEqual(clientGlobal.langEdits, {
+    button_label_cancel: "Keep editing",
+    submit_tip: "SUBMIT DESIGN",
+    finish_message: "This is how your design will look. Submit it for admin review now?",
+    confirm_design: "Submit design",
+    confirm: "Submit design",
+  });
+});
 
 function cssMediaBlockAfterComment(
   source: string,
@@ -459,7 +479,7 @@ test("storefront dashboard displays total sales and twenty percent commission", 
   assert.match(styles, /Hide details -/);
 });
 
-test("creator dashboard starts PitchPrint directly and reviews saved designs without reloads", () => {
+test("creator dashboard starts PitchPrint directly and submits final designs without reloads", () => {
   const block = readFileSync(
     "extensions/customhouse-creator-storefront/blocks/creator-dashboard.liquid",
     "utf8",
@@ -510,8 +530,18 @@ test("creator dashboard starts PitchPrint directly and reviews saved designs wit
   assert.match(script, /window\.addEventListener\("beforeunload"/);
   assert.match(script, /manager\.projectSaved/);
   assert.match(script, /saveCreatorProductPitchPrintProject/);
-  assert.match(script, /updateCreatorProductInState\(root, updated\)/);
-  assert.match(script, /openDesignReviewModal\(root, updated\)/);
+  assert.match(script, /const saved = await saveCreatorProductPitchPrintProject/);
+  assert.match(script, /const submitted = await submitCreatorProductForReview\(saved\.id\)/);
+  assert.match(script, /updateCreatorProductInState\(root, submitted\)/);
+  assert.match(script, /Design submitted for review\./);
+  assert.match(script, /openSubmitFeedbackModal\(root, \{ success: true \}\)/);
+  assert.match(script, /Design saved, but submission failed:/);
+  assert.match(script, /openDesignReviewModal\(root, saved\)/);
+  assert.match(script, /if \(saveFlags\.autoSaved \|\| saveFlags\.saveForLater\) \{[\s\S]*handlePitchPrintDraftSessionSaved[\s\S]*return;[\s\S]*manager\.finalProjectSavePending = true;/s);
+  assert.match(script, /configureCreatorPitchPrintLabels\(window\.PPCLIENT\)/);
+  assert.match(script, /submit_tip: "SUBMIT DESIGN"/);
+  assert.match(script, /confirm_design: "Submit design"/);
+  assert.match(script, /confirm: "Submit design"/);
   assert.match(script, /data-dashboard-review-edit/);
   assert.match(script, /data-dashboard-review-draft/);
   assert.match(script, /data-dashboard-review-submit/);
