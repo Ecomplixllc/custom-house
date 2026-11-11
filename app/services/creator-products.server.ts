@@ -2092,9 +2092,9 @@ export async function savePitchPrintDraftSessionForCustomer(
   }
 
   const projectId = cleanProjectId(input.projectId);
-  if (projectId === existing.pitchprintProjectId) {
-    return existing;
-  }
+  // PitchPrint overwrites the saved source under a stable project ID. Always
+  // re-fetch and validate a successful save event because the same ID can now
+  // contain newer artwork than the previous draft save.
   const source = await fetchProject(projectId);
   assertPitchPrintProjectOwner(shop, creator.id, source);
 

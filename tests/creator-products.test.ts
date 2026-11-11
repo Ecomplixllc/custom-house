@@ -41,6 +41,7 @@ import {
   CREATOR_PRODUCTION_PRICING_PRODUCT_ID,
   parseSurchargeInput,
 } from "../app/services/production-method-pricing.server.ts";
+import { completeCreatorFinalSubmission } from "../extensions/customhouse-creator-storefront/assets/customhouse-dashboard.js";
 
 const shop = "customhouse.test";
 const { nonFixedColorVariantIds } = creatorPublishing;
@@ -1215,7 +1216,7 @@ test("authenticated creator can persist an owned PitchPrint draft session withou
   assert.equal(updated.designVariantSelectionsJson, originalSetup);
 });
 
-test("PitchPrint draft-session persistence is idempotent for the current project ID", async () => {
+test("PitchPrint draft-session persistence revalidates repeated saves for the current project ID", async () => {
   const database = fakeDb();
   const draft = await createCreatorProductDraft(
     shop,
@@ -1241,13 +1242,20 @@ test("PitchPrint draft-session persistence is idempotent for the current project
     database,
     async () => {
       fetchCalls += 1;
-      throw new Error("idempotent save must not refetch PitchPrint");
+      return {
+        _id: "pp_existing_draft",
+        _author: `customhouse:${shop}:creator:creator-a`,
+        designId: "pp_design_global_hoodie",
+        pages: [
+          { id: "front", items: [{ type: "text" }, { type: "image" }] },
+        ],
+      };
     },
   );
 
   assert.equal(updated.pitchprintProjectId, "pp_existing_draft");
-  assert.equal(fetchCalls, 0);
-  assert.equal(updateCalls, 0);
+  assert.equal(fetchCalls, 1);
+  assert.equal(updateCalls, 1);
   assert.equal(updated.status, "DRAFT");
 });
 
@@ -2681,6 +2689,99 @@ test("creator can submit own complete DRAFT and it becomes PENDING", async () =>
 
   assert.equal(submitted.status, "PENDING");
   assert.ok(submitted.submittedAt);
+});
+
+test("dashboard final submit calls the authenticated action, updates DB, and reloads My Products as PENDING", async () => {
+  const database = fakeDb();
+  const draft = await createCreatorProductDraft(
+    shop,
+    "gid://shopify/Customer/1",
+    { shopifyProductId: baseProduct.id },
+    fakeClient(),
+    database,
+  );
+  await attachPitchPrintProjectToCreatorProduct(
+    shop,
+    "gid://shopify/Customer/1",
+    draft.id,
+    pitchPrintPayload({
+      projectId: "pp_submit_action",
+      previewUrl: "https://cdn.pitchprint.test/submit-action.png",
+    }),
+    database,
+  );
+
+  const result = await completeCreatorFinalSubmission({
+    creatorProductId: draft.id,
+    savePayload: { projectId: "pp_submit_action" },
+    saveProject: async (creatorProductId, savePayload) => {
+      assert.equal(creatorProductId, draft.id);
+      assert.equal(savePayload.projectId, "pp_submit_action");
+      return database.products[0];
+    },
+    submitProduct: async (creatorProductId) => {
+      const response = await creatorProductRoute.creatorProductActionCore(
+        {
+          params: { id: creatorProductId },
+          request: new Request(
+            `https://${shop}/apps/customhouse/api/creator-products/${creatorProductId}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ intent: "submit" }),
+            },
+          ),
+        },
+        {
+          ...creatorProductRoute.creatorProductActionServices,
+          proxyContext: async () => ({
+            shop,
+            customerId: "gid://shopify/Customer/1",
+            client: fakeClient(),
+          }),
+          enforceRateLimit: () => undefined,
+          jsonBody: (request: Request) => request.json(),
+          apiData: (data: unknown) => Response.json({ ok: true, data }),
+          apiError: (error: unknown) =>
+            Response.json({ ok: false, error }, { status: 500 }),
+          submitCreatorProductForReview: (
+            actionShop,
+            customerId,
+            submittedProductId,
+          ) => submitCreatorProductForReview(
+            actionShop,
+            customerId,
+            submittedProductId,
+            database,
+          ),
+          logCreatorSave: () => undefined,
+        },
+      );
+      assert.equal(response.status, 200);
+      const payload = await response.json() as {
+        ok: boolean;
+        data: { product: CreatorProductRecord };
+      };
+      assert.equal(payload.ok, true);
+      return payload.data.product;
+    },
+    reloadProduct: async (creatorProductId) => {
+      const product = await getCreatorProductForCustomer(
+        shop,
+        "gid://shopify/Customer/1",
+        creatorProductId,
+        database,
+      );
+      return { product, products: [product] };
+    },
+  });
+
+  assert.equal(result.saved.pitchprintProjectId, "pp_submit_action");
+  assert.equal(result.submitted.status, "PENDING");
+  assert.equal(result.product.status, "PENDING");
+  assert.equal(result.products[0].status, "PENDING");
+  assert.equal(result.refreshConfirmed, true);
+  assert.equal(database.products[0].status, "PENDING");
 });
 
 test("creator cannot submit another creator's DRAFT", async () => {
