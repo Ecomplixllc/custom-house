@@ -1892,6 +1892,20 @@ export function creatorPitchPrintClientOptions({
   };
 }
 
+export function configureCreatorPitchPrintLabels(clientGlobal) {
+  if (!clientGlobal || typeof clientGlobal !== "object") return;
+  const existing = clientGlobal.langEdits && typeof clientGlobal.langEdits === "object"
+    ? clientGlobal.langEdits
+    : {};
+  clientGlobal.langEdits = {
+    ...existing,
+    submit_tip: "SUBMIT DESIGN",
+    finish_message: "This is how your design will look. Submit it for admin review now?",
+    confirm_design: "Submit design",
+    confirm: "Submit design",
+  };
+}
+
 function hydratePitchPrintProduct(root, product) {
   if (!product) return product;
   const variants = pitchPrintProductVariants(product);
@@ -2272,14 +2286,29 @@ function bindPitchPrintManager(root) {
     }
     manager.projectSaved = true;
     try {
-      const updated = await saveCreatorProductPitchPrintProject(
+      const saved = await saveCreatorProductPitchPrintProject(
         product.id,
         savePayload,
       );
-      updateCreatorProductInState(root, updated);
-      hidePitchPrint();
-      showCreatorToast(root, "Design saved.");
-      openDesignReviewModal(root, updated);
+      updateCreatorProductInState(root, saved);
+      try {
+        const submitted = await submitCreatorProductForReview(saved.id);
+        updateCreatorProductInState(root, submitted);
+        hidePitchPrint();
+        showCreatorToast(root, "Design submitted for review.");
+        openSubmitFeedbackModal(root, { success: true });
+      } catch (error) {
+        manager.finalProjectSavePending = false;
+        hidePitchPrint();
+        showCreatorToast(
+          root,
+          error instanceof Error
+            ? `Design saved, but submission failed: ${error.message}`
+            : "Design saved, but it could not be submitted for review.",
+          true,
+        );
+        openDesignReviewModal(root, saved);
+      }
     } catch (error) {
       manager.projectSaved = false;
       manager.finalProjectSavePending = false;
@@ -2614,6 +2643,7 @@ function bindPitchPrintManager(root) {
       });
       window.PPCLIENT ||= {};
       window.PPCLIENT.userAccountPath = "/pages/creator-dashboard";
+      configureCreatorPitchPrintLabels(window.PPCLIENT);
       bindCreatorSetupWindowEvents(product, token);
       const client = new Client({
         ...clientOptions,
