@@ -48,4 +48,3 @@ Add a dedicated CustomHouse storefront discovery page for real published Creator
 - Sorting supports Newest, Price low to high, and Price high to low.
 - Product cards expose only `BUY PRODUCT`; Creator cards expose only `VIEW CREATOR`.
 - Mobile uses horizontal category/Creator scrolling and a modal filter drawer; desktop uses a sidebar.
-

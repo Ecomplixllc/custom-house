@@ -302,7 +302,13 @@ test("Creator Content Admin route is authenticated and manages ordered Featured 
   assert.match(navigation, />Creator Content</);
 });
 
-function fakePublicDiscovery(options: { invalidateBeta?: boolean; legacyBeta?: boolean } = {}) {
+function fakePublicDiscovery(options: {
+  invalidateBeta?: boolean;
+  legacyBeta?: boolean;
+  legacyGlobalOnly?: boolean;
+  disableDtf?: boolean;
+  prolificAlpha?: boolean;
+} = {}) {
   const adminDb = fakeFeaturedDb();
   adminDb.featured.push(
     { id: "featured-1", shop: "shop.myshopify.com", creatorId: "creator-b", position: 0 },
@@ -366,23 +372,47 @@ function fakePublicDiscovery(options: { invalidateBeta?: boolean; legacyBeta?: b
       creator: adminDb.creators[0],
     },
   ];
+  if (options.prolificAlpha) {
+    const extras = Array.from({ length: 100 }, (_, index) => ({
+      ...products[0]!,
+      id: `creator-product-alpha-${index}`,
+      title: `Alpha Drop ${index}`,
+      publishedAt: new Date(`2026-12-${String((index % 28) + 1).padStart(2, "0")}T00:00:00.000Z`),
+      updatedAt: new Date(`2026-12-${String((index % 28) + 1).padStart(2, "0")}T00:00:00.000Z`),
+      publishedShopifyProductId: `gid://shopify/Product/${1000 + index}`,
+    }));
+    products.unshift(...extras);
+  }
   const db = {
     ...adminDb,
     creatorProduct: {
       async findMany(args: Record<string, unknown>) {
+        const where = args.where as { creatorId?: string } | undefined;
         const skip = typeof args.skip === "number" ? args.skip : 0;
         const take = typeof args.take === "number" ? args.take : products.length;
-        return products.slice(skip, skip + take);
+        const matches = where?.creatorId
+          ? products.filter((product) => product.creatorId === where.creatorId)
+          : products;
+        return matches.slice(skip, skip + take);
       },
     },
     publicProductProductionPricing: {
+      async findUnique(args: Record<string, unknown>) {
+        if (!options.legacyBeta) return null;
+        const where = args.where as { shopKey_shopifyProductId?: { shopifyProductId?: string } };
+        return !options.legacyGlobalOnly && where.shopKey_shopifyProductId?.shopifyProductId === "gid://shopify/Product/200"
+          ? this.findMany().then((rows) => rows[0] || null)
+          : null;
+      },
       async findMany() {
         if (!options.legacyBeta) return [];
         const decimal = (value: string) => ({ toFixed: () => value });
         return [{
           id: "pricing-beta",
           shopKey: "shop.myshopify.com",
-          shopifyProductId: "gid://shopify/Product/200",
+          shopifyProductId: options.legacyGlobalOnly
+            ? "customhouse:creator-products"
+            : "gid://shopify/Product/200",
           currency: "SEK",
           methodConfigurations: {
             version: 2,
@@ -401,13 +431,19 @@ function fakePublicDiscovery(options: { invalidateBeta?: boolean; legacyBeta?: b
         }];
       },
     },
+    productionMethodSetting: {
+      async findMany() {
+        return options.disableDtf
+          ? [{ method: "DTF", label: "DTF printing", enabled: false }]
+          : [];
+      },
+    },
   };
   const requests: Array<{ query: string; variables: Record<string, unknown> }> = [];
   const shopify = {
     async request<T>(query: string, variables: Record<string, unknown>) {
       requests.push({ query, variables });
-      return {
-        nodes: [
+      const nodes = [
           {
             id: "gid://shopify/Product/900",
             title: "Alpha Art Tee",
@@ -466,6 +502,46 @@ function fakePublicDiscovery(options: { invalidateBeta?: boolean; legacyBeta?: b
             },
             variants: { nodes: [] },
           },
+        ];
+      const requestedIds = Array.isArray(variables.ids) ? variables.ids : [];
+      const knownIds = new Set(nodes.map((node) => node.id));
+      const generatedNodes = requestedIds
+        .filter((id): id is string => typeof id === "string" && !knownIds.has(id))
+        .flatMap((id) => {
+          const record = products.find((product) =>
+            (product.creatorPricingMode === "BAKED_IN_V1" && product.publishedShopifyProductId
+              ? product.publishedShopifyProductId
+              : product.shopifyProductId) === id,
+          );
+          return record
+            ? [{
+                id,
+                title: record.title,
+                handle: record.id,
+                status: "ACTIVE",
+                productType: record.baseProductTitle,
+                onlineStoreUrl: `https://shop.example.com/products/${record.id}`,
+                origin: { value: "creator" },
+                mode: { value: "buy_only" },
+                designStatus: { value: "published" },
+                creatorProductId: { value: record.id },
+                priceRangeV2: {
+                  minVariantPrice: { amount: "249.00", currencyCode: "SEK" },
+                  maxVariantPrice: { amount: "249.00", currencyCode: "SEK" },
+                },
+                variants: { nodes: [{
+                  id: `${id}/variant`,
+                  availableForSale: true,
+                  price: "249.00",
+                  selectedOptions: [{ name: "Color", value: "Black" }],
+                }] },
+              }]
+            : [];
+        });
+      return {
+        nodes: [
+          ...nodes.filter((node) => requestedIds.includes(node.id)),
+          ...generatedNodes,
         ],
       } as T;
     },
@@ -481,9 +557,10 @@ test("public Creator Content uses one batched Shopify query and canonical routes
     db as unknown as PublicContentDb,
   );
 
-  assert.equal(requests.length, 1);
-  assert.match(requests[0]!.query, /nodes\(ids: \$ids\)/);
-  assert.deepEqual(requests[0]!.variables.ids, [
+  assert.equal(requests.length, 2);
+  const productRequest = requests.find((request) => request.query.includes("CreatorContentProducts"))!;
+  assert.match(productRequest.query, /nodes\(ids: \$ids\)/);
+  assert.deepEqual(productRequest.variables.ids, [
     "gid://shopify/Product/900",
     "gid://shopify/Product/901",
     "gid://shopify/Product/902",
@@ -514,9 +591,10 @@ test("public Creator Content paginates DB rows and exposes a continuation offset
   assert.equal(first.hasMore, true);
   assert.equal(first.nextOffset, 1);
   assert.deepEqual(second.products.map((product) => product.id), ["creator-product-b"]);
-  assert.equal(requests.length, 2);
-  assert.equal((requests[0]!.variables.ids as string[]).includes("gid://shopify/Product/900"), true);
-  assert.equal((requests[1]!.variables.ids as string[]).includes("gid://shopify/Product/901"), true);
+  assert.equal(requests.length, 4);
+  const productRequests = requests.filter((request) => request.query.includes("CreatorContentProducts"));
+  assert.equal((productRequests[0]!.variables.ids as string[]).includes("gid://shopify/Product/900"), true);
+  assert.equal((productRequests[1]!.variables.ids as string[]).includes("gid://shopify/Product/901"), true);
 });
 
 test("public Creator Content exposes real price and variant facets only", async () => {
@@ -550,6 +628,33 @@ test("legacy Creator Content prices include the configured production surcharge"
   assert.deepEqual(beta.price, { min: 549, max: 549, currencyCode: "SEK" });
   assert.equal((requests[0]!.variables.ids as string[]).includes("gid://shopify/Product/200"), true);
   assert.equal((requests[0]!.variables.ids as string[]).includes("gid://shopify/Product/901"), false);
+});
+
+test("legacy Creator Content requires product-specific enabled production pricing", async () => {
+  for (const options of [
+    { legacyBeta: true, legacyGlobalOnly: true },
+    { legacyBeta: true, disableDtf: true },
+  ]) {
+    const { db, shopify } = fakePublicDiscovery(options);
+    const result = await loadPublicCreatorContent(
+      "shop.myshopify.com",
+      shopify as unknown as PublicContentClient,
+      db as unknown as PublicContentDb,
+    );
+
+    assert.equal(result.products.some((product) => product.id === "creator-product-b"), false);
+  }
+});
+
+test("Featured Creator eligibility is fair when another Creator has over 96 newer products", async () => {
+  const { db, shopify } = fakePublicDiscovery({ prolificAlpha: true });
+  const result = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+
+  assert.deepEqual(result.featuredCreators.map((creator) => creator.id), ["creator-b", "creator-a"]);
 });
 
 test("public Creator Content suppresses missing, inactive, or non-buy-only Shopify products", async () => {
@@ -641,7 +746,9 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /@media\(max-width:1279px\)/);
   assert.match(markup, /@media\(max-width:767px\)/);
   assert.match(markup, /customhouse-creator-content__hero h1\{font-size:clamp\(44px,15vw,72px\)\}/);
-  assert.match(markup, /setTimeout\(applyFilters, 180\)/);
+  assert.match(markup, /setTimeout\(async \(\) =>/);
+  assert.match(markup, /ensureCompleteCatalog/);
+  assert.match(markup, /sourcePriceGroup/);
   assert.match(markup, /minValue \? Number\(minValue\) : Number\.NaN/);
   assert.match(markup, /maxValue \? Number\(maxValue\) : Number\.NaN/);
   assert.match(markup, /matchMedia\("\(max-width:900px\)"\)/);
@@ -649,7 +756,7 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /event\.key === "Tab"/);
   assert.match(markup, /new URLSearchParams\(window\.location\.search\)/);
   assert.match(markup, /window\.history\.replaceState/);
-  assert.match(markup, /window\.addEventListener\("popstate", restoreUrlState\)/);
+  assert.match(markup, /window\.addEventListener\("popstate", \(\) => \{ void restoreCompleteUrlState\(\); \}\)/);
   assert.match(markup, /class="customhouse-header__nav"[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /class="customhouse-mobile-drawer__nav"[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /href="\/apps\/customhouse\/creator-content"[^>]*aria-current="page"/);

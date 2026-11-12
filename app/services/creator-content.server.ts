@@ -5,10 +5,7 @@ import {
   getCreatorProductStorefrontUrl,
 } from "./creator-storefront-urls.ts";
 import {
-  CREATOR_PRODUCTION_PRICING_PRODUCT_ID,
-  cleanEmbroiderySubtype,
-  cleanProductionMethod,
-  productProductionConfiguration,
+  resolveProductionPricing,
   type PublicProductProductionPricingRecord,
 } from "./production-method-pricing.server.ts";
 import type { ShopifyGraphqlClient } from "./shopify-graphql.server.ts";
@@ -76,7 +73,11 @@ type PublicCreatorContentDb = CreatorContentDb & {
     findMany(args: Record<string, unknown>): Promise<PublicCreatorContentRecord[]>;
   };
   publicProductProductionPricing?: {
+    findUnique(args: Record<string, unknown>): Promise<PublicProductProductionPricingRecord | null>;
     findMany(args: Record<string, unknown>): Promise<PublicProductProductionPricingRecord[]>;
+  };
+  productionMethodSetting?: {
+    findMany(args: Record<string, unknown>): Promise<unknown[]>;
   };
 };
 
@@ -351,32 +352,19 @@ function discoveryShopifyProductId(record: PublicCreatorContentRecord) {
     : record.shopifyProductId;
 }
 
-function legacyProductionSurcharge(
-  record: PublicCreatorContentRecord,
-  pricingByProductId: Map<string, PublicProductProductionPricingRecord>,
-  currencyCode: string,
-) {
-  if (record.creatorPricingMode === "BAKED_IN_V1") return 0;
+function legacyProductionSetup(record: PublicCreatorContentRecord) {
+  if (record.creatorPricingMode === "BAKED_IN_V1") return null;
   try {
     const setup: unknown = JSON.parse(record.designVariantSelectionsJson || "{}");
     if (!setup || typeof setup !== "object" || Array.isArray(setup)) return null;
     const values = setup as Record<string, unknown>;
     const placementCount = Number(values.placementCount);
     if (!Number.isInteger(placementCount) || placementCount < 1) return null;
-    const method = cleanProductionMethod(values.productionMethod);
-    const pricing = pricingByProductId.get(record.shopifyProductId) ||
-      pricingByProductId.get(CREATOR_PRODUCTION_PRICING_PRODUCT_ID);
-    if (!pricing || (pricing.currency && pricing.currency !== currencyCode)) return null;
-    const configured = productProductionConfiguration(pricing).methods[method];
-    if (!configured || !configured.enabled) return null;
-    const rate = "tiers" in configured
-      ? configured.tiers[cleanEmbroiderySubtype(values.embroiderySubtype)]
-      : configured;
-    if (!rate?.enabled) return null;
-    const surcharge = Number(rate.surcharge);
-    return Number.isFinite(surcharge) && surcharge >= 0
-      ? surcharge * placementCount
-      : null;
+    return {
+      method: values.productionMethod,
+      artworkType: values.embroiderySubtype,
+      placementCount,
+    };
   } catch {
     return null;
   }
@@ -435,6 +423,79 @@ function canonicalBuyOnlyProduct(
   );
 }
 
+async function validFeaturedCreatorIds(
+  shop: string,
+  creators: FeaturedCreatorSummary[],
+  client: ShopifyGraphqlClient,
+  database: PublicCreatorContentDb,
+) {
+  const valid = new Set<string>();
+  const unresolved = new Map(creators.map((creator) => [creator.id, 0]));
+  const batchSize = 4;
+  while (unresolved.size) {
+    const batches = await Promise.all([...unresolved].map(async ([creatorId, skip]) => ({
+      creatorId,
+      skip,
+      records: await database.creatorProduct.findMany({
+        where: {
+          shop,
+          creatorId,
+          status: "PUBLISHED",
+          creator: {
+            status: "APPROVED",
+            marketplaceCollection: { is: { status: "ACTIVE" } },
+          },
+        },
+        include: { creator: { include: { marketplaceCollection: true } } },
+        orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
+        skip,
+        take: batchSize,
+      }),
+    })));
+    const records = batches.flatMap((batch) => batch.records);
+    const productIds = [...new Set(records.map(discoveryShopifyProductId))];
+    const response = productIds.length
+      ? await client.request<{ nodes: Array<ShopifyDiscoveryProduct | null> }>(
+          `#graphql query CreatorContentFeaturedEligibility($ids: [ID!]!) {
+            nodes(ids: $ids) {
+              ... on Product {
+                id
+                status
+                onlineStoreUrl
+                origin: metafield(namespace: "customhouse", key: "product_origin") { value }
+                mode: metafield(namespace: "customhouse", key: "design_mode") { value }
+                designStatus: metafield(namespace: "customhouse", key: "design_status") { value }
+                creatorProductId: metafield(namespace: "customhouse", key: "creator_product_id") { value }
+                variants(first: 1) { nodes { id } }
+              }
+            }
+          }`,
+          { ids: productIds },
+        )
+      : { nodes: [] };
+    const productsById = new Map(
+      response.nodes
+        .filter((product): product is ShopifyDiscoveryProduct => Boolean(product?.id))
+        .map((product) => [product.id, product]),
+    );
+    for (const batch of batches) {
+      const hasValidProduct = batch.records.some((record) => {
+        const product = productsById.get(discoveryShopifyProductId(record));
+        return Boolean(product && canonicalBuyOnlyProduct(record, product));
+      });
+      if (hasValidProduct) {
+        valid.add(batch.creatorId);
+        unresolved.delete(batch.creatorId);
+      } else if (batch.records.length < batchSize) {
+        unresolved.delete(batch.creatorId);
+      } else {
+        unresolved.set(batch.creatorId, batch.skip + batchSize);
+      }
+    }
+  }
+  return valid;
+}
+
 export async function loadPublicCreatorContent(
   shop: string,
   client: ShopifyGraphqlClient,
@@ -468,33 +529,8 @@ export async function loadPublicCreatorContent(
   ]);
   const hasMore = records.length > limit;
   const pageRecords = records.slice(0, limit);
-  const featuredCreatorIds = adminState.selected.map((creator) => creator.id);
-  const featuredRecords = featuredCreatorIds.length
-    ? await database.creatorProduct.findMany({
-        where: {
-          shop,
-          status: "PUBLISHED",
-          creatorId: { in: featuredCreatorIds },
-          creator: {
-            status: "APPROVED",
-            marketplaceCollection: { is: { status: "ACTIVE" } },
-          },
-        },
-        include: {
-          creator: { include: { marketplaceCollection: true } },
-        },
-        orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
-        take: MAX_FEATURED_CREATORS * 4,
-      })
-    : [];
-  const discoveryRecords = [...new Map(
-    [...pageRecords, ...featuredRecords].map((record) => [record.id, record]),
-  ).values()];
-  const productIds = [...new Set(discoveryRecords.map(discoveryShopifyProductId))];
-  const legacyPricingProductIds = [...new Set(discoveryRecords
-    .filter((record) => record.creatorPricingMode !== "BAKED_IN_V1")
-    .flatMap((record) => [record.shopifyProductId, CREATOR_PRODUCTION_PRICING_PRODUCT_ID]))];
-  const [response, productionPricingRows] = await Promise.all([
+  const productIds = [...new Set(pageRecords.map(discoveryShopifyProductId))];
+  const [response, publicFeaturedCreatorIds, legacyPricingEntries] = await Promise.all([
     productIds.length
       ? client.request<{ nodes: Array<ShopifyDiscoveryProduct | null> }>(
         `#graphql query CreatorContentProducts($ids: [ID!]!) {
@@ -528,24 +564,42 @@ export async function loadPublicCreatorContent(
         { ids: productIds },
         )
       : Promise.resolve({ nodes: [] }),
-    legacyPricingProductIds.length && database.publicProductProductionPricing
-      ? database.publicProductProductionPricing.findMany({
-          where: {
-            shopKey: shop,
-            shopifyProductId: { in: legacyPricingProductIds },
-          },
-        })
-      : Promise.resolve([]),
+    validFeaturedCreatorIds(shop, adminState.selected, client, database),
+    Promise.all(pageRecords.map(async (record) => {
+      if (record.creatorPricingMode === "BAKED_IN_V1") {
+        return [record.id, { surcharge: 0, currency: null }] as const;
+      }
+      const setup = legacyProductionSetup(record);
+      if (!setup || !database.publicProductProductionPricing) {
+        return [record.id, null] as const;
+      }
+      try {
+        const resolved = await resolveProductionPricing({
+          shop,
+          productId: record.shopifyProductId,
+          method: setup.method,
+          artworkType: setup.artworkType,
+          database: database as unknown as NonNullable<Parameters<typeof resolveProductionPricing>[0]["database"]>,
+        });
+        return [record.id, {
+          surcharge: Number(resolved.surcharge.toFixed(2)) * setup.placementCount,
+          currency: resolved.currency,
+        }] as const;
+      } catch {
+        return [record.id, null] as const;
+      }
+    })),
   ]);
-  const pricingByProductId = new Map(
-    productionPricingRows.map((pricing) => [pricing.shopifyProductId, pricing]),
-  );
+  const legacyPricingByRecordId = new Map<
+    string,
+    { surcharge: number; currency: string | null } | null
+  >(legacyPricingEntries);
   const shopifyById = new Map(
     response.nodes
       .filter((product): product is ShopifyDiscoveryProduct => Boolean(product?.id))
       .map((product) => [product.id, product]),
   );
-  const validatedProducts = discoveryRecords
+  const products = pageRecords
     .map((record): PublicCreatorContentProduct | null => {
       const collection = record.creator.marketplaceCollection;
       if (!collection || collection.status !== "ACTIVE") return null;
@@ -569,8 +623,9 @@ export async function loadPublicCreatorContent(
       const min = Math.min(...variantPrices);
       const max = Math.max(...variantPrices);
       const currencyCode = product.priceRangeV2.minVariantPrice.currencyCode;
-      const surcharge = legacyProductionSurcharge(record, pricingByProductId, currencyCode);
-      if (surcharge === null) return null;
+      const resolvedPricing = legacyPricingByRecordId.get(record.id);
+      if (!resolvedPricing ||
+        (resolvedPricing.currency && resolvedPricing.currency !== currencyCode)) return null;
       const creatorUrl = getCreatorCollectionStorefrontUrl(collection);
       const viewUrl = getCreatorProductStorefrontUrl(collection, record);
       if (!creatorUrl || !viewUrl) return null;
@@ -588,8 +643,8 @@ export async function loadPublicCreatorContent(
         productType: product.productType?.trim() || record.baseProductTitle,
         imageUrl: productPreview(record),
         price: {
-          min: min + surcharge,
-          max: max + surcharge,
+          min: min + resolvedPricing.surcharge,
+          max: max + resolvedPricing.surcharge,
           currencyCode,
         },
         sizes: optionValues(variants, /^(size|storlek|storrelse|størrelse)$/i, false),
@@ -604,11 +659,8 @@ export async function loadPublicCreatorContent(
     .sort((left, right) =>
       String(right.publishedAt || "").localeCompare(String(left.publishedAt || "")),
     );
-  const pageRecordIds = new Set(pageRecords.map((record) => record.id));
-  const products = validatedProducts.filter((product) => pageRecordIds.has(product.id));
   const uniqueSorted = (values: string[]) =>
     [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
-  const publicCreatorIds = new Set(validatedProducts.map((product) => product.creatorId));
   const productCreators = new Map(
     products.map((product) => [
       product.creatorId,
@@ -621,7 +673,7 @@ export async function loadPublicCreatorContent(
   );
   return {
     featuredCreators: adminState.selected
-      .filter((creator) => publicCreatorIds.has(creator.id))
+      .filter((creator) => publicFeaturedCreatorIds.has(creator.id))
       .map((creator) => ({
       ...creator,
       viewUrl: getCreatorCollectionStorefrontUrl({ publicHandle: creator.publicHandle })!,

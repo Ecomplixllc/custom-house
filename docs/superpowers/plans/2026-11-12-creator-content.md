@@ -113,4 +113,3 @@
 - [ ] Run responsive browser QA at 375, 390, 430, 768, 1024, 1280, 1440, and 1920 pixels when local preview/browser tooling is available.
 - [ ] Inspect `git diff --check` and confirm existing Collections work and protected commerce flows were not reverted.
 - [ ] Produce the requested final PASS/FAIL report without deploying.
-

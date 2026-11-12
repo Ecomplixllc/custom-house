@@ -1125,14 +1125,10 @@ export function creatorContentHtml(
               renderActiveFilters();
               syncUrlState();
             };
-            search?.addEventListener("input", () => {
-              window.clearTimeout(timer);
-              timer = window.setTimeout(applyFilters, 180);
-            });
             const bindCategoryChip = (chip) => {
               if (chip.dataset.creatorContentBound === "true") return;
               chip.dataset.creatorContentBound = "true";
-              chip.addEventListener("click", () => {
+              chip.addEventListener("click", async () => {
                 activeCategory = String(chip.dataset.creatorContentCategory || "all").toLocaleLowerCase();
                 root.querySelectorAll("[data-creator-content-category]").forEach((item) => {
                   const active = item === chip;
@@ -1140,22 +1136,30 @@ export function creatorContentHtml(
                   item.setAttribute("aria-pressed", active ? "true" : "false");
                 });
                 applyFilters();
+                await ensureCompleteCatalog();
+                restoreUrlState();
               });
             };
             const bindFilterControl = (input) => {
               if (input.dataset.creatorContentBound === "true") return;
               input.dataset.creatorContentBound = "true";
-              input.addEventListener("input", applyFilters);
+              input.addEventListener("input", async () => {
+                applyFilters();
+                await ensureCompleteCatalog();
+                restoreUrlState();
+              });
             };
             root.querySelectorAll("[data-creator-content-category]").forEach(bindCategoryChip);
             root.querySelectorAll("[data-creator-content-filter], [data-creator-content-price-min], [data-creator-content-price-max]").forEach(bindFilterControl);
-            sort?.addEventListener("change", applyFilters);
-            loadMore?.addEventListener("click", async () => {
+            let pageRequest = null;
+            const loadNextPage = async (applyState = true) => {
               const nextOffset = loadMore.dataset.nextOffset;
-              if (!nextOffset || loadMore.disabled) return;
+              if (!nextOffset) return false;
+              if (pageRequest) return pageRequest;
               loadMore.disabled = true;
               loadMore.textContent = "LOADING…";
-              try {
+              pageRequest = (async () => {
+                try {
                 const pageUrl = new URL(window.location.href);
                 pageUrl.searchParams.set("offset", nextOffset);
                 const response = await fetch(pageUrl.toString(), { headers: { Accept: "text/html" } });
@@ -1190,20 +1194,70 @@ export function creatorContentHtml(
                     if (!exists && label) targetGroup.append(document.importNode(label, true));
                   });
                 });
+                const sourcePriceGroup = parsedRoot.querySelector(".customhouse-creator-content__filter-group--price");
+                const targetPriceGroup = root.querySelector(".customhouse-creator-content__filter-group--price");
+                if (sourcePriceGroup && !targetPriceGroup) {
+                  drawer?.append(document.importNode(sourcePriceGroup, true));
+                } else if (sourcePriceGroup && targetPriceGroup) {
+                  const sourceMin = sourcePriceGroup.querySelector("[data-creator-content-price-min]");
+                  const sourceMax = sourcePriceGroup.querySelector("[data-creator-content-price-max]");
+                  const targetMin = targetPriceGroup.querySelector("[data-creator-content-price-min]");
+                  const targetMax = targetPriceGroup.querySelector("[data-creator-content-price-max]");
+                  if (sourceMin && targetMin) {
+                    const minimum = Math.min(Number(targetMin.min), Number(sourceMin.min));
+                    targetMin.min = String(minimum);
+                    targetMin.placeholder = String(minimum);
+                  }
+                  if (sourceMax && targetMax) {
+                    const maximum = Math.max(Number(targetMax.max), Number(sourceMax.max));
+                    targetMax.max = String(maximum);
+                    targetMax.placeholder = String(maximum);
+                  }
+                }
                 cards = Array.from(root.querySelectorAll("[data-creator-content-product]"));
                 root.querySelectorAll("[data-creator-content-category]").forEach(bindCategoryChip);
                 root.querySelectorAll("[data-creator-content-filter], [data-creator-content-price-min], [data-creator-content-price-max]").forEach(bindFilterControl);
                 const parsedLoadMore = parsedRoot.querySelector("[data-creator-content-load-more]");
                 loadMore.dataset.nextOffset = parsedLoadMore?.dataset.nextOffset || "";
                 serverHasMore = Boolean(loadMore.dataset.nextOffset);
-                restoreUrlState();
-              } catch {
-                loadMore.textContent = "TRY AGAIN";
+                if (applyState) restoreUrlState();
+                return true;
+                } catch {
+                  loadMore.textContent = "TRY AGAIN";
+                  return false;
+                } finally {
+                  loadMore.disabled = false;
+                  if (loadMore.textContent !== "TRY AGAIN") loadMore.textContent = "LOAD MORE";
+                }
+              })();
+              try {
+                return await pageRequest;
               } finally {
-                loadMore.disabled = false;
-                if (loadMore.textContent !== "TRY AGAIN") loadMore.textContent = "LOAD MORE";
+                pageRequest = null;
               }
+            };
+            const ensureCompleteCatalog = async () => {
+              let pageCount = 0;
+              while (serverHasMore && pageCount < 1000) {
+                const loaded = await loadNextPage(false);
+                if (!loaded) break;
+                pageCount += 1;
+              }
+            };
+            search?.addEventListener("input", () => {
+              window.clearTimeout(timer);
+              timer = window.setTimeout(async () => {
+                applyFilters();
+                await ensureCompleteCatalog();
+                restoreUrlState();
+              }, 180);
             });
+            sort?.addEventListener("change", async () => {
+              applyFilters();
+              await ensureCompleteCatalog();
+              restoreUrlState();
+            });
+            loadMore?.addEventListener("click", () => { void loadNextPage(true); });
             root.addEventListener("click", (event) => {
               if (!event.target.closest("[data-creator-content-clear]")) return;
               root.querySelectorAll("[data-creator-content-filter]").forEach((input) => { input.checked = false; });
@@ -1237,8 +1291,15 @@ export function creatorContentHtml(
             const syncFilterBreakpoint = () => setDrawer(false, false);
             mobileFilters.addEventListener?.("change", syncFilterBreakpoint);
             syncFilterBreakpoint();
-            window.addEventListener("popstate", restoreUrlState);
-            restoreUrlState();
+            const restoreCompleteUrlState = async () => {
+              const params = new URLSearchParams(window.location.search);
+              const hasDiscoveryState = ["q", "category", "sort", "minPrice", "maxPrice", ...filterNames]
+                .some((name) => params.has(name));
+              if (hasDiscoveryState) await ensureCompleteCatalog();
+              restoreUrlState();
+            };
+            window.addEventListener("popstate", () => { void restoreCompleteUrlState(); });
+            void restoreCompleteUrlState();
           })();
         </script>
         ${siteShellScript()}
