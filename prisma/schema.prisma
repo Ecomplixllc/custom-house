@@ -311,6 +311,7 @@ model Creator {
   referralEarningsGenerated  ReferralEarning[]     @relation("ReferralEarningReferred")
   payoutMethods              PayoutMethod[]
   payouts                    Payout[]
+  featuredPlacements         FeaturedCreator[]
 
   @@unique([shop, customerId])
   @@unique([shop, handle])
@@ -318,6 +319,20 @@ model Creator {
   @@index([shop, status])
   @@index([shop, statusAuthority])
   @@index([referredByCreatorId])
+}
+
+model FeaturedCreator {
+  id        String   @id @default(cuid())
+  shop      String
+  creatorId String
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  creator   Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@unique([shop, creatorId])
+  @@index([shop, position])
+  @@index([creatorId])
 }
 
 model CreatorCollection {
