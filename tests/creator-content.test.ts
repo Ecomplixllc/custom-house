@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   listFeaturedCreatorAdminState,
+  loadPublicCreatorContent,
   saveFeaturedCreatorOrder,
 } from "../app/services/creator-content.server.ts";
 
@@ -246,4 +247,196 @@ test("Creator Content Admin route is authenticated and manages ordered Featured 
   assert.match(route, /Search approved Creators/);
   assert.match(navigation, /href="\/app\/creator-content"/);
   assert.match(navigation, />Creator Content</);
+});
+
+function fakePublicDiscovery() {
+  const adminDb = fakeFeaturedDb();
+  adminDb.featured.push(
+    { id: "featured-1", shop: "shop.myshopify.com", creatorId: "creator-b", position: 0 },
+    { id: "featured-2", shop: "shop.myshopify.com", creatorId: "creator-a", position: 1 },
+  );
+  const products = [
+    {
+      id: "creator-product-a",
+      shop: "shop.myshopify.com",
+      creatorId: "creator-a",
+      title: "Alpha Art Tee",
+      description: "A fixed Alpha design",
+      baseProductTitle: "T-shirt",
+      previewUrl: "https://cdn.example.com/alpha-product.png",
+      previewUrls: "[]",
+      status: "PUBLISHED",
+      publishedAt: new Date("2026-11-11T00:00:00.000Z"),
+      updatedAt: new Date("2026-11-11T00:00:00.000Z"),
+      shopifyProductId: "gid://shopify/Product/100",
+      publishedShopifyProductId: "gid://shopify/Product/900",
+      creatorPricingMode: "BAKED_IN_V1",
+      designVariantSelectionsJson: JSON.stringify({ fixedColor: "Black" }),
+      creator: adminDb.creators[0],
+    },
+    {
+      id: "creator-product-b",
+      shop: "shop.myshopify.com",
+      creatorId: "creator-b",
+      title: "Beta Sound Hoodie",
+      description: "A fixed Beta design",
+      baseProductTitle: "Hoodie",
+      previewUrl: "https://cdn.example.com/beta-product.png",
+      previewUrls: "[]",
+      status: "PUBLISHED",
+      publishedAt: new Date("2026-11-12T00:00:00.000Z"),
+      updatedAt: new Date("2026-11-12T00:00:00.000Z"),
+      shopifyProductId: "gid://shopify/Product/200",
+      publishedShopifyProductId: "gid://shopify/Product/901",
+      creatorPricingMode: "BAKED_IN_V1",
+      designVariantSelectionsJson: JSON.stringify({ fixedColor: "White" }),
+      creator: adminDb.creators[1],
+    },
+    {
+      id: "creator-product-invalid",
+      shop: "shop.myshopify.com",
+      creatorId: "creator-a",
+      title: "Invalid Product",
+      description: null,
+      baseProductTitle: "T-shirt",
+      previewUrl: null,
+      previewUrls: "[]",
+      status: "PUBLISHED",
+      publishedAt: new Date("2026-11-10T00:00:00.000Z"),
+      updatedAt: new Date("2026-11-10T00:00:00.000Z"),
+      shopifyProductId: "gid://shopify/Product/300",
+      publishedShopifyProductId: "gid://shopify/Product/902",
+      creatorPricingMode: "BAKED_IN_V1",
+      designVariantSelectionsJson: JSON.stringify({ fixedColor: "Black" }),
+      creator: adminDb.creators[0],
+    },
+  ];
+  const db = {
+    ...adminDb,
+    creatorProduct: {
+      async findMany() {
+        return products;
+      },
+    },
+  };
+  const requests: Array<{ query: string; variables: Record<string, unknown> }> = [];
+  const shopify = {
+    async request<T>(query: string, variables: Record<string, unknown>) {
+      requests.push({ query, variables });
+      return {
+        nodes: [
+          {
+            id: "gid://shopify/Product/900",
+            title: "Alpha Art Tee",
+            handle: "alpha-art-tee",
+            status: "ACTIVE",
+            onlineStoreUrl: "https://shop.example.com/products/alpha-art-tee",
+            origin: { value: "creator" },
+            mode: { value: "buy_only" },
+            designStatus: { value: "published" },
+            creatorProductId: { value: "creator-product-a" },
+            priceRangeV2: {
+              minVariantPrice: { amount: "249.00", currencyCode: "SEK" },
+              maxVariantPrice: { amount: "249.00", currencyCode: "SEK" },
+            },
+            variants: {
+              nodes: [
+                { id: "gid://shopify/ProductVariant/1", availableForSale: true, price: "249.00", selectedOptions: [{ name: "Size", value: "S" }, { name: "Color", value: "Black" }] },
+                { id: "gid://shopify/ProductVariant/2", availableForSale: false, price: "249.00", selectedOptions: [{ name: "Size", value: "M" }, { name: "Color", value: "Black" }] },
+              ],
+            },
+          },
+          {
+            id: "gid://shopify/Product/901",
+            title: "Beta Sound Hoodie",
+            handle: "beta-sound-hoodie",
+            status: "ACTIVE",
+            onlineStoreUrl: "https://shop.example.com/products/beta-sound-hoodie",
+            origin: { value: "creator" },
+            mode: { value: "buy_only" },
+            designStatus: { value: "published" },
+            creatorProductId: { value: "creator-product-b" },
+            priceRangeV2: {
+              minVariantPrice: { amount: "499.00", currencyCode: "SEK" },
+              maxVariantPrice: { amount: "499.00", currencyCode: "SEK" },
+            },
+            variants: {
+              nodes: [
+                { id: "gid://shopify/ProductVariant/3", availableForSale: true, price: "499.00", selectedOptions: [{ name: "Size", value: "L" }, { name: "Color", value: "White" }] },
+              ],
+            },
+          },
+          {
+            id: "gid://shopify/Product/902",
+            title: "Invalid Product",
+            handle: "invalid-product",
+            status: "DRAFT",
+            onlineStoreUrl: null,
+            origin: { value: "creator" },
+            mode: { value: "customizable" },
+            designStatus: { value: "draft" },
+            creatorProductId: { value: "creator-product-invalid" },
+            priceRangeV2: {
+              minVariantPrice: { amount: "100.00", currencyCode: "SEK" },
+              maxVariantPrice: { amount: "100.00", currencyCode: "SEK" },
+            },
+            variants: { nodes: [] },
+          },
+        ],
+      } as T;
+    },
+  };
+  return { db, shopify, requests };
+}
+
+test("public Creator Content uses one batched Shopify query and canonical routes", async () => {
+  const { db, shopify, requests } = fakePublicDiscovery();
+  const result = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as any,
+    db as any,
+  );
+
+  assert.equal(requests.length, 1);
+  assert.match(requests[0]!.query, /nodes\(ids: \$ids\)/);
+  assert.deepEqual(requests[0]!.variables.ids, [
+    "gid://shopify/Product/900",
+    "gid://shopify/Product/901",
+    "gid://shopify/Product/902",
+  ]);
+  assert.deepEqual(result.featuredCreators.map((creator) => creator.id), ["creator-b", "creator-a"]);
+  assert.deepEqual(result.products.map((product) => product.id), ["creator-product-b", "creator-product-a"]);
+  assert.equal(result.products[0]!.creatorUrl, "/apps/customhouse/creators/beta-b1c2d");
+  assert.equal(result.products[0]!.viewUrl, "/apps/customhouse/creators/beta-b1c2d/products/creator-product-b");
+});
+
+test("public Creator Content exposes real price and variant facets only", async () => {
+  const { db, shopify } = fakePublicDiscovery();
+  const result = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as any,
+    db as any,
+  );
+  const alpha = result.products.find((product) => product.id === "creator-product-a")!;
+
+  assert.deepEqual(alpha.price, { min: 249, max: 249, currencyCode: "SEK" });
+  assert.deepEqual(alpha.sizes, ["S", "M"]);
+  assert.deepEqual(alpha.colors, ["Black"]);
+  assert.equal(alpha.available, true);
+  assert.deepEqual(result.filters.productTypes, ["Hoodie", "T-shirt"]);
+  assert.deepEqual(result.filters.colors, ["Black", "White"]);
+  assert.deepEqual(result.filters.sizes, ["S", "M", "L"]);
+  assert.deepEqual(result.categories, ["Art & Design", "Music", "Streetwear"]);
+});
+
+test("public Creator Content suppresses missing, inactive, or non-buy-only Shopify products", async () => {
+  const { db, shopify } = fakePublicDiscovery();
+  const result = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as any,
+    db as any,
+  );
+
+  assert.equal(result.products.some((product) => product.id === "creator-product-invalid"), false);
+  assert.equal(result.products.every((product) => product.available), true);
 });
