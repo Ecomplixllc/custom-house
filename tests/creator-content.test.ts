@@ -724,6 +724,10 @@ test("Creator Content is added to theme navigation without duplicating merchant 
     "theme-live-cart/snippets/header-drawer.liquid",
     "utf8",
   );
+  const customHeader = readFileSync(
+    "theme-live-cart/sections/header.liquid",
+    "utf8",
+  );
 
   assert.match(fallback, /where:\s*'url',\s*'\/apps\/customhouse\/creator-content'/);
   assert.match(fallback, /creator_content_absolute/);
@@ -732,6 +736,10 @@ test("Creator Content is added to theme navigation without duplicating merchant 
   assert.match(desktopHeader, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'mobile_bar'/);
   assert.match(desktopHeader, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'desktop'/);
   assert.match(drawer, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'drawer'/);
+  assert.match(customHeader, /customhouse-header__nav[\s\S]*href="\/apps\/customhouse\/creator-content"[\s\S]*CREATOR CONTENT/);
+  assert.match(customHeader, /customhouse-mobile-drawer__nav[\s\S]*href="\/apps\/customhouse\/creator-content"[\s\S]*CREATOR CONTENT/);
+  assert.match(customHeader, /font-size:\s*clamp\(12px, 0\.86vw, 15px\)/);
+  assert.match(desktopHeader, /font-size:\s*min\(var\(--menu-top-level-font-size-desktop\), 15px\)/);
 });
 
 test("Creator Content renderer provides responsive real-data discovery without customization controls", async () => {
@@ -786,6 +794,7 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /class="customhouse-mobile-drawer__nav"[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /href="\/apps\/customhouse\/creator-content"[^>]*aria-current="page"/);
   assert.match(markup, /@media screen and \(min-width:901px\) and \(max-width:1500px\)/);
+  assert.match(markup, /customhouse-header__nav a\{[^}]*font-size:clamp\(12px,\.86vw,15px\)/);
   for (const [, source] of markup.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
     assert.doesNotThrow(() => new Function(source));
   }

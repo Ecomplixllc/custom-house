@@ -428,6 +428,10 @@
       <a href="/collections/hoodies">HOODIES</a>
       <a href="/pages/design-selv">DESIGN SELV</a>
       <a href="/blogs/news">INSPIRATION</a>
+      <a
+        href="/apps/customhouse/creator-content"
+        {% if request.path == '/apps/customhouse/creator-content' %}aria-current="page"{% endif %}
+      >CREATOR CONTENT</a>
     </nav>
 
     <div class="customhouse-header__actions">
@@ -604,6 +608,20 @@
         </span>
         <span>INSPIRATION</span>
       </a>
+      <a
+        href="/apps/customhouse/creator-content"
+        {% if request.path == '/apps/customhouse/creator-content' %}aria-current="page"{% endif %}
+      >
+        <span class="customhouse-mobile-drawer__line-icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48" focusable="false">
+            <circle cx="17" cy="17" r="7"></circle>
+            <circle cx="33" cy="19" r="5"></circle>
+            <path d="M5 40c1.6-8 5.6-12 12-12s10.4 4 12 12"></path>
+            <path d="M27 30c6.8 0 11 3.3 12.5 10"></path>
+          </svg>
+        </span>
+        <span>CREATOR CONTENT</span>
+      </a>
     </nav>
 
     {% if shop.customer_accounts_enabled %}
@@ -779,7 +797,7 @@
 
   .customhouse-header__nav a {
     font-family: var(--font-heading--family, Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif);
-    font-size: clamp(14px, 1.25vw, 19px);
+    font-size: clamp(12px, 0.86vw, 15px);
     font-weight: 900;
     line-height: 1;
     white-space: nowrap;
