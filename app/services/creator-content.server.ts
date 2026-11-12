@@ -4,10 +4,18 @@ import {
   getCreatorCollectionStorefrontUrl,
   getCreatorProductStorefrontUrl,
 } from "./creator-storefront-urls.ts";
+import {
+  CREATOR_PRODUCTION_PRICING_PRODUCT_ID,
+  cleanEmbroiderySubtype,
+  cleanProductionMethod,
+  productProductionConfiguration,
+  type PublicProductProductionPricingRecord,
+} from "./production-method-pricing.server.ts";
 import type { ShopifyGraphqlClient } from "./shopify-graphql.server.ts";
 
 const MAX_FEATURED_CREATORS = 24;
-const MAX_DISCOVERY_PRODUCTS = 96;
+const DEFAULT_DISCOVERY_PAGE_SIZE = 12;
+const MAX_DISCOVERY_PAGE_SIZE = 24;
 
 type EligibleCreator = {
   id: string;
@@ -66,6 +74,9 @@ type PublicCreatorContentRecord = {
 type PublicCreatorContentDb = CreatorContentDb & {
   creatorProduct: {
     findMany(args: Record<string, unknown>): Promise<PublicCreatorContentRecord[]>;
+  };
+  publicProductProductionPricing?: {
+    findMany(args: Record<string, unknown>): Promise<PublicProductProductionPricingRecord[]>;
   };
 };
 
@@ -196,9 +207,32 @@ export async function listFeaturedCreatorAdminState(
   query = "",
   database: CreatorContentDb = db as unknown as CreatorContentDb,
 ) {
+  const normalizedQuery = query.trim().slice(0, 80);
+  const candidateWhere = {
+    ...eligibleCreatorWhere(shop),
+    ...(normalizedQuery
+      ? {
+          OR: [
+            { displayName: { contains: normalizedQuery, mode: "insensitive" } },
+            { handle: { contains: normalizedQuery, mode: "insensitive" } },
+            { categoriesJson: { contains: normalizedQuery, mode: "insensitive" } },
+            {
+              marketplaceCollection: {
+                is: {
+                  OR: [
+                    { publicHandle: { contains: normalizedQuery, mode: "insensitive" } },
+                    { displayName: { contains: normalizedQuery, mode: "insensitive" } },
+                  ],
+                },
+              },
+            },
+          ],
+        }
+      : {}),
+  };
   const [eligibleCreators, featuredRows] = await Promise.all([
     database.creator.findMany({
-      where: eligibleCreatorWhere(shop),
+      where: candidateWhere,
       select: eligibleCreatorSelect,
       orderBy: [{ displayName: "asc" }, { id: "asc" }],
       take: 100,
@@ -212,22 +246,26 @@ export async function listFeaturedCreatorAdminState(
   const summaries = eligibleCreators
     .map(publicSummary)
     .filter((creator): creator is FeaturedCreatorSummary => Boolean(creator));
-  const eligibleById = new Map(summaries.map((creator) => [creator.id, creator]));
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const candidates = summaries.filter((creator) => {
-    if (!normalizedQuery) return true;
-    return [
-      creator.displayName,
-      creator.handle,
-      creator.publicHandle,
-      creator.collectionName,
-      ...creator.categories,
-    ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
-  });
+  const selectedIds = featuredRows.map((row) => row.creatorId);
+  const selectedCreators = selectedIds.length
+    ? await database.creator.findMany({
+        where: {
+          ...eligibleCreatorWhere(shop),
+          id: { in: selectedIds },
+        },
+        select: eligibleCreatorSelect,
+      })
+    : [];
+  const eligibleById = new Map(
+    selectedCreators
+      .map(publicSummary)
+      .filter((creator): creator is FeaturedCreatorSummary => Boolean(creator))
+      .map((creator) => [creator.id, creator]),
+  );
   const selected = featuredRows
     .map((row) => eligibleById.get(row.creatorId) || null)
     .filter((creator): creator is FeaturedCreatorSummary => Boolean(creator));
-  return { candidates, selected };
+  return { candidates: summaries, selected };
 }
 
 export async function saveFeaturedCreatorOrder(
@@ -307,6 +345,43 @@ function fixedColor(record: PublicCreatorContentRecord) {
   }
 }
 
+function discoveryShopifyProductId(record: PublicCreatorContentRecord) {
+  return record.creatorPricingMode === "BAKED_IN_V1" && record.publishedShopifyProductId
+    ? record.publishedShopifyProductId
+    : record.shopifyProductId;
+}
+
+function legacyProductionSurcharge(
+  record: PublicCreatorContentRecord,
+  pricingByProductId: Map<string, PublicProductProductionPricingRecord>,
+  currencyCode: string,
+) {
+  if (record.creatorPricingMode === "BAKED_IN_V1") return 0;
+  try {
+    const setup: unknown = JSON.parse(record.designVariantSelectionsJson || "{}");
+    if (!setup || typeof setup !== "object" || Array.isArray(setup)) return null;
+    const values = setup as Record<string, unknown>;
+    const placementCount = Number(values.placementCount);
+    if (!Number.isInteger(placementCount) || placementCount < 1) return null;
+    const method = cleanProductionMethod(values.productionMethod);
+    const pricing = pricingByProductId.get(record.shopifyProductId) ||
+      pricingByProductId.get(CREATOR_PRODUCTION_PRICING_PRODUCT_ID);
+    if (!pricing || (pricing.currency && pricing.currency !== currencyCode)) return null;
+    const configured = productProductionConfiguration(pricing).methods[method];
+    if (!configured || !configured.enabled) return null;
+    const rate = "tiers" in configured
+      ? configured.tiers[cleanEmbroiderySubtype(values.embroiderySubtype)]
+      : configured;
+    if (!rate?.enabled) return null;
+    const surcharge = Number(rate.surcharge);
+    return Number.isFinite(surcharge) && surcharge >= 0
+      ? surcharge * placementCount
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function optionValues(
   variants: ShopifyDiscoveryProduct["variants"]["nodes"],
   matcher: RegExp,
@@ -347,12 +422,12 @@ function canonicalBuyOnlyProduct(
   ) {
     return false;
   }
-  if (!record.publishedShopifyProductId) {
+  if (record.creatorPricingMode !== "BAKED_IN_V1") {
     // Legacy records remain safe because every card links to the existing
     // app-proxy buy-only page instead of the Shopify product/customizer.
     return true;
   }
-  return (
+  return Boolean(record.publishedShopifyProductId) && (
     product.origin?.value === "creator" &&
     product.mode?.value === "buy_only" &&
     product.designStatus?.value === "published" &&
@@ -364,7 +439,14 @@ export async function loadPublicCreatorContent(
   shop: string,
   client: ShopifyGraphqlClient,
   database: PublicCreatorContentDb = db as unknown as PublicCreatorContentDb,
+  options: { offset?: number; limit?: number } = {},
 ) {
+  const offset = Number.isInteger(options.offset) && Number(options.offset) >= 0
+    ? Math.min(Number(options.offset), 10_000)
+    : 0;
+  const limit = Number.isInteger(options.limit) && Number(options.limit) > 0
+    ? Math.min(Number(options.limit), MAX_DISCOVERY_PAGE_SIZE)
+    : DEFAULT_DISCOVERY_PAGE_SIZE;
   const [adminState, records] = await Promise.all([
     listFeaturedCreatorAdminState(shop, "", database),
     database.creatorProduct.findMany({
@@ -380,14 +462,41 @@ export async function loadPublicCreatorContent(
         creator: { include: { marketplaceCollection: true } },
       },
       orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
-      take: MAX_DISCOVERY_PRODUCTS,
+      skip: offset,
+      take: limit + 1,
     }),
   ]);
-  const productIds = [...new Set(records.map((record) =>
-    record.publishedShopifyProductId || record.shopifyProductId,
-  ))];
-  const response = productIds.length
-    ? await client.request<{ nodes: Array<ShopifyDiscoveryProduct | null> }>(
+  const hasMore = records.length > limit;
+  const pageRecords = records.slice(0, limit);
+  const featuredCreatorIds = adminState.selected.map((creator) => creator.id);
+  const featuredRecords = featuredCreatorIds.length
+    ? await database.creatorProduct.findMany({
+        where: {
+          shop,
+          status: "PUBLISHED",
+          creatorId: { in: featuredCreatorIds },
+          creator: {
+            status: "APPROVED",
+            marketplaceCollection: { is: { status: "ACTIVE" } },
+          },
+        },
+        include: {
+          creator: { include: { marketplaceCollection: true } },
+        },
+        orderBy: [{ publishedAt: "desc" }, { updatedAt: "desc" }],
+        take: MAX_FEATURED_CREATORS * 4,
+      })
+    : [];
+  const discoveryRecords = [...new Map(
+    [...pageRecords, ...featuredRecords].map((record) => [record.id, record]),
+  ).values()];
+  const productIds = [...new Set(discoveryRecords.map(discoveryShopifyProductId))];
+  const legacyPricingProductIds = [...new Set(discoveryRecords
+    .filter((record) => record.creatorPricingMode !== "BAKED_IN_V1")
+    .flatMap((record) => [record.shopifyProductId, CREATOR_PRODUCTION_PRICING_PRODUCT_ID]))];
+  const [response, productionPricingRows] = await Promise.all([
+    productIds.length
+      ? client.request<{ nodes: Array<ShopifyDiscoveryProduct | null> }>(
         `#graphql query CreatorContentProducts($ids: [ID!]!) {
           nodes(ids: $ids) {
             ... on Product {
@@ -417,25 +526,32 @@ export async function loadPublicCreatorContent(
           }
         }`,
         { ids: productIds },
-      )
-    : { nodes: [] };
+        )
+      : Promise.resolve({ nodes: [] }),
+    legacyPricingProductIds.length && database.publicProductProductionPricing
+      ? database.publicProductProductionPricing.findMany({
+          where: {
+            shopKey: shop,
+            shopifyProductId: { in: legacyPricingProductIds },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+  const pricingByProductId = new Map(
+    productionPricingRows.map((pricing) => [pricing.shopifyProductId, pricing]),
+  );
   const shopifyById = new Map(
     response.nodes
       .filter((product): product is ShopifyDiscoveryProduct => Boolean(product?.id))
       .map((product) => [product.id, product]),
   );
-  const products = records
+  const validatedProducts = discoveryRecords
     .map((record): PublicCreatorContentProduct | null => {
       const collection = record.creator.marketplaceCollection;
       if (!collection || collection.status !== "ACTIVE") return null;
-      const shopifyId = record.publishedShopifyProductId || record.shopifyProductId;
+      const shopifyId = discoveryShopifyProductId(record);
       const product = shopifyById.get(shopifyId);
       if (!product || !canonicalBuyOnlyProduct(record, product)) return null;
-      const min = Number(product.priceRangeV2.minVariantPrice.amount);
-      const max = Number(product.priceRangeV2.maxVariantPrice.amount);
-      if (!Number.isFinite(min) || !Number.isFinite(max) || min < 0 || max < 0) {
-        return null;
-      }
       const selectedColor = fixedColor(record);
       const variants = selectedColor
         ? product.variants.nodes.filter((variant) => {
@@ -446,6 +562,15 @@ export async function loadPublicCreatorContent(
           })
         : product.variants.nodes;
       if (!variants.length) return null;
+      const variantPrices = variants
+        .map((variant) => Number(variant.price))
+        .filter((price) => Number.isFinite(price) && price >= 0);
+      if (variantPrices.length !== variants.length) return null;
+      const min = Math.min(...variantPrices);
+      const max = Math.max(...variantPrices);
+      const currencyCode = product.priceRangeV2.minVariantPrice.currencyCode;
+      const surcharge = legacyProductionSurcharge(record, pricingByProductId, currencyCode);
+      if (surcharge === null) return null;
       const creatorUrl = getCreatorCollectionStorefrontUrl(collection);
       const viewUrl = getCreatorProductStorefrontUrl(collection, record);
       if (!creatorUrl || !viewUrl) return null;
@@ -463,9 +588,9 @@ export async function loadPublicCreatorContent(
         productType: product.productType?.trim() || record.baseProductTitle,
         imageUrl: productPreview(record),
         price: {
-          min,
-          max,
-          currencyCode: product.priceRangeV2.minVariantPrice.currencyCode,
+          min: min + surcharge,
+          max: max + surcharge,
+          currencyCode,
         },
         sizes: optionValues(variants, /^(size|storlek|storrelse|størrelse)$/i, false),
         colors: optionValues(variants, /^(color|colour|farg|färg)$/i),
@@ -479,21 +604,34 @@ export async function loadPublicCreatorContent(
     .sort((left, right) =>
       String(right.publishedAt || "").localeCompare(String(left.publishedAt || "")),
     );
+  const pageRecordIds = new Set(pageRecords.map((record) => record.id));
+  const products = validatedProducts.filter((product) => pageRecordIds.has(product.id));
   const uniqueSorted = (values: string[]) =>
     [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
+  const publicCreatorIds = new Set(validatedProducts.map((product) => product.creatorId));
+  const productCreators = new Map(
+    products.map((product) => [
+      product.creatorId,
+      {
+        id: product.creatorId,
+        displayName: product.creatorDisplayName,
+        publicHandle: product.creatorPublicHandle,
+      },
+    ]),
+  );
   return {
-    featuredCreators: adminState.selected.map((creator) => ({
+    featuredCreators: adminState.selected
+      .filter((creator) => publicCreatorIds.has(creator.id))
+      .map((creator) => ({
       ...creator,
       viewUrl: getCreatorCollectionStorefrontUrl({ publicHandle: creator.publicHandle })!,
     })),
-    categories: uniqueSorted(adminState.candidates.flatMap((creator) => creator.categories)),
+    categories: uniqueSorted(products.flatMap((product) => product.creatorCategories)),
     products,
     filters: {
-      creators: adminState.candidates.map((creator) => ({
-        id: creator.id,
-        displayName: creator.displayName,
-        publicHandle: creator.publicHandle,
-      })),
+      creators: [...productCreators.values()].sort((left, right) =>
+        left.displayName.localeCompare(right.displayName),
+      ),
       productTypes: uniqueSorted(products.map((product) => product.productType)),
       sizes: sortSizes(products.flatMap((product) => product.sizes)),
       colors: uniqueSorted(products.flatMap((product) => product.colors)),
@@ -506,6 +644,9 @@ export async function loadPublicCreatorContent(
           }
         : null,
     },
-    limit: MAX_DISCOVERY_PRODUCTS,
+    offset,
+    limit,
+    hasMore,
+    nextOffset: hasMore ? offset + limit : null,
   };
 }

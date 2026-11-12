@@ -894,6 +894,7 @@ export function creatorContentHtml(
           return `<article
             class="customhouse-creator-content__product"
             data-creator-content-product
+            data-product-id="${escapeHtml(product.id)}"
             data-search="${escapeHtml(searchText)}"
             data-creator="${escapeHtml(product.creatorId)}"
             data-categories="${escapeHtml(product.creatorCategories.map((value) => value.toLocaleLowerCase()).join("||"))}"
@@ -965,26 +966,26 @@ export function creatorContentHtml(
             </section>
             <div class="customhouse-creator-content__discovery">
               <label class="customhouse-creator-content__search">
-                <input type="search" placeholder="Search creators, collections, designs or tags…" autocomplete="off" data-creator-content-search>
+                <input type="search" aria-label="Search creators, collections, designs, or tags" placeholder="Search creators, collections, designs or tags…" autocomplete="off" data-creator-content-search>
                 <span aria-hidden="true">⌕</span>
               </label>
               <div class="customhouse-creator-content__chips" aria-label="Creator interests">${categoryChips}</div>
               <div class="customhouse-creator-content__section-heading"><div><p>DISCOVER THE COMMUNITY</p><h2>Featured Creators</h2></div></div>
               <section class="customhouse-creator-content__featured" aria-label="Featured Creators">${featuredCreators}</section>
               <div class="customhouse-creator-content__toolbar">
-                <div class="customhouse-creator-content__toolbar-left"><button class="customhouse-creator-content__filter-open" type="button" data-creator-content-filter-open>FILTERS</button><strong><span data-creator-content-count>${input.products.length}</span> PRODUCTS</strong></div>
+                <div class="customhouse-creator-content__toolbar-left"><button class="customhouse-creator-content__filter-open" type="button" data-creator-content-filter-open aria-controls="CreatorContentFilters" aria-expanded="false">FILTERS</button><strong><span data-creator-content-count>${input.products.length}</span> PRODUCTS</strong></div>
                 <label><span class="visually-hidden">Sort products</span><select data-creator-content-sort><option value="newest">Newest</option><option value="price-asc">Price: low to high</option><option value="price-desc">Price: high to low</option></select></label>
               </div>
               <div class="customhouse-creator-content__active-filters" data-creator-content-active-filters></div>
               <div class="customhouse-creator-content__results">
-                <aside class="customhouse-creator-content__filters" data-creator-content-filter-drawer aria-label="Product filters">
+                <aside id="CreatorContentFilters" class="customhouse-creator-content__filters" data-creator-content-filter-drawer aria-label="Product filters" aria-hidden="true" inert>
                   <div class="customhouse-creator-content__filter-head"><h3>FILTERS</h3><button type="button" data-creator-content-clear>CLEAR ALL</button><button class="customhouse-creator-content__filter-close" type="button" data-creator-content-filter-close aria-label="Close filters">✕</button></div>
                   ${creatorFilters}${productTypeFilters}${sizeFilters}${colorFilters}${priceFilter}${availabilityFilters}
                 </aside>
                 <div>
                   <div class="customhouse-creator-content__grid" data-creator-content-grid>${productCards}</div>
                   <div class="customhouse-creator-content__empty${input.products.length ? "" : " is-visible"}" data-creator-content-empty><p>No published Creator products match these filters.</p></div>
-                  <button class="customhouse-creator-content__load-more" type="button" data-creator-content-load-more${input.products.length > 24 ? "" : " hidden"}>LOAD MORE</button>
+                  <button class="customhouse-creator-content__load-more" type="button" data-creator-content-load-more data-next-offset="${escapeHtml(String(input.nextOffset ?? ""))}"${input.hasMore ? "" : " hidden"}>LOAD MORE</button>
                 </div>
               </div>
             </div>
@@ -997,7 +998,7 @@ export function creatorContentHtml(
             const root = document.querySelector("[data-creator-content-root]");
             if (!root) return;
             const search = root.querySelector("[data-creator-content-search]");
-            const cards = Array.from(root.querySelectorAll("[data-creator-content-product]"));
+            let cards = Array.from(root.querySelectorAll("[data-creator-content-product]"));
             const grid = root.querySelector("[data-creator-content-grid]");
             const count = root.querySelector("[data-creator-content-count]");
             const empty = root.querySelector("[data-creator-content-empty]");
@@ -1005,19 +1006,83 @@ export function creatorContentHtml(
             const loadMore = root.querySelector("[data-creator-content-load-more]");
             const drawer = root.querySelector("[data-creator-content-filter-drawer]");
             const overlay = root.querySelector(".customhouse-creator-content__drawer-overlay");
+            const openButton = root.querySelector("[data-creator-content-filter-open]");
+            const mobileFilters = window.matchMedia("(max-width:900px)");
             const activeFilters = root.querySelector("[data-creator-content-active-filters]");
             let activeCategory = "all";
-            let visibleLimit = 24;
+            let serverHasMore = Boolean(loadMore?.dataset.nextOffset);
             let timer = 0;
+            let lastDrawerFocus = null;
             const selected = (name) => Array.from(root.querySelectorAll('input[name="' + name + '"]:checked')).map((input) => input.value);
             const values = (card, key) => String(card.dataset[key] || "").split("||").filter(Boolean);
             const intersects = (selectedValues, cardValues) => !selectedValues.length || selectedValues.some((value) => cardValues.includes(value));
-            const setDrawer = (open) => {
+            const filterNames = ["creator", "productType", "size", "color", "availability"];
+            const syncUrlState = () => {
+              const params = new URLSearchParams(window.location.search);
+              ["q", "category", "sort", "minPrice", "maxPrice", ...filterNames].forEach((name) => params.delete(name));
+              const query = String(search?.value || "").trim();
+              if (query) params.set("q", query);
+              if (activeCategory !== "all") params.set("category", activeCategory);
+              if (sort?.value && sort.value !== "newest") params.set("sort", sort.value);
+              filterNames.forEach((name) => selected(name).forEach((value) => params.append(name, value)));
+              const minPrice = root.querySelector("[data-creator-content-price-min]")?.value || "";
+              const maxPrice = root.querySelector("[data-creator-content-price-max]")?.value || "";
+              if (minPrice) params.set("minPrice", minPrice);
+              if (maxPrice) params.set("maxPrice", maxPrice);
+              const nextUrl = window.location.pathname + (params.size ? "?" + params.toString() : "") + window.location.hash;
+              window.history.replaceState(null, "", nextUrl);
+            };
+            const restoreUrlState = () => {
+              const params = new URLSearchParams(window.location.search);
+              if (search) search.value = params.get("q") || "";
+              activeCategory = String(params.get("category") || "all").toLocaleLowerCase();
+              root.querySelectorAll("[data-creator-content-category]").forEach((chip) => {
+                const active = String(chip.dataset.creatorContentCategory || "all").toLocaleLowerCase() === activeCategory;
+                chip.classList.toggle("is-active", active);
+                chip.setAttribute("aria-pressed", active ? "true" : "false");
+              });
+              filterNames.forEach((name) => {
+                const activeValues = params.getAll(name);
+                root.querySelectorAll('input[name="' + name + '"]').forEach((input) => { input.checked = activeValues.includes(input.value); });
+              });
+              if (sort) {
+                const sortValue = params.get("sort") || "newest";
+                sort.value = ["newest", "price-asc", "price-desc"].includes(sortValue) ? sortValue : "newest";
+              }
+              const minInput = root.querySelector("[data-creator-content-price-min]");
+              const maxInput = root.querySelector("[data-creator-content-price-max]");
+              if (minInput) minInput.value = params.get("minPrice") || "";
+              if (maxInput) maxInput.value = params.get("maxPrice") || "";
+              applyFilters();
+            };
+            const setDrawer = (open, restoreFocus = true) => {
               if (!drawer || !overlay) return;
+              if (!mobileFilters.matches) {
+                drawer.classList.remove("is-open");
+                overlay.classList.remove("is-open");
+                drawer.removeAttribute("aria-hidden");
+                drawer.removeAttribute("aria-modal");
+                drawer.removeAttribute("role");
+                drawer.inert = false;
+                openButton?.setAttribute("aria-expanded", "false");
+                document.documentElement.style.overflow = "";
+                return;
+              }
               drawer.classList.toggle("is-open", open);
               overlay.classList.toggle("is-open", open);
               drawer.setAttribute("aria-hidden", open ? "false" : "true");
+              drawer.setAttribute("role", "dialog");
+              drawer.setAttribute("aria-modal", "true");
+              drawer.inert = !open;
+              openButton?.setAttribute("aria-expanded", open ? "true" : "false");
               document.documentElement.style.overflow = open ? "hidden" : "";
+              if (open) {
+                lastDrawerFocus = document.activeElement;
+                drawer.querySelector("[data-creator-content-filter-close]")?.focus();
+              } else if (restoreFocus && lastDrawerFocus instanceof HTMLElement) {
+                lastDrawerFocus.focus();
+                lastDrawerFocus = null;
+              }
             };
             const renderActiveFilters = () => {
               if (!activeFilters) return;
@@ -1053,43 +1118,127 @@ export function creatorContentHtml(
                 return String(right.dataset.published || "").localeCompare(String(left.dataset.published || ""));
               });
               cards.filter((card) => !matching.includes(card)).forEach((card) => { card.hidden = true; });
-              matching.forEach((card, index) => { card.hidden = index >= visibleLimit; grid?.append(card); });
+              matching.forEach((card) => { card.hidden = false; grid?.append(card); });
               if (count) count.textContent = String(matching.length);
               empty?.classList.toggle("is-visible", matching.length === 0);
-              if (loadMore) loadMore.hidden = matching.length <= visibleLimit;
+              if (loadMore) loadMore.hidden = !serverHasMore;
               renderActiveFilters();
+              syncUrlState();
             };
             search?.addEventListener("input", () => {
               window.clearTimeout(timer);
-              visibleLimit = 24;
               timer = window.setTimeout(applyFilters, 180);
             });
-            root.querySelectorAll("[data-creator-content-category]").forEach((chip) => chip.addEventListener("click", () => {
-              activeCategory = String(chip.dataset.creatorContentCategory || "all").toLocaleLowerCase();
-              root.querySelectorAll("[data-creator-content-category]").forEach((item) => {
-                const active = item === chip;
-                item.classList.toggle("is-active", active);
-                item.setAttribute("aria-pressed", active ? "true" : "false");
+            const bindCategoryChip = (chip) => {
+              if (chip.dataset.creatorContentBound === "true") return;
+              chip.dataset.creatorContentBound = "true";
+              chip.addEventListener("click", () => {
+                activeCategory = String(chip.dataset.creatorContentCategory || "all").toLocaleLowerCase();
+                root.querySelectorAll("[data-creator-content-category]").forEach((item) => {
+                  const active = item === chip;
+                  item.classList.toggle("is-active", active);
+                  item.setAttribute("aria-pressed", active ? "true" : "false");
+                });
+                applyFilters();
               });
-              visibleLimit = 24;
-              applyFilters();
-            }));
-            root.querySelectorAll("[data-creator-content-filter], [data-creator-content-price-min], [data-creator-content-price-max]").forEach((input) => input.addEventListener("input", () => { visibleLimit = 24; applyFilters(); }));
+            };
+            const bindFilterControl = (input) => {
+              if (input.dataset.creatorContentBound === "true") return;
+              input.dataset.creatorContentBound = "true";
+              input.addEventListener("input", applyFilters);
+            };
+            root.querySelectorAll("[data-creator-content-category]").forEach(bindCategoryChip);
+            root.querySelectorAll("[data-creator-content-filter], [data-creator-content-price-min], [data-creator-content-price-max]").forEach(bindFilterControl);
             sort?.addEventListener("change", applyFilters);
-            loadMore?.addEventListener("click", () => { visibleLimit += 24; applyFilters(); });
+            loadMore?.addEventListener("click", async () => {
+              const nextOffset = loadMore.dataset.nextOffset;
+              if (!nextOffset || loadMore.disabled) return;
+              loadMore.disabled = true;
+              loadMore.textContent = "LOADING…";
+              try {
+                const pageUrl = new URL(window.location.href);
+                pageUrl.searchParams.set("offset", nextOffset);
+                const response = await fetch(pageUrl.toString(), { headers: { Accept: "text/html" } });
+                if (!response.ok) throw new Error("Creator Content page request failed");
+                const parsed = new DOMParser().parseFromString(await response.text(), "text/html");
+                const parsedRoot = parsed.querySelector("[data-creator-content-root]");
+                if (!parsedRoot) throw new Error("Creator Content page response was invalid");
+                const knownProducts = new Set(cards.map((card) => card.dataset.productId));
+                parsedRoot.querySelectorAll("[data-creator-content-product]").forEach((card) => {
+                  if (knownProducts.has(card.dataset.productId)) return;
+                  grid?.append(document.importNode(card, true));
+                  knownProducts.add(card.dataset.productId);
+                });
+                const chipContainer = root.querySelector(".customhouse-creator-content__chips");
+                parsedRoot.querySelectorAll("[data-creator-content-category]").forEach((chip) => {
+                  const value = chip.dataset.creatorContentCategory;
+                  const exists = Array.from(root.querySelectorAll("[data-creator-content-category]")).some((current) => current.dataset.creatorContentCategory === value);
+                  if (!exists) chipContainer?.append(document.importNode(chip, true));
+                });
+                parsedRoot.querySelectorAll(".customhouse-creator-content__filter-group:not(.customhouse-creator-content__filter-group--price)").forEach((sourceGroup) => {
+                  const title = sourceGroup.querySelector("legend")?.textContent?.trim();
+                  if (!title) return;
+                  const targetGroup = Array.from(root.querySelectorAll(".customhouse-creator-content__filter-group")).find((group) => group.querySelector("legend")?.textContent?.trim() === title);
+                  if (!targetGroup) {
+                    const priceGroup = drawer?.querySelector(".customhouse-creator-content__filter-group--price");
+                    drawer?.insertBefore(document.importNode(sourceGroup, true), priceGroup || null);
+                    return;
+                  }
+                  sourceGroup.querySelectorAll("[data-creator-content-filter]").forEach((sourceInput) => {
+                    const exists = Array.from(targetGroup.querySelectorAll("[data-creator-content-filter]")).some((current) => current.name === sourceInput.name && current.value === sourceInput.value);
+                    const label = sourceInput.closest("label");
+                    if (!exists && label) targetGroup.append(document.importNode(label, true));
+                  });
+                });
+                cards = Array.from(root.querySelectorAll("[data-creator-content-product]"));
+                root.querySelectorAll("[data-creator-content-category]").forEach(bindCategoryChip);
+                root.querySelectorAll("[data-creator-content-filter], [data-creator-content-price-min], [data-creator-content-price-max]").forEach(bindFilterControl);
+                const parsedLoadMore = parsedRoot.querySelector("[data-creator-content-load-more]");
+                loadMore.dataset.nextOffset = parsedLoadMore?.dataset.nextOffset || "";
+                serverHasMore = Boolean(loadMore.dataset.nextOffset);
+                restoreUrlState();
+              } catch {
+                loadMore.textContent = "TRY AGAIN";
+              } finally {
+                loadMore.disabled = false;
+                if (loadMore.textContent !== "TRY AGAIN") loadMore.textContent = "LOAD MORE";
+              }
+            });
             root.addEventListener("click", (event) => {
               if (!event.target.closest("[data-creator-content-clear]")) return;
               root.querySelectorAll("[data-creator-content-filter]").forEach((input) => { input.checked = false; });
               root.querySelectorAll("[data-creator-content-price-min], [data-creator-content-price-max]").forEach((input) => { input.value = ""; });
               activeCategory = "all";
               root.querySelectorAll("[data-creator-content-category]").forEach((item, index) => { item.classList.toggle("is-active", index === 0); item.setAttribute("aria-pressed", index === 0 ? "true" : "false"); });
-              visibleLimit = 24;
               applyFilters();
             });
-            root.querySelector("[data-creator-content-filter-open]")?.addEventListener("click", () => setDrawer(true));
+            openButton?.addEventListener("click", () => setDrawer(true));
             root.querySelectorAll("[data-creator-content-filter-close]").forEach((button) => button.addEventListener("click", () => setDrawer(false)));
-            document.addEventListener("keydown", (event) => { if (event.key === "Escape") setDrawer(false); });
-            applyFilters();
+            document.addEventListener("keydown", (event) => {
+              if (!mobileFilters.matches || !drawer?.classList.contains("is-open")) return;
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setDrawer(false);
+                return;
+              }
+              if (event.key === "Tab") {
+                const focusable = Array.from(drawer.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href]'));
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                  event.preventDefault();
+                  last?.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                  event.preventDefault();
+                  first?.focus();
+                }
+              }
+            });
+            const syncFilterBreakpoint = () => setDrawer(false, false);
+            mobileFilters.addEventListener?.("change", syncFilterBreakpoint);
+            syncFilterBreakpoint();
+            window.addEventListener("popstate", restoreUrlState);
+            restoreUrlState();
           })();
         </script>
         ${siteShellScript()}
@@ -2274,7 +2423,17 @@ export async function handleStorefrontProxy(
           );
         }
         {
-          const content = await loadPublicCreatorContent(context.shop, context.client);
+          const requestUrl = new URL(request.url);
+          const requestedOffset = Number(requestUrl.searchParams.get("offset") || "0");
+          const offset = Number.isInteger(requestedOffset) && requestedOffset >= 0
+            ? requestedOffset
+            : 0;
+          const content = await loadPublicCreatorContent(
+            context.shop,
+            context.client,
+            undefined,
+            { offset },
+          );
           return wantsJson(request)
             ? success({ route: "creatorContent", ...content })
             : creatorContentHtml({

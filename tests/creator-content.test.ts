@@ -120,7 +120,7 @@ function fakeFeaturedDb() {
         const shop = String(where.shop || "");
         const ids = where.id?.in;
         const query = String(where.OR?.[0]?.displayName?.contains || "").toLowerCase();
-        return creators
+        const results = creators
           .filter((creator) => eligible(creator, shop))
           .filter((creator) => !ids || ids.includes(creator.id))
           .filter((creator) => !query || `${creator.displayName} ${creator.handle}`.toLowerCase().includes(query))
@@ -133,6 +133,7 @@ function fakeFeaturedDb() {
             marketplaceCollection: creator.marketplaceCollection,
             _count: { creatorProducts: creator.creatorProducts.filter((product) => product.status === "PUBLISHED").length },
           }));
+        return typeof args.take === "number" ? results.slice(0, args.take) : results;
       },
     },
     featuredCreator: {
@@ -249,6 +250,42 @@ test("stale featured records are suppressed when a Creator becomes suspended", a
   assert.deepEqual(state.selected, []);
 });
 
+test("featured ordering remains visible when an eligible Creator is outside the candidate page", async () => {
+  const db = fakeFeaturedDb();
+  for (let index = 0; index < 105; index += 1) {
+    db.creators.push({
+      id: `creator-extra-${String(index).padStart(3, "0")}`,
+      shop: "shop.myshopify.com",
+      displayName: `Extra Creator ${String(index).padStart(3, "0")}`,
+      handle: `extra-${index}`,
+      status: "APPROVED",
+      categoriesJson: "[]",
+      profileImageUrl: null,
+      marketplaceCollection: {
+        status: "ACTIVE",
+        publicHandle: `extra-${index}-public`,
+        displayName: `Extra ${index}`,
+      },
+      creatorProducts: [{ status: "PUBLISHED" }],
+    });
+  }
+  const selectedId = "creator-extra-104";
+  await saveFeaturedCreatorOrder(
+    "shop.myshopify.com",
+    [selectedId],
+    db as unknown as AdminContentDb,
+  );
+
+  const state = await listFeaturedCreatorAdminState(
+    "shop.myshopify.com",
+    "",
+    db as unknown as AdminContentDb,
+  );
+
+  assert.equal(state.candidates.length, 100);
+  assert.deepEqual(state.selected.map((creator) => creator.id), [selectedId]);
+});
+
 test("Creator Content Admin route is authenticated and manages ordered Featured Creators", () => {
   const route = readFileSync("app/routes/app.creator-content.tsx", "utf8");
   const navigation = readFileSync("app/routes/app.tsx", "utf8");
@@ -265,7 +302,7 @@ test("Creator Content Admin route is authenticated and manages ordered Featured 
   assert.match(navigation, />Creator Content</);
 });
 
-function fakePublicDiscovery() {
+function fakePublicDiscovery(options: { invalidateBeta?: boolean; legacyBeta?: boolean } = {}) {
   const adminDb = fakeFeaturedDb();
   adminDb.featured.push(
     { id: "featured-1", shop: "shop.myshopify.com", creatorId: "creator-b", position: 0 },
@@ -304,8 +341,10 @@ function fakePublicDiscovery() {
       updatedAt: new Date("2026-11-12T00:00:00.000Z"),
       shopifyProductId: "gid://shopify/Product/200",
       publishedShopifyProductId: "gid://shopify/Product/901",
-      creatorPricingMode: "BAKED_IN_V1",
-      designVariantSelectionsJson: JSON.stringify({ fixedColor: "White" }),
+      creatorPricingMode: options.legacyBeta ? null : "BAKED_IN_V1",
+      designVariantSelectionsJson: JSON.stringify(options.legacyBeta
+        ? { fixedColor: "White", productionMethod: "DTF", placementCount: 2 }
+        : { fixedColor: "White" }),
       creator: adminDb.creators[1],
     },
     {
@@ -330,8 +369,36 @@ function fakePublicDiscovery() {
   const db = {
     ...adminDb,
     creatorProduct: {
+      async findMany(args: Record<string, unknown>) {
+        const skip = typeof args.skip === "number" ? args.skip : 0;
+        const take = typeof args.take === "number" ? args.take : products.length;
+        return products.slice(skip, skip + take);
+      },
+    },
+    publicProductProductionPricing: {
       async findMany() {
-        return products;
+        if (!options.legacyBeta) return [];
+        const decimal = (value: string) => ({ toFixed: () => value });
+        return [{
+          id: "pricing-beta",
+          shopKey: "shop.myshopify.com",
+          shopifyProductId: "gid://shopify/Product/200",
+          currency: "SEK",
+          methodConfigurations: {
+            version: 2,
+            methods: { DTF: { enabled: true, surcharge: "25.00", feeVariantId: null } },
+          },
+          embroiderySurcharge: decimal("0.00"),
+          embroideryTextSurcharge: decimal("0.00"),
+          embroideryImageSurcharge: decimal("0.00"),
+          dtfSurcharge: decimal("25.00"),
+          dtgSurcharge: decimal("0.00"),
+          embroideryFeeVariantId: null,
+          embroideryTextFeeVariantId: null,
+          embroideryImageFeeVariantId: null,
+          dtfFeeVariantId: null,
+          dtgFeeVariantId: null,
+        }];
       },
     },
   };
@@ -353,21 +420,22 @@ function fakePublicDiscovery() {
             creatorProductId: { value: "creator-product-a" },
             priceRangeV2: {
               minVariantPrice: { amount: "249.00", currencyCode: "SEK" },
-              maxVariantPrice: { amount: "249.00", currencyCode: "SEK" },
+              maxVariantPrice: { amount: "999.00", currencyCode: "SEK" },
             },
             variants: {
               nodes: [
                 { id: "gid://shopify/ProductVariant/1", availableForSale: true, price: "249.00", selectedOptions: [{ name: "Size", value: "S" }, { name: "Color", value: "Black" }] },
                 { id: "gid://shopify/ProductVariant/2", availableForSale: false, price: "249.00", selectedOptions: [{ name: "Size", value: "M" }, { name: "Color", value: "Black" }] },
+                { id: "gid://shopify/ProductVariant/4", availableForSale: true, price: "999.00", selectedOptions: [{ name: "Size", value: "S" }, { name: "Color", value: "Blue" }] },
               ],
             },
           },
           {
-            id: "gid://shopify/Product/901",
+            id: options.legacyBeta ? "gid://shopify/Product/200" : "gid://shopify/Product/901",
             title: "Beta Sound Hoodie",
             handle: "beta-sound-hoodie",
-            status: "ACTIVE",
-            onlineStoreUrl: "https://shop.example.com/products/beta-sound-hoodie",
+            status: options.invalidateBeta ? "DRAFT" : "ACTIVE",
+            onlineStoreUrl: options.invalidateBeta ? null : "https://shop.example.com/products/beta-sound-hoodie",
             origin: { value: "creator" },
             mode: { value: "buy_only" },
             designStatus: { value: "published" },
@@ -426,6 +494,31 @@ test("public Creator Content uses one batched Shopify query and canonical routes
   assert.equal(result.products[0]!.viewUrl, "/apps/customhouse/creators/beta-b1c2d/products/creator-product-b");
 });
 
+test("public Creator Content paginates DB rows and exposes a continuation offset", async () => {
+  const { db, shopify, requests } = fakePublicDiscovery();
+  const first = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+    { offset: 0, limit: 1 },
+  );
+  const second = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+    { offset: first.nextOffset || 0, limit: 1 },
+  );
+
+  assert.deepEqual(first.products.map((product) => product.id), ["creator-product-a"]);
+  assert.deepEqual(first.featuredCreators.map((creator) => creator.id), ["creator-b", "creator-a"]);
+  assert.equal(first.hasMore, true);
+  assert.equal(first.nextOffset, 1);
+  assert.deepEqual(second.products.map((product) => product.id), ["creator-product-b"]);
+  assert.equal(requests.length, 2);
+  assert.equal((requests[0]!.variables.ids as string[]).includes("gid://shopify/Product/900"), true);
+  assert.equal((requests[1]!.variables.ids as string[]).includes("gid://shopify/Product/901"), true);
+});
+
 test("public Creator Content exposes real price and variant facets only", async () => {
   const { db, shopify } = fakePublicDiscovery();
   const result = await loadPublicCreatorContent(
@@ -445,6 +538,20 @@ test("public Creator Content exposes real price and variant facets only", async 
   assert.deepEqual(result.categories, ["Art & Design", "Music", "Streetwear"]);
 });
 
+test("legacy Creator Content prices include the configured production surcharge", async () => {
+  const { db, shopify, requests } = fakePublicDiscovery({ legacyBeta: true });
+  const result = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+  const beta = result.products.find((product) => product.id === "creator-product-b")!;
+
+  assert.deepEqual(beta.price, { min: 549, max: 549, currencyCode: "SEK" });
+  assert.equal((requests[0]!.variables.ids as string[]).includes("gid://shopify/Product/200"), true);
+  assert.equal((requests[0]!.variables.ids as string[]).includes("gid://shopify/Product/901"), false);
+});
+
 test("public Creator Content suppresses missing, inactive, or non-buy-only Shopify products", async () => {
   const { db, shopify } = fakePublicDiscovery();
   const result = await loadPublicCreatorContent(
@@ -455,6 +562,20 @@ test("public Creator Content suppresses missing, inactive, or non-buy-only Shopi
 
   assert.equal(result.products.some((product) => product.id === "creator-product-invalid"), false);
   assert.equal(result.products.every((product) => product.available), true);
+});
+
+test("public facets and Featured Creators require at least one Shopify-valid product", async () => {
+  const { db, shopify } = fakePublicDiscovery({ invalidateBeta: true });
+  const result = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+
+  assert.deepEqual(result.products.map((product) => product.creatorId), ["creator-a"]);
+  assert.deepEqual(result.featuredCreators.map((creator) => creator.id), ["creator-a"]);
+  assert.deepEqual(result.filters.creators.map((creator) => creator.id), ["creator-a"]);
+  assert.deepEqual(result.categories, ["Art & Design", "Streetwear"]);
 });
 
 test("Creator Content app-proxy route is deterministic", () => {
@@ -476,6 +597,8 @@ test("Creator Content is added to theme navigation without duplicating merchant 
   );
 
   assert.match(fallback, /where:\s*'url',\s*'\/apps\/customhouse\/creator-content'/);
+  assert.match(fallback, /creator_content_absolute/);
+  assert.match(fallback, /'\/apps\/customhouse\/creator-content\/'/);
   assert.match(fallback, /CREATOR CONTENT/);
   assert.match(desktopHeader, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'mobile_bar'/);
   assert.match(desktopHeader, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'desktop'/);
@@ -501,13 +624,19 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /HOME[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /Discover unique designs from CustomHouse creators/);
   assert.match(markup, /data-creator-content-search/);
+  assert.match(markup, /aria-label="Search creators, collections, designs, or tags"/);
   assert.match(markup, /data-creator-content-category="Streetwear"/);
   assert.match(markup, /Featured Creators/);
   assert.match(markup, /href="\/apps\/customhouse\/creators\/beta-b1c2d"/);
   assert.match(markup, /href="\/apps\/customhouse\/creators\/beta-b1c2d\/products\/creator-product-b"/);
   assert.match(markup, />BUY PRODUCT</);
   assert.match(markup, /data-creator-content-filter-drawer/);
+  assert.match(markup, /data-creator-content-filter-drawer[^>]*aria-hidden="true"[^>]*inert/);
+  assert.match(markup, /data-creator-content-filter-open[^>]*aria-expanded="false"/);
   assert.match(markup, /data-creator-content-sort/);
+  assert.match(markup, /data-next-offset=/);
+  assert.match(markup, /new DOMParser\(\)/);
+  assert.match(markup, /fetch\(pageUrl\.toString\(\)/);
   assert.match(markup, /Price: low to high/);
   assert.match(markup, /@media\(max-width:1279px\)/);
   assert.match(markup, /@media\(max-width:767px\)/);
@@ -515,6 +644,12 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /setTimeout\(applyFilters, 180\)/);
   assert.match(markup, /minValue \? Number\(minValue\) : Number\.NaN/);
   assert.match(markup, /maxValue \? Number\(maxValue\) : Number\.NaN/);
+  assert.match(markup, /matchMedia\("\(max-width:900px\)"\)/);
+  assert.match(markup, /drawer\.inert = !open/);
+  assert.match(markup, /event\.key === "Tab"/);
+  assert.match(markup, /new URLSearchParams\(window\.location\.search\)/);
+  assert.match(markup, /window\.history\.replaceState/);
+  assert.match(markup, /window\.addEventListener\("popstate", restoreUrlState\)/);
   assert.match(markup, /class="customhouse-header__nav"[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /class="customhouse-mobile-drawer__nav"[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /href="\/apps\/customhouse\/creator-content"[^>]*aria-current="page"/);
@@ -530,7 +665,7 @@ test("Creator Content storefront handler loads the public service and reuses exi
   const source = readFileSync("app/services/storefront-proxy.server.ts", "utf8");
 
   assert.match(source, /case "creatorContent":/);
-  assert.match(source, /loadPublicCreatorContent\(context\.shop, context\.client\)/);
+  assert.match(source, /loadPublicCreatorContent\([\s\S]*?context\.shop,[\s\S]*?context\.client,[\s\S]*?undefined,[\s\S]*?\{ offset \},[\s\S]*?\)/);
   assert.match(source, /creatorContentHtml\(\{/);
   assert.match(source, /getCreatorProductStorefrontUrl/);
   assert.doesNotMatch(source, /creatorContent.*showApp\(/i);

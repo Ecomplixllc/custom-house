@@ -9,13 +9,25 @@
 
 {% liquid
   assign creator_content_links = links | where: 'url', '/apps/customhouse/creator-content'
+  assign creator_content_absolute = shop.url | append: '/apps/customhouse/creator-content'
+  assign creator_content_present = false
+  if creator_content_links.size > 0
+    assign creator_content_present = true
+  endif
+  for link in links
+    assign creator_content_absolute_slash = creator_content_absolute | append: '/'
+    if link.url == '/apps/customhouse/creator-content/' or link.url == creator_content_absolute or link.url == creator_content_absolute_slash
+      assign creator_content_present = true
+      break
+    endif
+  endfor
   assign creator_content_active = false
   if request.path == '/apps/customhouse/creator-content'
     assign creator_content_active = true
   endif
 %}
 
-{% if creator_content_links.size == 0 %}
+{% unless creator_content_present %}
   {% case variant %}
     {% when 'mobile_bar' %}
       <li>
@@ -52,4 +64,4 @@
         </a>
       </li>
   {% endcase %}
-{% endif %}
+{% endunless %}
