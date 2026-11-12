@@ -1203,13 +1203,13 @@ export function creatorContentHtml(
                   const sourceMax = sourcePriceGroup.querySelector("[data-creator-content-price-max]");
                   const targetMin = targetPriceGroup.querySelector("[data-creator-content-price-min]");
                   const targetMax = targetPriceGroup.querySelector("[data-creator-content-price-max]");
-                  if (sourceMin && targetMin) {
+                  if (sourceMin && sourceMax && targetMin && targetMax) {
                     const minimum = Math.min(Number(targetMin.min), Number(sourceMin.min));
-                    targetMin.min = String(minimum);
-                    targetMin.placeholder = String(minimum);
-                  }
-                  if (sourceMax && targetMax) {
                     const maximum = Math.max(Number(targetMax.max), Number(sourceMax.max));
+                    targetMin.min = String(minimum);
+                    targetMin.max = String(maximum);
+                    targetMin.placeholder = String(minimum);
+                    targetMax.min = String(minimum);
                     targetMax.max = String(maximum);
                     targetMax.placeholder = String(maximum);
                   }
@@ -2493,7 +2493,7 @@ export async function handleStorefrontProxy(
             context.shop,
             context.client,
             undefined,
-            { offset },
+            { offset, includeFeatured: offset === 0 },
           );
           return wantsJson(request)
             ? success({ route: "creatorContent", ...content })

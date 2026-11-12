@@ -643,6 +643,7 @@ test("legacy Creator Content requires product-specific enabled production pricin
     );
 
     assert.equal(result.products.some((product) => product.id === "creator-product-b"), false);
+    assert.equal(result.featuredCreators.some((creator) => creator.id === "creator-b"), false);
   }
 });
 
@@ -772,7 +773,7 @@ test("Creator Content storefront handler loads the public service and reuses exi
   const source = readFileSync("app/services/storefront-proxy.server.ts", "utf8");
 
   assert.match(source, /case "creatorContent":/);
-  assert.match(source, /loadPublicCreatorContent\([\s\S]*?context\.shop,[\s\S]*?context\.client,[\s\S]*?undefined,[\s\S]*?\{ offset \},[\s\S]*?\)/);
+  assert.match(source, /loadPublicCreatorContent\([\s\S]*?context\.shop,[\s\S]*?context\.client,[\s\S]*?undefined,[\s\S]*?\{ offset, includeFeatured: offset === 0 \},[\s\S]*?\)/);
   assert.match(source, /creatorContentHtml\(\{/);
   assert.match(source, /getCreatorProductStorefrontUrl/);
   assert.doesNotMatch(source, /creatorContent.*showApp\(/i);

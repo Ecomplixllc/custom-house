@@ -370,6 +370,48 @@ function legacyProductionSetup(record: PublicCreatorContentRecord) {
   }
 }
 
+async function resolveDiscoveryPricing(
+  shop: string,
+  record: PublicCreatorContentRecord,
+  database: PublicCreatorContentDb,
+) {
+  if (record.creatorPricingMode === "BAKED_IN_V1") {
+    return { surcharge: 0, currency: null as string | null };
+  }
+  const setup = legacyProductionSetup(record);
+  if (!setup || !database.publicProductProductionPricing) return null;
+  try {
+    const resolved = await resolveProductionPricing({
+      shop,
+      productId: record.shopifyProductId,
+      method: setup.method,
+      artworkType: setup.artworkType,
+      database: database as unknown as NonNullable<Parameters<typeof resolveProductionPricing>[0]["database"]>,
+    });
+    return {
+      surcharge: Number(resolved.surcharge.toFixed(2)) * setup.placementCount,
+      currency: resolved.currency,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function fixedColorVariants(
+  record: PublicCreatorContentRecord,
+  product: ShopifyDiscoveryProduct,
+) {
+  const selectedColor = fixedColor(record);
+  return selectedColor
+    ? product.variants.nodes.filter((variant) => {
+        const color = variant.selectedOptions.find((option) =>
+          /^(color|colour|farg|färg)$/i.test(option.name.trim()),
+        )?.value;
+        return !color || color.toLocaleLowerCase() === selectedColor.toLocaleLowerCase();
+      })
+    : product.variants.nodes;
+}
+
 function optionValues(
   variants: ShopifyDiscoveryProduct["variants"]["nodes"],
   matcher: RegExp,
@@ -466,7 +508,7 @@ async function validFeaturedCreatorIds(
                 mode: metafield(namespace: "customhouse", key: "design_mode") { value }
                 designStatus: metafield(namespace: "customhouse", key: "design_status") { value }
                 creatorProductId: metafield(namespace: "customhouse", key: "creator_product_id") { value }
-                variants(first: 1) { nodes { id } }
+                variants(first: 100) { nodes { id selectedOptions { name value } } }
               }
             }
           }`,
@@ -479,10 +521,13 @@ async function validFeaturedCreatorIds(
         .map((product) => [product.id, product]),
     );
     for (const batch of batches) {
-      const hasValidProduct = batch.records.some((record) => {
+      const eligibility = await Promise.all(batch.records.map(async (record) => {
         const product = productsById.get(discoveryShopifyProductId(record));
-        return Boolean(product && canonicalBuyOnlyProduct(record, product));
-      });
+        if (!product || !canonicalBuyOnlyProduct(record, product) ||
+          !fixedColorVariants(record, product).length) return false;
+        return Boolean(await resolveDiscoveryPricing(shop, record, database));
+      }));
+      const hasValidProduct = eligibility.some(Boolean);
       if (hasValidProduct) {
         valid.add(batch.creatorId);
         unresolved.delete(batch.creatorId);
@@ -500,10 +545,10 @@ export async function loadPublicCreatorContent(
   shop: string,
   client: ShopifyGraphqlClient,
   database: PublicCreatorContentDb = db as unknown as PublicCreatorContentDb,
-  options: { offset?: number; limit?: number } = {},
+  options: { offset?: number; limit?: number; includeFeatured?: boolean } = {},
 ) {
-  const offset = Number.isInteger(options.offset) && Number(options.offset) >= 0
-    ? Math.min(Number(options.offset), 10_000)
+  const offset = Number.isSafeInteger(options.offset) && Number(options.offset) >= 0
+    ? Number(options.offset)
     : 0;
   const limit = Number.isInteger(options.limit) && Number(options.limit) > 0
     ? Math.min(Number(options.limit), MAX_DISCOVERY_PAGE_SIZE)
@@ -564,31 +609,13 @@ export async function loadPublicCreatorContent(
         { ids: productIds },
         )
       : Promise.resolve({ nodes: [] }),
-    validFeaturedCreatorIds(shop, adminState.selected, client, database),
-    Promise.all(pageRecords.map(async (record) => {
-      if (record.creatorPricingMode === "BAKED_IN_V1") {
-        return [record.id, { surcharge: 0, currency: null }] as const;
-      }
-      const setup = legacyProductionSetup(record);
-      if (!setup || !database.publicProductProductionPricing) {
-        return [record.id, null] as const;
-      }
-      try {
-        const resolved = await resolveProductionPricing({
-          shop,
-          productId: record.shopifyProductId,
-          method: setup.method,
-          artworkType: setup.artworkType,
-          database: database as unknown as NonNullable<Parameters<typeof resolveProductionPricing>[0]["database"]>,
-        });
-        return [record.id, {
-          surcharge: Number(resolved.surcharge.toFixed(2)) * setup.placementCount,
-          currency: resolved.currency,
-        }] as const;
-      } catch {
-        return [record.id, null] as const;
-      }
-    })),
+    options.includeFeatured === false
+      ? Promise.resolve(new Set<string>())
+      : validFeaturedCreatorIds(shop, adminState.selected, client, database),
+    Promise.all(pageRecords.map(async (record) => [
+      record.id,
+      await resolveDiscoveryPricing(shop, record, database),
+    ] as const)),
   ]);
   const legacyPricingByRecordId = new Map<
     string,
@@ -606,15 +633,7 @@ export async function loadPublicCreatorContent(
       const shopifyId = discoveryShopifyProductId(record);
       const product = shopifyById.get(shopifyId);
       if (!product || !canonicalBuyOnlyProduct(record, product)) return null;
-      const selectedColor = fixedColor(record);
-      const variants = selectedColor
-        ? product.variants.nodes.filter((variant) => {
-            const color = variant.selectedOptions.find((option) =>
-              /^(color|colour|farg|färg)$/i.test(option.name.trim()),
-            )?.value;
-            return !color || color.toLocaleLowerCase() === selectedColor.toLocaleLowerCase();
-          })
-        : product.variants.nodes;
+      const variants = fixedColorVariants(record, product);
       if (!variants.length) return null;
       const variantPrices = variants
         .map((variant) => Number(variant.price))
