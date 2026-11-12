@@ -231,3 +231,19 @@ test("stale featured records are suppressed when a Creator becomes suspended", a
   );
   assert.deepEqual(state.selected, []);
 });
+
+test("Creator Content Admin route is authenticated and manages ordered Featured Creators", () => {
+  const route = readFileSync("app/routes/app.creator-content.tsx", "utf8");
+  const navigation = readFileSync("app/routes/app.tsx", "utf8");
+
+  assert.match(route, /authenticate\.admin\(request\)/);
+  assert.match(route, /listFeaturedCreatorAdminState/);
+  assert.match(route, /saveFeaturedCreatorOrder/);
+  assert.match(route, /name="creatorIds"/);
+  assert.match(route, /Move up/);
+  assert.match(route, /Move down/);
+  assert.match(route, /Remove/);
+  assert.match(route, /Search approved Creators/);
+  assert.match(navigation, /href="\/app\/creator-content"/);
+  assert.match(navigation, />Creator Content</);
+});
