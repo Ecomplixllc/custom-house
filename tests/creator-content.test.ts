@@ -298,6 +298,9 @@ test("Creator Content Admin route is authenticated and manages ordered Featured 
   assert.match(route, /Move down/);
   assert.match(route, /Remove/);
   assert.match(route, /Search approved Creators/);
+  assert.match(route, /Build the Featured Creators lineup/);
+  assert.match(route, /featured-creator-order/);
+  assert.match(route, /Save featured lineup/);
   assert.match(navigation, /href="\/app\/creator-content"/);
   assert.match(navigation, />Creator Content</);
 });
@@ -308,6 +311,7 @@ function fakePublicDiscovery(options: {
   legacyGlobalOnly?: boolean;
   disableDtf?: boolean;
   prolificAlpha?: boolean;
+  appProxyOnly?: boolean;
 } = {}) {
   const adminDb = fakeFeaturedDb();
   adminDb.featured.push(
@@ -449,7 +453,9 @@ function fakePublicDiscovery(options: {
             title: "Alpha Art Tee",
             handle: "alpha-art-tee",
             status: "ACTIVE",
-            onlineStoreUrl: "https://shop.example.com/products/alpha-art-tee",
+            onlineStoreUrl: options.appProxyOnly
+              ? null
+              : "https://shop.example.com/products/alpha-art-tee",
             origin: { value: "creator" },
             mode: { value: "buy_only" },
             designStatus: { value: "published" },
@@ -471,7 +477,9 @@ function fakePublicDiscovery(options: {
             title: "Beta Sound Hoodie",
             handle: "beta-sound-hoodie",
             status: options.invalidateBeta ? "DRAFT" : "ACTIVE",
-            onlineStoreUrl: options.invalidateBeta ? null : "https://shop.example.com/products/beta-sound-hoodie",
+            onlineStoreUrl: options.invalidateBeta || options.appProxyOnly
+              ? null
+              : "https://shop.example.com/products/beta-sound-hoodie",
             origin: { value: "creator" },
             mode: { value: "buy_only" },
             designStatus: { value: "published" },
@@ -520,7 +528,9 @@ function fakePublicDiscovery(options: {
                 handle: record.id,
                 status: "ACTIVE",
                 productType: record.baseProductTitle,
-                onlineStoreUrl: `https://shop.example.com/products/${record.id}`,
+                onlineStoreUrl: options.appProxyOnly
+                  ? null
+                  : `https://shop.example.com/products/${record.id}`,
                 origin: { value: "creator" },
                 mode: { value: "buy_only" },
                 designStatus: { value: "published" },
@@ -569,6 +579,19 @@ test("public Creator Content uses one batched Shopify query and canonical routes
   assert.deepEqual(result.products.map((product) => product.id), ["creator-product-b", "creator-product-a"]);
   assert.equal(result.products[0]!.creatorUrl, "/apps/customhouse/creators/beta-b1c2d");
   assert.equal(result.products[0]!.viewUrl, "/apps/customhouse/creators/beta-b1c2d/products/creator-product-b");
+});
+
+test("public Creator Content includes active buy-only products routed through the app proxy", async () => {
+  const { db, shopify } = fakePublicDiscovery({ appProxyOnly: true });
+  const result = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+
+  assert.deepEqual(result.featuredCreators.map((creator) => creator.id), ["creator-b", "creator-a"]);
+  assert.deepEqual(result.products.map((product) => product.id), ["creator-product-b", "creator-product-a"]);
+  assert.equal(result.products.every((product) => product.viewUrl.startsWith("/apps/customhouse/creators/")), true);
 });
 
 test("public Creator Content paginates DB rows and exposes a continuation offset", async () => {
@@ -727,6 +750,7 @@ test("Creator Content renderer provides responsive real-data discovery without c
 
   assert.equal(response.status, 200);
   assert.match(markup, /class="customhouse-creator-content-page"/);
+  assert.match(markup, /html,body\{min-height:100%;margin:0;background:#060708\}/);
   assert.match(markup, /HOME[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /Discover unique designs from CustomHouse creators/);
   assert.match(markup, /data-creator-content-search/);

@@ -447,11 +447,15 @@ function canonicalBuyOnlyProduct(
 ) {
   if (
     product.status !== "ACTIVE" ||
-    !product.onlineStoreUrl ||
     !product.variants.nodes.length
   ) {
     return false;
   }
+  // Creator products are intentionally purchased through the authenticated
+  // CustomHouse app-proxy product page. They do not need a native Shopify
+  // Online Store URL, and many valid buy-only products are not published to
+  // that sales channel. Keep the lifecycle and buy-only metadata checks below
+  // as the public eligibility boundary instead.
   if (record.creatorPricingMode !== "BAKED_IN_V1") {
     // Legacy records remain safe because every card links to the existing
     // app-proxy buy-only page instead of the Shopify product/customizer.
