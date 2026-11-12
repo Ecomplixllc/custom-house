@@ -738,8 +738,9 @@ test("Creator Content is added to theme navigation without duplicating merchant 
   assert.match(drawer, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'drawer'/);
   assert.match(customHeader, /customhouse-header__nav[\s\S]*href="\/apps\/customhouse\/creator-content"[\s\S]*CREATOR CONTENT/);
   assert.match(customHeader, /customhouse-mobile-drawer__nav[\s\S]*href="\/apps\/customhouse\/creator-content"[\s\S]*CREATOR CONTENT/);
-  assert.match(customHeader, /font-size:\s*clamp\(12px, 0\.86vw, 15px\)/);
-  assert.match(desktopHeader, /font-size:\s*min\(var\(--menu-top-level-font-size-desktop\), 15px\)/);
+  assert.match(customHeader, /gap:\s*clamp\(14px, 1\.8vw, 28px\)/);
+  assert.match(customHeader, /font-size:\s*clamp\(11px, 0\.72vw, 13px\)/);
+  assert.match(desktopHeader, /font-size:\s*min\(var\(--menu-top-level-font-size-desktop\), 13px\)/);
 });
 
 test("Creator Content renderer provides responsive real-data discovery without customization controls", async () => {
@@ -794,7 +795,8 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /class="customhouse-mobile-drawer__nav"[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /href="\/apps\/customhouse\/creator-content"[^>]*aria-current="page"/);
   assert.match(markup, /@media screen and \(min-width:901px\) and \(max-width:1500px\)/);
-  assert.match(markup, /customhouse-header__nav a\{[^}]*font-size:clamp\(12px,\.86vw,15px\)/);
+  assert.match(markup, /customhouse-header__nav\{[^}]*gap:clamp\(14px,1\.8vw,28px\)/);
+  assert.match(markup, /customhouse-header__nav a\{[^}]*font-size:clamp\(11px,\.72vw,13px\)/);
   for (const [, source] of markup.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
     assert.doesNotThrow(() => new Function(source));
   }
