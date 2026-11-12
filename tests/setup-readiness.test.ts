@@ -214,7 +214,10 @@ test("app managed creator cart uses base variants and signed attribution", () =>
   assert.doesNotMatch(proxy, /customhouse-proxy-header/);
   assert.doesNotMatch(proxy, /customhouse-proxy-footer/);
   assert.match(proxy, /async function siteHeaderAccount\(context: VerifiedProxyContext\)/);
-  assert.match(proxy, /function siteHeader\(account: SiteHeaderAccount = \{ loggedIn: false \}\)/);
+  assert.match(
+    proxy,
+    /function siteHeader\(\s*account: SiteHeaderAccount = \{ loggedIn: false \},\s*activePage\?: "creatorContent",\s*\)/,
+  );
   assert.match(proxy, /function siteFooter\(\)/);
   assert.match(proxy, /\$\{siteHeader\(input\.headerAccount\)\}/);
   assert.match(proxy, /headerAccount: await siteHeaderAccount\(context\)/);
@@ -276,7 +279,6 @@ test("app managed creator cart uses base variants and signed attribution", () =>
   assert.match(proxy, /relatedBase\.baseProduct\?\.priceRange/);
   assert.doesNotMatch(proxy, /customhouse-more__subtitle/);
   assert.doesNotMatch(proxy, /customhouse-public-breadcrumb/);
-  assert.doesNotMatch(proxy, /aria-label="Breadcrumb"/);
   assert.doesNotMatch(proxy, /customhouse-more__rating/);
   assert.doesNotMatch(proxy, /4\.9 \(128\)/);
   assert.doesNotMatch(proxy, /Check out more designs from this creator/);

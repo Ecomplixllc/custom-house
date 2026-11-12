@@ -16,6 +16,7 @@ import {
 import { normalizeCustomerGid } from "./helium-sync.ts";
 import { formatMinorMoney } from "./money.ts";
 import { listPublicCreatorDirectory } from "./creator-discovery.server.ts";
+import { loadPublicCreatorContent } from "./creator-content.server.ts";
 
 const SAFE_HEADERS = {
   "Cache-Control": "no-store",
@@ -41,6 +42,7 @@ export type ProxyAuthenticator = (
 
 type ProxyRoute =
   | { kind: "base" }
+  | { kind: "creatorContent" }
   | { kind: "creators" }
   | { kind: "creator"; creatorHandle: string }
   | { kind: "creatorProduct"; creatorHandle: string; creatorProductId: string }
@@ -547,6 +549,7 @@ function publicCss() {
     #FooterStrip-customhouse-app .footer-strip__links{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px var(--footer-link-gap);max-width:100%}
     #FooterStrip-customhouse-app .footer-strip__link{position:relative;display:inline-flex;align-items:center;min-height:24px;font-size:var(--footer-link-size);white-space:nowrap}
     #FooterStrip-customhouse-app .footer-strip__link+.footer-strip__link::before{content:"";width:2px;height:18px;margin-right:var(--footer-link-gap);background:currentColor;opacity:.55}
+    @media screen and (min-width:901px) and (max-width:1500px){.customhouse-header{--customhouse-logo-width-desktop:320px;--customhouse-logo-mark-width-desktop:108px;--customhouse-logo-wordmark-size-desktop:35px}.customhouse-header__inner{gap:clamp(18px,2.2vw,32px)}.customhouse-header__nav{gap:clamp(18px,2.2vw,32px)}.customhouse-header__nav a{font-size:clamp(13px,.92vw,15px)}}
     @media screen and (min-width:901px){.customhouse-header__menu-button{display:none!important}.customhouse-header__nav{display:flex!important}.customhouse-header__profile{display:block!important}}
     @media screen and (max-width:900px){.customhouse-header{position:relative;--customhouse-header-height:clamp(74px,10vw,94px);--customhouse-header-pad-x:clamp(14px,4vw,34px);background:rgb(6 7 8 / .96)}.customhouse-header__inner{min-height:var(--customhouse-header-height);grid-template-columns:minmax(0,1fr) auto;gap:clamp(10px,2.4vw,24px);padding-top:clamp(14px,2.2vw,20px);padding-bottom:12px}.customhouse-header__nav{display:none}.customhouse-header__profile{display:none}.customhouse-header__logo{--customhouse-logo-width:clamp(var(--customhouse-logo-width-mobile),24vw,var(--customhouse-logo-width-desktop));--customhouse-logo-mark-width:clamp(var(--customhouse-logo-mark-width-mobile),7.2vw,var(--customhouse-logo-mark-width-desktop));--customhouse-logo-mark-height:clamp(var(--customhouse-logo-mark-height-mobile),2.6vw,var(--customhouse-logo-mark-height-desktop));--customhouse-logo-wordmark-size:clamp(var(--customhouse-logo-wordmark-size-mobile),2.45vw,var(--customhouse-logo-wordmark-size-desktop));gap:7px}.customhouse-header__logo-image{max-height:54px}.customhouse-header__actions{gap:clamp(10px,2.2vw,18px)}.customhouse-header__icon{width:clamp(28px,3.6vw,34px);height:clamp(28px,3.6vw,34px)}.customhouse-header__icon svg{stroke-width:2.6}.customhouse-header__menu-button{display:inline-flex;color:#9bd21a}.customhouse-header__menu-button svg{stroke-width:2.8}}
     @media screen and (max-width:749px){.customhouse-header{--customhouse-header-height:94px;--customhouse-header-pad-x:clamp(13px,4.5vw,22px)}.customhouse-header__inner{gap:10px;padding-top:16px;padding-bottom:12px}.customhouse-header__logo{--customhouse-logo-width:var(--customhouse-logo-width-mobile);--customhouse-logo-mark-width:var(--customhouse-logo-mark-width-mobile);--customhouse-logo-mark-height:var(--customhouse-logo-mark-height-mobile);--customhouse-logo-wordmark-size:var(--customhouse-logo-wordmark-size-mobile)}.customhouse-header__actions{gap:clamp(10px,3vw,18px)}.customhouse-header__icon{width:clamp(28px,8vw,34px);height:clamp(28px,8vw,34px)}.customhouse-mobile-drawer{width:min(82vw,390px)}#FooterStrip-customhouse-app{min-height:auto;padding-right:var(--footer-mobile-padding-x);padding-left:var(--footer-mobile-padding-x)}#FooterStrip-customhouse-app .footer-strip__inner{min-height:auto;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center}#FooterStrip-customhouse-app .footer-strip__social{justify-items:center;min-width:0;width:100%}#FooterStrip-customhouse-app .footer-strip__heading{font-size:var(--footer-mobile-label-size)}#FooterStrip-customhouse-app .footer-strip__icon{width:var(--footer-mobile-icon-size);height:var(--footer-mobile-icon-size)}#FooterStrip-customhouse-app .footer-strip__links{width:100%;justify-content:center;row-gap:8px}#FooterStrip-customhouse-app .footer-strip__link{font-size:var(--footer-mobile-link-size);min-height:22px;white-space:normal;overflow-wrap:anywhere}}
@@ -574,7 +577,10 @@ async function siteHeaderAccount(context: VerifiedProxyContext): Promise<SiteHea
   };
 }
 
-function siteHeader(account: SiteHeaderAccount = { loggedIn: false }) {
+function siteHeader(
+  account: SiteHeaderAccount = { loggedIn: false },
+  activePage?: "creatorContent",
+) {
   const logoUrl =
     publicImageUrl(process.env.CUSTOMHOUSE_HEADER_LOGO_URL) ||
     DEFAULT_HEADER_LOGO_URL;
@@ -591,6 +597,7 @@ function siteHeader(account: SiteHeaderAccount = { loggedIn: false }) {
   const becomeCreatorLoginUrl = "/customer_authentication/login?return_to=%2Fpages%2Fbecome-a-creator";
   const creatorDashboardUrl = "/pages/creator-dashboard";
   const logoutUrl = "/account/logout";
+  const creatorContentCurrent = activePage === "creatorContent";
   const profileMenu = account.loggedIn
     ? `<p class="customhouse-header__profile-name">${escapeHtml(account.displayName || "Customer account")}</p>
             ${
@@ -636,6 +643,7 @@ function siteHeader(account: SiteHeaderAccount = { loggedIn: false }) {
         <a href="/collections/hoodies">HOODIES</a>
         <a href="/pages/design-selv">DESIGN SELV</a>
         <a href="/blogs/news">INSPIRATION</a>
+        <a href="/apps/customhouse/creator-content"${creatorContentCurrent ? ' aria-current="page"' : ""}>CREATOR CONTENT</a>
       </nav>
       <div class="customhouse-header__actions">
         <a class="customhouse-header__icon" href="/search" aria-label="Search">
@@ -681,6 +689,10 @@ function siteHeader(account: SiteHeaderAccount = { loggedIn: false }) {
         <a href="/blogs/news">
           <span class="customhouse-mobile-drawer__line-icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M18 30c-2.8-2.2-4.5-5.3-4.5-9 0-6.3 4.7-11 10.5-11s10.5 4.7 10.5 11c0 3.7-1.7 6.8-4.5 9"></path><path d="M19 34h10"></path><path d="M20.5 39h7"></path><path d="M24 3v4"></path><path d="M9 10l3 3"></path><path d="M39 10l-3 3"></path><path d="M7 22h4"></path><path d="M37 22h4"></path></svg></span>
           <span>INSPIRATION</span>
+        </a>
+        <a href="/apps/customhouse/creator-content"${creatorContentCurrent ? ' aria-current="page"' : ""}>
+          <span class="customhouse-mobile-drawer__line-icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><circle cx="17" cy="17" r="7"></circle><circle cx="33" cy="19" r="5"></circle><path d="M5 40c1.6-8 5.6-12 12-12s10.4 4 12 12"></path><path d="M27 30c6.8 0 11 3.3 12.5 10"></path></svg></span>
+          <span>CREATOR CONTENT</span>
         </a>
       </nav>
       <div class="customhouse-mobile-drawer__account">
@@ -747,6 +759,342 @@ function siteShellScript() {
       });
     })();
   </script>`;
+}
+
+export function creatorContentHtml(
+  input: Awaited<ReturnType<typeof loadPublicCreatorContent>> & {
+    headerAccount?: SiteHeaderAccount;
+  },
+) {
+  const heroImages = input.products
+    .map((product) => product.imageUrl)
+    .filter((url): url is string => Boolean(url))
+    .slice(0, 3);
+  const heroArt = heroImages.length
+    ? heroImages
+        .map(
+          (url, index) =>
+            `<span class="customhouse-creator-content__hero-shot customhouse-creator-content__hero-shot--${index + 1}"><img src="${escapeHtml(url)}" alt="" loading="${index ? "lazy" : "eager"}"></span>`,
+        )
+        .join("")
+    : `<span class="customhouse-creator-content__hero-monogram" aria-hidden="true">CH</span>`;
+  const categoryChips = ["All", ...input.categories]
+    .map(
+      (category, index) =>
+        `<button class="customhouse-creator-content__chip${index === 0 ? " is-active" : ""}" type="button" data-creator-content-category="${escapeHtml(category)}" aria-pressed="${index === 0 ? "true" : "false"}">${escapeHtml(category)}</button>`,
+    )
+    .join("");
+  const featuredCreators = input.featuredCreators.length
+    ? input.featuredCreators
+        .map((creator) => {
+          const initials = creator.displayName
+            .split(/\s+/)
+            .slice(0, 2)
+            .map((part) => part[0] || "")
+            .join("")
+            .toUpperCase();
+          return `<article class="customhouse-creator-content__creator">
+            <a class="customhouse-creator-content__creator-media" href="${escapeHtml(creator.viewUrl)}" aria-label="View ${escapeHtml(creator.displayName)}">
+              ${
+                creator.profileImageUrl
+                  ? `<img src="${escapeHtml(creator.profileImageUrl)}" alt="${escapeHtml(creator.displayName)}" loading="lazy">`
+                  : `<span aria-hidden="true">${escapeHtml(initials || "CH")}</span>`
+              }
+            </a>
+            <div class="customhouse-creator-content__creator-copy">
+              <strong>${escapeHtml(creator.displayName)}</strong>
+              <small>@${escapeHtml(creator.publicHandle)}</small>
+              ${creator.categories.length ? `<p>${escapeHtml(creator.categories.slice(0, 2).join(" · "))}</p>` : ""}
+            </div>
+            <a class="customhouse-creator-content__creator-action" href="${escapeHtml(creator.viewUrl)}">VIEW CREATOR</a>
+          </article>`;
+        })
+        .join("")
+    : `<p class="customhouse-creator-content__empty-inline">Featured Creators will appear here when selected by CustomHouse.</p>`;
+  const checkboxGroup = (
+    title: string,
+    name: string,
+    values: Array<{ value: string; label: string }>,
+  ) =>
+    values.length
+      ? `<fieldset class="customhouse-creator-content__filter-group">
+          <legend>${escapeHtml(title)}</legend>
+          ${values
+            .map(
+              ({ value, label }) =>
+                `<label><input type="checkbox" name="${escapeHtml(name)}" value="${escapeHtml(value)}" data-creator-content-filter> <span>${escapeHtml(label)}</span></label>`,
+            )
+            .join("")}
+        </fieldset>`
+      : "";
+  const creatorFilters = checkboxGroup(
+    "Creator",
+    "creator",
+    input.filters.creators.map((creator) => ({
+      value: creator.id,
+      label: creator.displayName,
+    })),
+  );
+  const productTypeFilters = checkboxGroup(
+    "Product type",
+    "productType",
+    input.filters.productTypes.map((value) => ({ value, label: value })),
+  );
+  const sizeFilters = checkboxGroup(
+    "Size",
+    "size",
+    input.filters.sizes.map((value) => ({ value, label: value })),
+  );
+  const colorFilters = checkboxGroup(
+    "Color",
+    "color",
+    input.filters.colors.map((value) => ({ value, label: value })),
+  );
+  const availabilityFilters = input.products.length
+    ? checkboxGroup(
+        "Availability",
+        "availability",
+        [
+          { value: "available", label: "In stock" },
+          ...(input.filters.availability
+            ? [{ value: "unavailable", label: "Sold out" }]
+            : []),
+        ],
+      )
+    : "";
+  const priceFilter = input.filters.price
+    ? `<fieldset class="customhouse-creator-content__filter-group customhouse-creator-content__filter-group--price">
+        <legend>Price</legend>
+        <div>
+          <label>Min<input type="number" min="${escapeHtml(String(input.filters.price.min))}" max="${escapeHtml(String(input.filters.price.max))}" placeholder="${escapeHtml(String(input.filters.price.min))}" data-creator-content-price-min></label>
+          <label>Max<input type="number" min="${escapeHtml(String(input.filters.price.min))}" max="${escapeHtml(String(input.filters.price.max))}" placeholder="${escapeHtml(String(input.filters.price.max))}" data-creator-content-price-max></label>
+        </div>
+        <small>${escapeHtml(input.filters.price.currencyCode)}</small>
+      </fieldset>`
+    : "";
+  const productCards = input.products.length
+    ? input.products
+        .map((product) => {
+          const creatorInitial = product.creatorDisplayName.slice(0, 1).toUpperCase();
+          const price =
+            product.price.min === product.price.max
+              ? formatMoney(String(product.price.min), product.price.currencyCode)
+              : `${formatMoney(String(product.price.min), product.price.currencyCode)} – ${formatMoney(String(product.price.max), product.price.currencyCode)}`;
+          const searchText = [
+            product.creatorDisplayName,
+            product.creatorHandle,
+            product.creatorPublicHandle,
+            product.collectionName,
+            product.title,
+            product.productType,
+            ...product.creatorCategories,
+          ]
+            .join(" ")
+            .toLocaleLowerCase();
+          return `<article
+            class="customhouse-creator-content__product"
+            data-creator-content-product
+            data-search="${escapeHtml(searchText)}"
+            data-creator="${escapeHtml(product.creatorId)}"
+            data-categories="${escapeHtml(product.creatorCategories.map((value) => value.toLocaleLowerCase()).join("||"))}"
+            data-product-type="${escapeHtml(product.productType)}"
+            data-sizes="${escapeHtml(product.sizes.join("||"))}"
+            data-colors="${escapeHtml(product.colors.join("||"))}"
+            data-price-min="${escapeHtml(String(product.price.min))}"
+            data-price-max="${escapeHtml(String(product.price.max))}"
+            data-available="${product.available ? "true" : "false"}"
+            data-published="${escapeHtml(product.publishedAt || "")}">
+            <a class="customhouse-creator-content__product-media" href="${escapeHtml(product.viewUrl)}">
+              ${
+                product.imageUrl
+                  ? `<img src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(product.title)}" loading="lazy">`
+                  : `<span aria-hidden="true">CH</span>`
+              }
+              ${product.available ? "" : `<em>SOLD OUT</em>`}
+            </a>
+            <div class="customhouse-creator-content__product-body">
+              <a class="customhouse-creator-content__product-creator" href="${escapeHtml(product.creatorUrl)}">
+                <span class="customhouse-creator-content__mini-avatar">
+                  ${product.creatorAvatarUrl ? `<img src="${escapeHtml(product.creatorAvatarUrl)}" alt="" loading="lazy">` : escapeHtml(creatorInitial)}
+                </span>
+                <span><small>CustomHouse Creator</small><strong>${escapeHtml(product.creatorDisplayName)}</strong></span>
+              </a>
+              <h3><a href="${escapeHtml(product.viewUrl)}">${escapeHtml(product.title)}</a></h3>
+              <p class="customhouse-creator-content__product-type">${escapeHtml(product.productType)}</p>
+              <strong class="customhouse-creator-content__price">${escapeHtml(price)}</strong>
+              <a class="customhouse-creator-content__buy" href="${escapeHtml(product.viewUrl)}">BUY PRODUCT</a>
+            </div>
+          </article>`;
+        })
+        .join("")
+    : "";
+  return html(`<!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Creator Content | CustomHouse</title>
+        ${publicCss()}
+        <style>
+          .customhouse-creator-content-page{--cc-bg:#060708;--cc-panel:#111216;--cc-panel-2:#17181d;--cc-line:#303139;--cc-text:#f7f7f4;--cc-muted:#a1a3ad;--cc-lime:#b7ff00;--cc-purple:#872cff;min-height:100vh;background:var(--cc-bg);color:var(--cc-text);font-family:Arial,Helvetica,sans-serif}.customhouse-creator-content-page *{box-sizing:border-box}.customhouse-creator-content-page a{color:inherit}.customhouse-creator-content__container{width:min(1440px,calc(100% - 48px));margin:0 auto}.customhouse-creator-content__breadcrumb{display:flex;gap:9px;align-items:center;padding:20px 0 14px;color:#7f818c;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.customhouse-creator-content__breadcrumb span:last-child{color:var(--cc-purple)}.customhouse-creator-content__hero{position:relative;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr);min-height:420px;overflow:hidden;border:1px solid var(--cc-line);background:linear-gradient(115deg,#07080a 0 48%,#181922 48% 100%)}.customhouse-creator-content__hero::after{position:absolute;right:-70px;bottom:-130px;width:340px;height:340px;border:60px solid rgba(135,44,255,.26);border-radius:50%;content:""}.customhouse-creator-content__hero-copy{position:relative;z-index:2;display:flex;flex-direction:column;justify-content:center;padding:52px}.customhouse-creator-content__eyebrow{margin:0 0 12px;color:var(--cc-lime);font-size:12px;font-weight:900;letter-spacing:.16em}.customhouse-creator-content__hero h1{max-width:700px;margin:0;font-size:clamp(54px,6vw,94px);font-style:italic;font-weight:950;letter-spacing:-.07em;line-height:.82}.customhouse-creator-content__hero h1 span{display:block;color:var(--cc-lime)}.customhouse-creator-content__hero-copy>p:last-child{max-width:600px;margin:26px 0 0;color:#d2d3d8;font-size:16px;line-height:1.55}.customhouse-creator-content__hero-art{position:relative;min-height:420px;overflow:hidden}.customhouse-creator-content__hero-shot{position:absolute;display:block;overflow:hidden;border:1px solid rgba(255,255,255,.2);background:#0d0e12;box-shadow:0 24px 60px rgba(0,0,0,.5)}.customhouse-creator-content__hero-shot img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__hero-shot--1{right:6%;top:7%;width:55%;height:82%;transform:rotate(3deg)}.customhouse-creator-content__hero-shot--2{left:2%;bottom:5%;width:38%;height:56%;transform:rotate(-7deg)}.customhouse-creator-content__hero-shot--3{right:1%;bottom:-7%;width:31%;height:45%;transform:rotate(8deg)}.customhouse-creator-content__hero-monogram{position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.08);font-size:180px;font-weight:950}.customhouse-creator-content__benefits{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--cc-line);border-top:0;background:#0d0e11}.customhouse-creator-content__benefit{display:grid;grid-template-columns:38px 1fr;gap:10px;align-items:center;min-height:82px;padding:14px 22px;border-right:1px solid var(--cc-line)}.customhouse-creator-content__benefit:last-child{border-right:0}.customhouse-creator-content__benefit b{color:var(--cc-lime);font-size:22px}.customhouse-creator-content__benefit strong,.customhouse-creator-content__benefit small{display:block}.customhouse-creator-content__benefit strong{font-size:12px}.customhouse-creator-content__benefit small{margin-top:4px;color:var(--cc-muted);font-size:10px}.customhouse-creator-content__discovery{padding:42px 0 82px}.customhouse-creator-content__search{position:relative}.customhouse-creator-content__search input{width:100%;height:58px;border:1px solid var(--cc-line);border-radius:6px;outline:0;background:var(--cc-panel);color:var(--cc-text);padding:0 58px 0 20px;font:700 14px/1 Arial}.customhouse-creator-content__search input:focus{border-color:var(--cc-purple);box-shadow:0 0 0 3px rgba(135,44,255,.18)}.customhouse-creator-content__search span{position:absolute;right:20px;top:50%;transform:translateY(-50%);color:var(--cc-lime);font-size:24px}.customhouse-creator-content__chips{display:flex;gap:9px;overflow:auto;padding:16px 0 4px;scrollbar-width:none}.customhouse-creator-content__chips::-webkit-scrollbar{display:none}.customhouse-creator-content__chip{flex:0 0 auto;min-height:37px;border:1px solid var(--cc-line);border-radius:999px;background:var(--cc-panel);color:var(--cc-text);padding:0 17px;font-size:11px;font-weight:800;cursor:pointer}.customhouse-creator-content__chip.is-active{border-color:var(--cc-lime);background:rgba(183,255,0,.09);color:var(--cc-lime)}.customhouse-creator-content__section-heading{display:flex;align-items:end;justify-content:space-between;gap:20px;margin:42px 0 18px}.customhouse-creator-content__section-heading p{margin:0 0 7px;color:var(--cc-lime);font-size:11px;font-weight:900;letter-spacing:.14em}.customhouse-creator-content__section-heading h2{margin:0;font-size:clamp(28px,3vw,44px);letter-spacing:-.05em}.customhouse-creator-content__featured{display:flex;gap:12px;overflow:auto;padding:0 0 10px;scroll-snap-type:x proximity}.customhouse-creator-content__creator{display:grid;grid-template-columns:68px minmax(120px,1fr);grid-template-rows:auto auto;gap:10px 13px;min-width:285px;max-width:330px;flex:1 0 285px;border:1px solid var(--cc-line);border-radius:10px;background:linear-gradient(145deg,var(--cc-panel-2),#0b0c0f);padding:14px;scroll-snap-align:start}.customhouse-creator-content__creator-media{grid-row:1/3;width:68px;height:68px;overflow:hidden;border:2px solid var(--cc-purple);border-radius:50%;background:#20152d;text-decoration:none}.customhouse-creator-content__creator-media img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__creator-media span{display:grid;width:100%;height:100%;place-items:center;color:var(--cc-lime);font-size:20px;font-weight:900}.customhouse-creator-content__creator-copy{min-width:0}.customhouse-creator-content__creator-copy strong,.customhouse-creator-content__creator-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.customhouse-creator-content__creator-copy small,.customhouse-creator-content__creator-copy p{color:var(--cc-muted);font-size:10px}.customhouse-creator-content__creator-copy p{margin:5px 0 0}.customhouse-creator-content__creator-action{justify-self:start;color:var(--cc-lime);font-size:10px;font-weight:900;text-decoration:none}.customhouse-creator-content__empty-inline{color:var(--cc-muted)}.customhouse-creator-content__toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:38px 0 14px}.customhouse-creator-content__toolbar-left{display:flex;align-items:center;gap:12px}.customhouse-creator-content__toolbar button,.customhouse-creator-content__toolbar select{height:42px;border:1px solid var(--cc-line);border-radius:6px;background:var(--cc-panel);color:var(--cc-text);padding:0 14px;font-size:11px;font-weight:800}.customhouse-creator-content__filter-open{display:none}.customhouse-creator-content__active-filters{display:flex;gap:7px;flex-wrap:wrap}.customhouse-creator-content__active-filters button{height:30px;border-color:rgba(135,44,255,.7);color:#d8c2ff}.customhouse-creator-content__results{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px}.customhouse-creator-content__filters{position:sticky;top:18px;align-self:start;border:1px solid var(--cc-line);border-radius:8px;background:var(--cc-panel);padding:18px}.customhouse-creator-content__filter-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--cc-line);padding:0 0 14px}.customhouse-creator-content__filter-head h3{margin:0;font-size:15px}.customhouse-creator-content__filter-head button{border:0;background:none;color:var(--cc-lime);font-size:10px;font-weight:800;cursor:pointer}.customhouse-creator-content__filter-close{display:none}.customhouse-creator-content__filter-group{display:grid;gap:9px;margin:0;padding:17px 0;border:0;border-bottom:1px solid var(--cc-line)}.customhouse-creator-content__filter-group legend{padding:0 0 4px;font-size:11px;font-weight:900;text-transform:uppercase}.customhouse-creator-content__filter-group>label{display:flex;align-items:center;gap:8px;color:#d3d4da;font-size:11px}.customhouse-creator-content__filter-group input[type=checkbox]{width:16px;height:16px;accent-color:var(--cc-purple)}.customhouse-creator-content__filter-group--price>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}.customhouse-creator-content__filter-group--price label{display:grid;gap:5px;color:var(--cc-muted);font-size:9px}.customhouse-creator-content__filter-group--price input{min-width:0;width:100%;height:36px;border:1px solid var(--cc-line);border-radius:4px;background:#08090b;color:var(--cc-text);padding:0 8px}.customhouse-creator-content__filter-group--price small{color:var(--cc-muted)}.customhouse-creator-content__grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}.customhouse-creator-content__product{min-width:0;overflow:hidden;border:1px solid var(--cc-line);border-radius:8px;background:var(--cc-panel)}.customhouse-creator-content__product[hidden]{display:none}.customhouse-creator-content__product-media{position:relative;display:block;aspect-ratio:1/1;overflow:hidden;background:radial-gradient(circle at 50% 40%,#292b32,#0c0d10 72%)}.customhouse-creator-content__product-media img{width:100%;height:100%;object-fit:contain;transition:transform .25s ease}.customhouse-creator-content__product:hover .customhouse-creator-content__product-media img{transform:scale(1.025)}.customhouse-creator-content__product-media>span{display:grid;width:100%;height:100%;place-items:center;color:#2c2e36;font-size:70px;font-weight:950}.customhouse-creator-content__product-media em{position:absolute;left:10px;top:10px;border-radius:4px;background:#07080a;color:#fff;padding:6px 8px;font-size:9px;font-style:normal;font-weight:900}.customhouse-creator-content__product-body{display:grid;gap:9px;padding:12px}.customhouse-creator-content__product-creator{display:flex;align-items:center;gap:8px;text-decoration:none}.customhouse-creator-content__mini-avatar{display:grid;width:28px;height:28px;flex:0 0 28px;place-items:center;overflow:hidden;border:1px solid var(--cc-purple);border-radius:50%;background:#211431;color:var(--cc-lime);font-size:10px;font-weight:900}.customhouse-creator-content__mini-avatar img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__product-creator small,.customhouse-creator-content__product-creator strong{display:block}.customhouse-creator-content__product-creator small{color:var(--cc-muted);font-size:8px}.customhouse-creator-content__product-creator strong{font-size:10px}.customhouse-creator-content__product h3{min-height:34px;margin:0;font-size:13px;line-height:1.3}.customhouse-creator-content__product h3 a{text-decoration:none}.customhouse-creator-content__product-type{margin:0;color:var(--cc-muted);font-size:9px}.customhouse-creator-content__price{color:var(--cc-lime);font-size:13px}.customhouse-creator-content__buy{display:grid;min-height:37px;place-items:center;border:1px solid var(--cc-purple);border-radius:4px;color:#fff;font-size:10px;font-weight:900;text-decoration:none}.customhouse-creator-content__buy:hover{background:var(--cc-purple)}.customhouse-creator-content__empty{display:none;min-height:280px;place-items:center;border:1px dashed var(--cc-line);color:var(--cc-muted);text-align:center}.customhouse-creator-content__empty.is-visible{display:grid}.customhouse-creator-content__load-more{display:block;min-width:180px;height:44px;margin:24px auto 0;border:1px solid var(--cc-purple);border-radius:5px;background:var(--cc-purple);color:#fff;font-weight:900;cursor:pointer}.customhouse-creator-content__load-more[hidden]{display:none}.customhouse-creator-content__drawer-overlay{display:none}
+          @media(max-width:1279px){.customhouse-creator-content__container{width:min(1120px,calc(100% - 36px))}.customhouse-creator-content__hero{grid-template-columns:1fr .8fr}.customhouse-creator-content__hero-copy{padding:42px}.customhouse-creator-content__benefits{grid-template-columns:repeat(2,1fr)}.customhouse-creator-content__benefit:nth-child(2){border-right:0}.customhouse-creator-content__benefit:nth-child(-n+2){border-bottom:1px solid var(--cc-line)}.customhouse-creator-content__grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+          @media(max-width:900px){.customhouse-creator-content__hero{grid-template-columns:1fr minmax(260px,.62fr)}.customhouse-creator-content__results{grid-template-columns:1fr}.customhouse-creator-content__filter-open{display:block}.customhouse-creator-content__filters{position:fixed;z-index:1001;top:0;right:0;width:min(390px,92vw);height:100dvh;overflow:auto;border-radius:0;transform:translateX(105%);transition:transform .2s ease}.customhouse-creator-content__filters.is-open{transform:translateX(0)}.customhouse-creator-content__filter-close{display:block}.customhouse-creator-content__drawer-overlay{position:fixed;z-index:1000;inset:0;display:none;border:0;background:rgba(0,0,0,.72)}.customhouse-creator-content__drawer-overlay.is-open{display:block}.customhouse-creator-content__grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+          @media(max-width:767px){.customhouse-creator-content__container{width:min(100% - 24px,620px)}.customhouse-creator-content__breadcrumb{padding-top:14px}.customhouse-creator-content__hero{display:block;min-height:0}.customhouse-creator-content__hero-copy{padding:34px 24px 28px}.customhouse-creator-content__hero h1{font-size:clamp(48px,17vw,72px)}.customhouse-creator-content__hero-copy>p:last-child{font-size:13px}.customhouse-creator-content__hero-art{min-height:250px}.customhouse-creator-content__hero-shot--1{right:7%;width:58%;height:82%}.customhouse-creator-content__benefits{grid-template-columns:1fr 1fr}.customhouse-creator-content__benefit{grid-template-columns:28px 1fr;min-height:74px;padding:10px}.customhouse-creator-content__benefit b{font-size:18px}.customhouse-creator-content__discovery{padding:26px 0 58px}.customhouse-creator-content__search input{height:52px;font-size:12px}.customhouse-creator-content__section-heading{margin-top:30px}.customhouse-creator-content__section-heading h2{font-size:30px}.customhouse-creator-content__creator{min-width:250px;flex-basis:250px}.customhouse-creator-content__toolbar{align-items:stretch;flex-direction:column}.customhouse-creator-content__toolbar-left{justify-content:space-between}.customhouse-creator-content__toolbar select{width:100%}.customhouse-creator-content__active-filters:empty{display:none}.customhouse-creator-content__grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.customhouse-creator-content__product-body{padding:10px}.customhouse-creator-content__product h3{font-size:11px}.customhouse-creator-content__product-creator small{display:none}.customhouse-creator-content__buy{font-size:9px}.customhouse-creator-content__price{font-size:11px}}
+          @media(max-width:767px){.customhouse-creator-content__hero h1{font-size:clamp(44px,15vw,72px)}}
+          @media(max-width:390px){.customhouse-creator-content__container{width:calc(100% - 18px)}.customhouse-creator-content__hero-copy{padding-left:18px;padding-right:18px}.customhouse-creator-content__benefit strong{font-size:10px}.customhouse-creator-content__benefit small{font-size:8px}.customhouse-creator-content__mini-avatar{display:none}}
+        </style>
+      </head>
+      <body>
+        ${siteHeader(input.headerAccount, "creatorContent")}
+        <main class="customhouse-creator-content-page" data-creator-content-root>
+          <div class="customhouse-creator-content__container">
+            <nav class="customhouse-creator-content__breadcrumb" aria-label="Breadcrumb"><a href="/">HOME</a><span>›</span><a href="/pages/collections">COLLECTIONS</a><span>›</span><span>CREATOR CONTENT</span></nav>
+            <section class="customhouse-creator-content__hero">
+              <div class="customhouse-creator-content__hero-copy">
+                <p class="customhouse-creator-content__eyebrow">FROM THE COMMUNITY</p>
+                <h1>CREATOR <span>CONTENT</span></h1>
+                <p>Discover unique designs from CustomHouse creators. Explore their collections and shop published designs with locked Creator artwork.</p>
+              </div>
+              <div class="customhouse-creator-content__hero-art" aria-hidden="true">${heroArt}</div>
+            </section>
+            <section class="customhouse-creator-content__benefits" aria-label="Creator Content benefits">
+              <div class="customhouse-creator-content__benefit"><b>◇</b><span><strong>CREATOR COLLECTIONS</strong><small>Exclusive creator designs</small></span></div>
+              <div class="customhouse-creator-content__benefit"><b>◎</b><span><strong>DISCOVER CREATORS</strong><small>Explore creators and new drops</small></span></div>
+              <div class="customhouse-creator-content__benefit"><b>✦</b><span><strong>LIMITED DROPS</strong><small>Creator releases &amp; collaborations</small></span></div>
+              <div class="customhouse-creator-content__benefit"><b>▱</b><span><strong>WORLDWIDE SHIPPING</strong><small>Fast and reliable</small></span></div>
+            </section>
+            <div class="customhouse-creator-content__discovery">
+              <label class="customhouse-creator-content__search">
+                <input type="search" placeholder="Search creators, collections, designs or tags…" autocomplete="off" data-creator-content-search>
+                <span aria-hidden="true">⌕</span>
+              </label>
+              <div class="customhouse-creator-content__chips" aria-label="Creator interests">${categoryChips}</div>
+              <div class="customhouse-creator-content__section-heading"><div><p>DISCOVER THE COMMUNITY</p><h2>Featured Creators</h2></div></div>
+              <section class="customhouse-creator-content__featured" aria-label="Featured Creators">${featuredCreators}</section>
+              <div class="customhouse-creator-content__toolbar">
+                <div class="customhouse-creator-content__toolbar-left"><button class="customhouse-creator-content__filter-open" type="button" data-creator-content-filter-open>FILTERS</button><strong><span data-creator-content-count>${input.products.length}</span> PRODUCTS</strong></div>
+                <label><span class="visually-hidden">Sort products</span><select data-creator-content-sort><option value="newest">Newest</option><option value="price-asc">Price: low to high</option><option value="price-desc">Price: high to low</option></select></label>
+              </div>
+              <div class="customhouse-creator-content__active-filters" data-creator-content-active-filters></div>
+              <div class="customhouse-creator-content__results">
+                <aside class="customhouse-creator-content__filters" data-creator-content-filter-drawer aria-label="Product filters">
+                  <div class="customhouse-creator-content__filter-head"><h3>FILTERS</h3><button type="button" data-creator-content-clear>CLEAR ALL</button><button class="customhouse-creator-content__filter-close" type="button" data-creator-content-filter-close aria-label="Close filters">✕</button></div>
+                  ${creatorFilters}${productTypeFilters}${sizeFilters}${colorFilters}${priceFilter}${availabilityFilters}
+                </aside>
+                <div>
+                  <div class="customhouse-creator-content__grid" data-creator-content-grid>${productCards}</div>
+                  <div class="customhouse-creator-content__empty${input.products.length ? "" : " is-visible"}" data-creator-content-empty><p>No published Creator products match these filters.</p></div>
+                  <button class="customhouse-creator-content__load-more" type="button" data-creator-content-load-more${input.products.length > 24 ? "" : " hidden"}>LOAD MORE</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <button class="customhouse-creator-content__drawer-overlay" type="button" data-creator-content-filter-close aria-label="Close filters"></button>
+        </main>
+        ${siteFooter()}
+        <script>
+          (() => {
+            const root = document.querySelector("[data-creator-content-root]");
+            if (!root) return;
+            const search = root.querySelector("[data-creator-content-search]");
+            const cards = Array.from(root.querySelectorAll("[data-creator-content-product]"));
+            const grid = root.querySelector("[data-creator-content-grid]");
+            const count = root.querySelector("[data-creator-content-count]");
+            const empty = root.querySelector("[data-creator-content-empty]");
+            const sort = root.querySelector("[data-creator-content-sort]");
+            const loadMore = root.querySelector("[data-creator-content-load-more]");
+            const drawer = root.querySelector("[data-creator-content-filter-drawer]");
+            const overlay = root.querySelector(".customhouse-creator-content__drawer-overlay");
+            const activeFilters = root.querySelector("[data-creator-content-active-filters]");
+            let activeCategory = "all";
+            let visibleLimit = 24;
+            let timer = 0;
+            const selected = (name) => Array.from(root.querySelectorAll('input[name="' + name + '"]:checked')).map((input) => input.value);
+            const values = (card, key) => String(card.dataset[key] || "").split("||").filter(Boolean);
+            const intersects = (selectedValues, cardValues) => !selectedValues.length || selectedValues.some((value) => cardValues.includes(value));
+            const setDrawer = (open) => {
+              if (!drawer || !overlay) return;
+              drawer.classList.toggle("is-open", open);
+              overlay.classList.toggle("is-open", open);
+              drawer.setAttribute("aria-hidden", open ? "false" : "true");
+              document.documentElement.style.overflow = open ? "hidden" : "";
+            };
+            const renderActiveFilters = () => {
+              if (!activeFilters) return;
+              const labels = [];
+              if (activeCategory !== "all") labels.push(activeCategory);
+              root.querySelectorAll("[data-creator-content-filter]:checked").forEach((input) => labels.push(input.parentElement?.innerText.trim() || input.value));
+              const min = root.querySelector("[data-creator-content-price-min]")?.value;
+              const max = root.querySelector("[data-creator-content-price-max]")?.value;
+              if (min) labels.push("Min " + min);
+              if (max) labels.push("Max " + max);
+              activeFilters.innerHTML = labels.map((label) => '<button type="button" data-creator-content-clear>' + String(label).replace(/[&<>"']/g, "") + ' ×</button>').join("");
+            };
+            const applyFilters = () => {
+              const query = String(search?.value || "").trim().toLocaleLowerCase();
+              const creators = selected("creator");
+              const productTypes = selected("productType");
+              const sizes = selected("size");
+              const colors = selected("color");
+              const availability = selected("availability");
+              const minValue = root.querySelector("[data-creator-content-price-min]")?.value || "";
+              const maxValue = root.querySelector("[data-creator-content-price-max]")?.value || "";
+              const min = minValue ? Number(minValue) : Number.NaN;
+              const max = maxValue ? Number(maxValue) : Number.NaN;
+              const matching = cards.filter((card) => {
+                const categoryMatch = activeCategory === "all" || values(card, "categories").includes(activeCategory.toLocaleLowerCase());
+                const available = card.dataset.available === "true";
+                const availabilityMatch = !availability.length || (available && availability.includes("available")) || (!available && availability.includes("unavailable"));
+                return (!query || String(card.dataset.search || "").includes(query)) && categoryMatch && intersects(creators, [card.dataset.creator || ""]) && intersects(productTypes, [card.dataset.productType || ""]) && intersects(sizes, values(card, "sizes")) && intersects(colors, values(card, "colors")) && availabilityMatch && (!Number.isFinite(min) || Number(card.dataset.priceMax) >= min) && (!Number.isFinite(max) || Number(card.dataset.priceMin) <= max);
+              });
+              matching.sort((left, right) => {
+                if (sort?.value === "price-asc") return Number(left.dataset.priceMin) - Number(right.dataset.priceMin);
+                if (sort?.value === "price-desc") return Number(right.dataset.priceMax) - Number(left.dataset.priceMax);
+                return String(right.dataset.published || "").localeCompare(String(left.dataset.published || ""));
+              });
+              cards.filter((card) => !matching.includes(card)).forEach((card) => { card.hidden = true; });
+              matching.forEach((card, index) => { card.hidden = index >= visibleLimit; grid?.append(card); });
+              if (count) count.textContent = String(matching.length);
+              empty?.classList.toggle("is-visible", matching.length === 0);
+              if (loadMore) loadMore.hidden = matching.length <= visibleLimit;
+              renderActiveFilters();
+            };
+            search?.addEventListener("input", () => {
+              window.clearTimeout(timer);
+              visibleLimit = 24;
+              timer = window.setTimeout(applyFilters, 180);
+            });
+            root.querySelectorAll("[data-creator-content-category]").forEach((chip) => chip.addEventListener("click", () => {
+              activeCategory = String(chip.dataset.creatorContentCategory || "all").toLocaleLowerCase();
+              root.querySelectorAll("[data-creator-content-category]").forEach((item) => {
+                const active = item === chip;
+                item.classList.toggle("is-active", active);
+                item.setAttribute("aria-pressed", active ? "true" : "false");
+              });
+              visibleLimit = 24;
+              applyFilters();
+            }));
+            root.querySelectorAll("[data-creator-content-filter], [data-creator-content-price-min], [data-creator-content-price-max]").forEach((input) => input.addEventListener("input", () => { visibleLimit = 24; applyFilters(); }));
+            sort?.addEventListener("change", applyFilters);
+            loadMore?.addEventListener("click", () => { visibleLimit += 24; applyFilters(); });
+            root.addEventListener("click", (event) => {
+              if (!event.target.closest("[data-creator-content-clear]")) return;
+              root.querySelectorAll("[data-creator-content-filter]").forEach((input) => { input.checked = false; });
+              root.querySelectorAll("[data-creator-content-price-min], [data-creator-content-price-max]").forEach((input) => { input.value = ""; });
+              activeCategory = "all";
+              root.querySelectorAll("[data-creator-content-category]").forEach((item, index) => { item.classList.toggle("is-active", index === 0); item.setAttribute("aria-pressed", index === 0 ? "true" : "false"); });
+              visibleLimit = 24;
+              applyFilters();
+            });
+            root.querySelector("[data-creator-content-filter-open]")?.addEventListener("click", () => setDrawer(true));
+            root.querySelectorAll("[data-creator-content-filter-close]").forEach((button) => button.addEventListener("click", () => setDrawer(false)));
+            document.addEventListener("keydown", (event) => { if (event.key === "Escape") setDrawer(false); });
+            applyFilters();
+          })();
+        </script>
+        ${siteShellScript()}
+      </body>
+    </html>`);
 }
 
 export function collectionHtml(input: {
@@ -1771,6 +2119,9 @@ function safeSegment(value: string, label: string): string {
 export function parseProxyRoute(splat = ""): ProxyRoute {
   const parts = splat.split("/").filter(Boolean);
   if (parts.length === 0) return { kind: "base" };
+  if (parts.length === 1 && parts[0] === "creator-content") {
+    return { kind: "creatorContent" };
+  }
   if (parts.length === 1 && parts[0] === "creators") {
     return { kind: "creators" };
   }
@@ -1907,6 +2258,30 @@ export async function handleStorefrontProxy(
           message: "Custom House Shopify App Proxy is working",
           customer,
         });
+      case "creatorContent":
+        if (request.method !== "GET") {
+          return failure(
+            "METHOD_NOT_ALLOWED",
+            "Creator Content only supports GET requests.",
+            405,
+          );
+        }
+        if (!context.client) {
+          throw new DomainError(
+            "SHOP_NOT_INSTALLED",
+            "The marketplace app is not available.",
+            503,
+          );
+        }
+        {
+          const content = await loadPublicCreatorContent(context.shop, context.client);
+          return wantsJson(request)
+            ? success({ route: "creatorContent", ...content })
+            : creatorContentHtml({
+                ...content,
+                headerAccount: await siteHeaderAccount(context),
+              });
+        }
       case "creators":
         if (request.method !== "GET") {
           return failure(

@@ -6,6 +6,14 @@ import {
   loadPublicCreatorContent,
   saveFeaturedCreatorOrder,
 } from "../app/services/creator-content.server.ts";
+import {
+  creatorContentHtml,
+  parseProxyRoute,
+} from "../app/services/storefront-proxy.server.ts";
+
+type AdminContentDb = Parameters<typeof listFeaturedCreatorAdminState>[2];
+type PublicContentClient = Parameters<typeof loadPublicCreatorContent>[1];
+type PublicContentDb = Parameters<typeof loadPublicCreatorContent>[2];
 
 type CreatorRow = {
   id: string;
@@ -103,10 +111,15 @@ function fakeFeaturedDb() {
     creators,
     featured,
     creator: {
-      async findMany(args: Record<string, any>) {
-        const shop = String(args.where?.shop || "");
-        const ids = args.where?.id?.in as string[] | undefined;
-        const query = String(args.where?.OR?.[0]?.displayName?.contains || "").toLowerCase();
+      async findMany(args: Record<string, unknown>) {
+        const where = (args.where || {}) as {
+          shop?: string;
+          id?: { in?: string[] };
+          OR?: Array<{ displayName?: { contains?: string } }>;
+        };
+        const shop = String(where.shop || "");
+        const ids = where.id?.in;
+        const query = String(where.OR?.[0]?.displayName?.contains || "").toLowerCase();
         return creators
           .filter((creator) => eligible(creator, shop))
           .filter((creator) => !ids || ids.includes(creator.id))
@@ -123,25 +136,28 @@ function fakeFeaturedDb() {
       },
     },
     featuredCreator: {
-      async findMany(args: Record<string, any>) {
+      async findMany(args: Record<string, unknown>) {
+        const where = (args.where || {}) as { shop?: string };
         return featured
-          .filter((item) => item.shop === args.where.shop)
+          .filter((item) => item.shop === where.shop)
           .sort((left, right) => left.position - right.position)
           .map((item) => ({
             ...item,
             creator: creators.find((creator) => creator.id === item.creatorId),
           }));
       },
-      async deleteMany(args: Record<string, any>) {
+      async deleteMany(args: Record<string, unknown>) {
+        const where = (args.where || {}) as { shop?: string };
         for (let index = featured.length - 1; index >= 0; index -= 1) {
-          if (featured[index]?.shop === args.where.shop) featured.splice(index, 1);
+          if (featured[index]?.shop === where.shop) featured.splice(index, 1);
         }
       },
-      async createMany(args: Record<string, any>) {
-        featured.push(...args.data.map((item: any, index: number) => ({ id: `featured-${index}`, ...item })));
+      async createMany(args: Record<string, unknown>) {
+        const data = args.data as Array<{ shop: string; creatorId: string; position: number }>;
+        featured.push(...data.map((item, index) => ({ id: `featured-${index}`, ...item })));
       },
     },
-    async $transaction(callback: (transaction: any) => Promise<unknown>) {
+    async $transaction(callback: (transaction: unknown) => Promise<unknown>) {
       return callback(db);
     },
   };
@@ -168,7 +184,7 @@ test("admin state exposes only approved Creators with active public published wo
   const result = await listFeaturedCreatorAdminState(
     "shop.myshopify.com",
     "creator",
-    db as any,
+    db as unknown as AdminContentDb,
   );
 
   assert.deepEqual(result.candidates.map((creator) => creator.id), ["creator-a", "creator-b"]);
@@ -182,7 +198,7 @@ test("admin save persists exact featured ordering and supports removal", async (
   await saveFeaturedCreatorOrder(
     "shop.myshopify.com",
     ["creator-b", "creator-a"],
-    db as any,
+    db as unknown as AdminContentDb,
   );
   assert.deepEqual(
     db.featured.map((item) => [item.creatorId, item.position]),
@@ -192,7 +208,7 @@ test("admin save persists exact featured ordering and supports removal", async (
   await saveFeaturedCreatorOrder(
     "shop.myshopify.com",
     ["creator-a"],
-    db as any,
+    db as unknown as AdminContentDb,
   );
   assert.deepEqual(
     db.featured.map((item) => [item.creatorId, item.position]),
@@ -202,18 +218,18 @@ test("admin save persists exact featured ordering and supports removal", async (
 
 test("admin save rejects duplicates, suspended Creators, and cross-shop IDs before writing", async () => {
   const db = fakeFeaturedDb();
-  await saveFeaturedCreatorOrder("shop.myshopify.com", ["creator-a"], db as any);
+  await saveFeaturedCreatorOrder("shop.myshopify.com", ["creator-a"], db as unknown as AdminContentDb);
 
   await assert.rejects(
-    () => saveFeaturedCreatorOrder("shop.myshopify.com", ["creator-a", "creator-a"], db as any),
+    () => saveFeaturedCreatorOrder("shop.myshopify.com", ["creator-a", "creator-a"], db as unknown as AdminContentDb),
     /only once/i,
   );
   await assert.rejects(
-    () => saveFeaturedCreatorOrder("shop.myshopify.com", ["creator-suspended"], db as any),
+    () => saveFeaturedCreatorOrder("shop.myshopify.com", ["creator-suspended"], db as unknown as AdminContentDb),
     /approved Creator/i,
   );
   await assert.rejects(
-    () => saveFeaturedCreatorOrder("shop.myshopify.com", ["creator-other-shop"], db as any),
+    () => saveFeaturedCreatorOrder("shop.myshopify.com", ["creator-other-shop"], db as unknown as AdminContentDb),
     /approved Creator/i,
   );
   assert.deepEqual(db.featured.map((item) => item.creatorId), ["creator-a"]);
@@ -221,14 +237,14 @@ test("admin save rejects duplicates, suspended Creators, and cross-shop IDs befo
 
 test("stale featured records are suppressed when a Creator becomes suspended", async () => {
   const db = fakeFeaturedDb();
-  await saveFeaturedCreatorOrder("shop.myshopify.com", ["creator-a"], db as any);
+  await saveFeaturedCreatorOrder("shop.myshopify.com", ["creator-a"], db as unknown as AdminContentDb);
   db.creators[0]!.status = "SUSPENDED";
   db.creators[0]!.marketplaceCollection!.status = "SUSPENDED";
 
   const state = await listFeaturedCreatorAdminState(
     "shop.myshopify.com",
     "",
-    db as any,
+    db as unknown as AdminContentDb,
   );
   assert.deepEqual(state.selected, []);
 });
@@ -393,8 +409,8 @@ test("public Creator Content uses one batched Shopify query and canonical routes
   const { db, shopify, requests } = fakePublicDiscovery();
   const result = await loadPublicCreatorContent(
     "shop.myshopify.com",
-    shopify as any,
-    db as any,
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
   );
 
   assert.equal(requests.length, 1);
@@ -414,8 +430,8 @@ test("public Creator Content exposes real price and variant facets only", async 
   const { db, shopify } = fakePublicDiscovery();
   const result = await loadPublicCreatorContent(
     "shop.myshopify.com",
-    shopify as any,
-    db as any,
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
   );
   const alpha = result.products.find((product) => product.id === "creator-product-a")!;
 
@@ -433,10 +449,89 @@ test("public Creator Content suppresses missing, inactive, or non-buy-only Shopi
   const { db, shopify } = fakePublicDiscovery();
   const result = await loadPublicCreatorContent(
     "shop.myshopify.com",
-    shopify as any,
-    db as any,
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
   );
 
   assert.equal(result.products.some((product) => product.id === "creator-product-invalid"), false);
   assert.equal(result.products.every((product) => product.available), true);
+});
+
+test("Creator Content app-proxy route is deterministic", () => {
+  assert.deepEqual(parseProxyRoute("creator-content"), { kind: "creatorContent" });
+});
+
+test("Creator Content is added to theme navigation without duplicating merchant links", () => {
+  const fallback = readFileSync(
+    "theme-live-cart/snippets/customhouse-creator-content-menu-fallback.liquid",
+    "utf8",
+  );
+  const desktopHeader = readFileSync(
+    "theme-live-cart/blocks/_header-menu.liquid",
+    "utf8",
+  );
+  const drawer = readFileSync(
+    "theme-live-cart/snippets/header-drawer.liquid",
+    "utf8",
+  );
+
+  assert.match(fallback, /where:\s*'url',\s*'\/apps\/customhouse\/creator-content'/);
+  assert.match(fallback, /CREATOR CONTENT/);
+  assert.match(desktopHeader, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'mobile_bar'/);
+  assert.match(desktopHeader, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'desktop'/);
+  assert.match(drawer, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'drawer'/);
+});
+
+test("Creator Content renderer provides responsive real-data discovery without customization controls", async () => {
+  const { db, shopify } = fakePublicDiscovery();
+  const data = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+  const response = creatorContentHtml({
+    ...data,
+    headerAccount: { loggedIn: false },
+  });
+  const markup = await response.text();
+  const pageMarkup = markup.match(/<main class="customhouse-creator-content-page"[\s\S]*?<\/main>/)?.[0] || "";
+
+  assert.equal(response.status, 200);
+  assert.match(markup, /class="customhouse-creator-content-page"/);
+  assert.match(markup, /HOME[\s\S]*CREATOR CONTENT/);
+  assert.match(markup, /Discover unique designs from CustomHouse creators/);
+  assert.match(markup, /data-creator-content-search/);
+  assert.match(markup, /data-creator-content-category="Streetwear"/);
+  assert.match(markup, /Featured Creators/);
+  assert.match(markup, /href="\/apps\/customhouse\/creators\/beta-b1c2d"/);
+  assert.match(markup, /href="\/apps\/customhouse\/creators\/beta-b1c2d\/products\/creator-product-b"/);
+  assert.match(markup, />BUY PRODUCT</);
+  assert.match(markup, /data-creator-content-filter-drawer/);
+  assert.match(markup, /data-creator-content-sort/);
+  assert.match(markup, /Price: low to high/);
+  assert.match(markup, /@media\(max-width:1279px\)/);
+  assert.match(markup, /@media\(max-width:767px\)/);
+  assert.match(markup, /customhouse-creator-content__hero h1\{font-size:clamp\(44px,15vw,72px\)\}/);
+  assert.match(markup, /setTimeout\(applyFilters, 180\)/);
+  assert.match(markup, /minValue \? Number\(minValue\) : Number\.NaN/);
+  assert.match(markup, /maxValue \? Number\(maxValue\) : Number\.NaN/);
+  assert.match(markup, /class="customhouse-header__nav"[\s\S]*CREATOR CONTENT/);
+  assert.match(markup, /class="customhouse-mobile-drawer__nav"[\s\S]*CREATOR CONTENT/);
+  assert.match(markup, /href="\/apps\/customhouse\/creator-content"[^>]*aria-current="page"/);
+  assert.match(markup, /@media screen and \(min-width:901px\) and \(max-width:1500px\)/);
+  for (const [, source] of markup.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
+    assert.doesNotThrow(() => new Function(source));
+  }
+  assert.doesNotMatch(pageMarkup, />\s*Customize\s*</i);
+  assert.doesNotMatch(pageMarkup, /PitchPrint|Follow Creator|Wishlist|favorite/i);
+});
+
+test("Creator Content storefront handler loads the public service and reuses existing product routes", () => {
+  const source = readFileSync("app/services/storefront-proxy.server.ts", "utf8");
+
+  assert.match(source, /case "creatorContent":/);
+  assert.match(source, /loadPublicCreatorContent\(context\.shop, context\.client\)/);
+  assert.match(source, /creatorContentHtml\(\{/);
+  assert.match(source, /getCreatorProductStorefrontUrl/);
+  assert.doesNotMatch(source, /creatorContent.*showApp\(/i);
 });
