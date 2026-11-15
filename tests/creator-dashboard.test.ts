@@ -1062,6 +1062,19 @@ test("design review modal matches the responsive mobile submission sheet", () =>
     styles,
     /\.ch-design-review-modal \.ch-creator-modal__dialog footer \[data-dashboard-review-submit\]\s*\{[^}]*color: #fff !important;[^}]*background: linear-gradient\(135deg, #7c3aed, #5b22e8\) !important;/s,
   );
+  assert.match(styles, /Final Creator design review: light, high-contrast submission workspace/);
+  assert.match(
+    styles,
+    /\.ch-design-review-modal \.ch-creator-content-editor strong,[\s\S]*color: #1d2939;/,
+  );
+  assert.match(
+    styles,
+    /\.ch-design-review-modal \.ch-creator-content-editor__add input\s*\{[^}]*color: #1d2939;[^}]*background: #fff;/s,
+  );
+  assert.match(
+    styles,
+    /\.ch-design-review-modal \.ch-creator-content-editor__toggle input:checked\s*\{[^}]*background: linear-gradient\(135deg, #7c3aed, #5b22e8\);/s,
+  );
   assert.match(styles, /\.ch-submit-feedback-modal__body > \.material-symbols-outlined\s*\{[^}]*background: #dcfae6;/s);
   assert.match(styles, /\.ch-submit-feedback-modal--error \.ch-submit-feedback-modal__body > \.material-symbols-outlined\s*\{[^}]*background: #fee4e2;/s);
   assert.doesNotMatch(
