@@ -545,6 +545,60 @@ async function validFeaturedCreatorIds(
   return valid;
 }
 
+function publicHttpsUrl(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolvePublicProfileImageUrls(
+  storedValues: Array<string | null | undefined>,
+  client: ShopifyGraphqlClient,
+) {
+  const uniqueValues = [...new Set(storedValues.filter(
+    (value): value is string => typeof value === "string" && Boolean(value.trim()),
+  ))];
+  const resolved = new Map<string, string | null>();
+  const shopifyFileIds: string[] = [];
+
+  for (const value of uniqueValues) {
+    if (/^gid:\/\/shopify\/(?:MediaImage|GenericFile)\/[A-Za-z0-9_-]+$/.test(value)) {
+      shopifyFileIds.push(value);
+    } else {
+      resolved.set(value, publicHttpsUrl(value));
+    }
+  }
+
+  if (!shopifyFileIds.length) return resolved;
+
+  const response = await client.request<{
+    nodes: Array<{
+      id: string;
+      image?: { url: string } | null;
+      url?: string | null;
+    } | null>;
+  }>(
+    `#graphql query CreatorContentProfileImages($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on MediaImage { id image { url } }
+        ... on GenericFile { id url }
+      }
+    }`,
+    { ids: shopifyFileIds },
+  );
+
+  for (const id of shopifyFileIds) resolved.set(id, null);
+  for (const node of response.nodes) {
+    if (!node?.id || !resolved.has(node.id)) continue;
+    resolved.set(node.id, publicHttpsUrl(node.image?.url || node.url));
+  }
+  return resolved;
+}
+
 export async function loadPublicCreatorContent(
   shop: string,
   client: ShopifyGraphqlClient,
@@ -579,7 +633,12 @@ export async function loadPublicCreatorContent(
   const hasMore = records.length > limit;
   const pageRecords = records.slice(0, limit);
   const productIds = [...new Set(pageRecords.map(discoveryShopifyProductId))];
-  const [response, publicFeaturedCreatorIds, legacyPricingEntries] = await Promise.all([
+  const [
+    response,
+    publicFeaturedCreatorIds,
+    legacyPricingEntries,
+    profileImageUrls,
+  ] = await Promise.all([
     productIds.length
       ? client.request<{ nodes: Array<ShopifyDiscoveryProduct | null> }>(
         `#graphql query CreatorContentProducts($ids: [ID!]!) {
@@ -620,6 +679,10 @@ export async function loadPublicCreatorContent(
       record.id,
       await resolveDiscoveryPricing(shop, record, database),
     ] as const)),
+    resolvePublicProfileImageUrls([
+      ...adminState.selected.map((creator) => creator.profileImageUrl),
+      ...pageRecords.map((record) => record.creator.profileImageUrl),
+    ], client),
   ]);
   const legacyPricingByRecordId = new Map<
     string,
@@ -658,7 +721,9 @@ export async function loadPublicCreatorContent(
         creatorDisplayName: record.creator.displayName,
         creatorHandle: record.creator.handle,
         creatorPublicHandle: collection.publicHandle,
-        creatorAvatarUrl: record.creator.profileImageUrl,
+        creatorAvatarUrl: record.creator.profileImageUrl
+          ? profileImageUrls.get(record.creator.profileImageUrl) ?? null
+          : null,
         creatorCategories: categoriesFromJson(record.creator.categoriesJson),
         collectionName: collection.displayName,
         title: record.title,
@@ -699,6 +764,9 @@ export async function loadPublicCreatorContent(
       .filter((creator) => publicFeaturedCreatorIds.has(creator.id))
       .map((creator) => ({
       ...creator,
+      profileImageUrl: creator.profileImageUrl
+        ? profileImageUrls.get(creator.profileImageUrl) ?? null
+        : null,
       viewUrl: getCreatorCollectionStorefrontUrl({ publicHandle: creator.publicHandle })!,
     })),
     categories: uniqueSorted(products.flatMap((product) => product.creatorCategories)),

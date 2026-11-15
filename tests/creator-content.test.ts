@@ -312,8 +312,13 @@ function fakePublicDiscovery(options: {
   disableDtf?: boolean;
   prolificAlpha?: boolean;
   appProxyOnly?: boolean;
+  profileImageMode?: "resolved" | "unresolved";
 } = {}) {
   const adminDb = fakeFeaturedDb();
+  if (options.profileImageMode) {
+    adminDb.creators[0]!.profileImageUrl = "gid://shopify/MediaImage/777";
+    adminDb.creators[1]!.profileImageUrl = "https://cdn.example.com/beta.jpg";
+  }
   adminDb.featured.push(
     { id: "featured-1", shop: "shop.myshopify.com", creatorId: "creator-b", position: 0 },
     { id: "featured-2", shop: "shop.myshopify.com", creatorId: "creator-a", position: 1 },
@@ -447,6 +452,16 @@ function fakePublicDiscovery(options: {
   const shopify = {
     async request<T>(query: string, variables: Record<string, unknown>) {
       requests.push({ query, variables });
+      if (query.includes("CreatorContentProfileImages")) {
+        return {
+          nodes: options.profileImageMode === "resolved"
+            ? [{
+                id: "gid://shopify/MediaImage/777",
+                image: { url: "https://cdn.shopify.com/alpha-profile.jpg" },
+              }]
+            : [null],
+        } as T;
+      }
       const nodes = [
           {
             id: "gid://shopify/Product/900",
@@ -592,6 +607,39 @@ test("public Creator Content includes active buy-only products routed through th
   assert.deepEqual(result.featuredCreators.map((creator) => creator.id), ["creator-b", "creator-a"]);
   assert.deepEqual(result.products.map((product) => product.id), ["creator-product-b", "creator-product-a"]);
   assert.equal(result.products.every((product) => product.viewUrl.startsWith("/apps/customhouse/creators/")), true);
+});
+
+test("public Creator Content resolves stored Shopify profile images without exposing GIDs", async () => {
+  const { db, shopify, requests } = fakePublicDiscovery({ profileImageMode: "resolved" });
+  const result = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+
+  const alpha = result.featuredCreators.find((creator) => creator.id === "creator-a")!;
+  const beta = result.featuredCreators.find((creator) => creator.id === "creator-b")!;
+  const alphaProduct = result.products.find((product) => product.creatorId === "creator-a")!;
+  const profileRequest = requests.find((request) => request.query.includes("CreatorContentProfileImages"))!;
+
+  assert.equal(alpha.profileImageUrl, "https://cdn.shopify.com/alpha-profile.jpg");
+  assert.equal(alphaProduct.creatorAvatarUrl, "https://cdn.shopify.com/alpha-profile.jpg");
+  assert.equal(beta.profileImageUrl, "https://cdn.example.com/beta.jpg");
+  assert.deepEqual(profileRequest.variables.ids, ["gid://shopify/MediaImage/777"]);
+});
+
+test("public Creator Content falls back safely when a Shopify profile image cannot resolve", async () => {
+  const { db, shopify } = fakePublicDiscovery({ profileImageMode: "unresolved" });
+  const result = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+
+  const alpha = result.featuredCreators.find((creator) => creator.id === "creator-a")!;
+  const alphaProduct = result.products.find((product) => product.creatorId === "creator-a")!;
+  assert.equal(alpha.profileImageUrl, null);
+  assert.equal(alphaProduct.creatorAvatarUrl, null);
 });
 
 test("public Creator Content paginates DB rows and exposes a continuation offset", async () => {
