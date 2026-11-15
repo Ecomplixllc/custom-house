@@ -812,7 +812,7 @@ test("Creator Content pagination model clamps pages and keeps 12 products per pa
   assert.equal(creatorContentPaginationModel(13, 1, 0.5).pageSize, 12);
 });
 
-test("Creator Content desktop filters start collapsed and toggle from the toolbar", async () => {
+test("Creator Content keeps the desktop filter sidebar visible with collapsed option groups", async () => {
   const { db, shopify } = fakePublicDiscovery();
   const data = await loadPublicCreatorContent(
     "shop.myshopify.com",
@@ -835,16 +835,27 @@ test("Creator Content desktop filters start collapsed and toggle from the toolba
   );
   assert.match(
     markup,
-    /\.customhouse-creator-content__filter-open\{display:block/,
+    /\.customhouse-creator-content__filter-open\{display:none/,
   );
   assert.match(
     markup,
-    /\.customhouse-creator-content__results\.is-filter-open\{display:grid;grid-template-columns:250px minmax\(0,1fr\)/,
+    /\.customhouse-creator-content__results(?:,\.customhouse-creator-content__results\.is-filter-open)?\{display:grid;grid-template-columns:250px minmax\(0,1fr\)/,
   );
   assert.match(
     markup,
-    /openButton\?\.addEventListener\("click", \(\) => setDrawer\(openButton\.getAttribute\("aria-expanded"\) !== "true"\)\)/,
+    /<details class="customhouse-creator-content__filter-group">\s*<summary><span data-creator-content-filter-title>Creator<\/span><\/summary>/,
   );
+  assert.match(markup, /class="customhouse-creator-content__filter-options"/);
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__filter-group:not\(\[open\]\)>\.customhouse-creator-content__filter-options\{display:none\}/,
+  );
+  assert.doesNotMatch(
+    markup,
+    /<details class="customhouse-creator-content__filter-group(?: [^"]*)?" open>/,
+  );
+  assert.match(markup, /drawer\.removeAttribute\("aria-hidden"\)/);
+  assert.match(markup, /drawer\.inert = false/);
 });
 
 test("Creator Content renderer provides responsive real-data discovery without customization controls", async () => {
