@@ -8,6 +8,7 @@ import {
 } from "../app/services/creator-content.server.ts";
 import {
   creatorContentHtml,
+  creatorContentPaginationModel,
   parseProxyRoute,
 } from "../app/services/storefront-proxy.server.ts";
 
@@ -791,6 +792,25 @@ test("Creator Content is added to theme navigation without duplicating merchant 
   assert.match(desktopHeader, /font-size:\s*min\(var\(--menu-top-level-font-size-desktop\), 13px\)/);
 });
 
+test("Creator Content pagination model clamps pages and keeps 12 products per page", () => {
+  assert.deepEqual(creatorContentPaginationModel(0, 99), {
+    page: 1,
+    pageCount: 1,
+    pageSize: 12,
+    start: 0,
+    end: 0,
+  });
+  assert.deepEqual(creatorContentPaginationModel(13, 2), {
+    page: 2,
+    pageCount: 2,
+    pageSize: 12,
+    start: 12,
+    end: 13,
+  });
+  assert.equal(creatorContentPaginationModel(13, 99).page, 2);
+  assert.equal(creatorContentPaginationModel(13, -2).page, 1);
+});
+
 test("Creator Content renderer provides responsive real-data discovery without customization controls", async () => {
   const { db, shopify } = fakePublicDiscovery();
   const data = await loadPublicCreatorContent(
@@ -822,6 +842,11 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /data-creator-content-filter-open[^>]*aria-expanded="false"/);
   assert.match(markup, /data-creator-content-sort/);
   assert.match(markup, /data-next-offset=/);
+  assert.match(markup, /data-creator-content-pagination/);
+  assert.match(markup, /data-creator-content-page-prev/);
+  assert.match(markup, /data-creator-content-page-next/);
+  assert.match(markup, /data-creator-content-page-status[^>]*aria-live="polite"/);
+  assert.doesNotMatch(markup, /data-creator-content-load-more|>LOAD MORE</);
   assert.match(markup, /new DOMParser\(\)/);
   assert.match(markup, /fetch\(pageUrl\.toString\(\)/);
   assert.match(markup, /Price: low to high/);

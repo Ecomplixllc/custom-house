@@ -680,7 +680,9 @@ export async function loadPublicCreatorContent(
       await resolveDiscoveryPricing(shop, record, database),
     ] as const)),
     resolvePublicProfileImageUrls([
-      ...adminState.selected.map((creator) => creator.profileImageUrl),
+      ...(options.includeFeatured === false
+        ? []
+        : adminState.selected.map((creator) => creator.profileImageUrl)),
       ...pageRecords.map((record) => record.creator.profileImageUrl),
     ], client),
   ]);
