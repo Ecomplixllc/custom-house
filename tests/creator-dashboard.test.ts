@@ -18,6 +18,7 @@ import {
   normalizePitchPrintSaveEvent,
   pitchPrintSaveFlags,
   resolveDashboardState,
+  saveCreatorFinalProject,
 } from "../extensions/customhouse-creator-storefront/assets/customhouse-dashboard.js";
 import { countActiveCollectionProducts } from "../app/services/creator-collection-products.server.ts";
 import { uploadProfileImage } from "../app/services/profile-image.server.ts";
@@ -532,14 +533,16 @@ test("creator dashboard submits final designs and confirms refreshed My Products
   assert.match(script, /manager\.projectSaved/);
   assert.match(script, /saveCreatorProductPitchPrintProject/);
   assert.match(script, /completeCreatorFinalSubmission/);
+  assert.match(script, /const finalSubmitPromise = saveCreatorFinalProject\(\{/);
   assert.match(script, /const saved = await saveProject\(productId, savePayload\)/);
   assert.match(
     script,
     /const submitted = await submitProduct\(productId, \{[\s\S]*creatorContentOptIn: saved\.creatorContentOptIn !== false,[\s\S]*creatorContentTags: Array\.isArray\(saved\.creatorContentTags\)/,
   );
   assert.match(script, /reloaded = await reloadProduct\(productId\)/);
-  assert.match(script, /updateCreatorProductInState\(root, result\.product\)/);
-  assert.match(script, /Design submitted for review\./);
+  assert.match(script, /updateCreatorProductInState\(root, saved\)/);
+  assert.match(script, /openDesignReviewModal\(root, saved\)/);
+  assert.match(script, /Design saved\. Confirm Creator Content settings, then submit your design\./);
   assert.match(script, /openSubmitFeedbackModal\(root, \{ success: true \}\)/);
   assert.match(script, /openSubmitFeedbackModal\(root, \{ success: false, message \}\)/);
   assert.match(script, /if \(!hasFinalSubmitIntent\(product, token\)\) \{[\s\S]*handlePitchPrintDraftSessionSaved[\s\S]*return;/s);
@@ -550,6 +553,13 @@ test("creator dashboard submits final designs and confirms refreshed My Products
   assert.match(script, /data-dashboard-review-edit/);
   assert.match(script, /data-dashboard-review-draft/);
   assert.match(script, /data-dashboard-review-submit/);
+  assert.match(block, /Show this product in Creator Content/);
+  assert.match(block, /data-dashboard-creator-content-tag-count>0 \/ 5 tags/);
+  assert.match(block, /data-dashboard-review-submit>Submit Design/);
+  assert.match(
+    script,
+    /await flushCreatorContentReview\(root\);[\s\S]*submitCreatorProductForReview\([\s\S]*creatorContentReviewMetadata\(root\)/,
+  );
   assert.match(script, /Submit for Review/);
   assert.match(script, /Resubmit for Review/);
   assert.match(script, /Design and Creator Content settings saved as draft/);
@@ -591,7 +601,7 @@ test("creator dashboard submits final designs and confirms refreshed My Products
   assert.match(block, /Review your design before submitting it for approval/);
   assert.match(block, /Continue Editing/);
   assert.match(block, /Keep as Draft/);
-  assert.match(block, /Submit for Review/);
+  assert.match(block, /Submit Design/);
   assert.match(block, /class="customhouse-action" data-dashboard-review-submit/);
   assert.doesNotMatch(block, /data-dashboard-creator-products-form/);
   assert.doesNotMatch(block, /data-dashboard-pitchprint-launch/);
@@ -637,6 +647,29 @@ test("closing PitchPrint returns to the existing draft without prompting", () =>
   assert.equal(manager.projectSaved, false);
   assert.equal(restored, 1);
   assert.equal(productsShown, 1);
+});
+
+test("PitchPrint final save stages the current design as DRAFT for the Creator Content review panel", async () => {
+  const calls: string[] = [];
+  const saved = await saveCreatorFinalProject({
+    creatorProductId: "creator-product-1",
+    savePayload: { projectId: "ABC123" },
+    saveProject: async (productId, payload) => {
+      calls.push(`save:${productId}:${payload.projectId}`);
+      return {
+        id: productId,
+        status: "DRAFT",
+        pitchprintProjectId: "ABC123",
+        creatorContentOptIn: false,
+        creatorContentTags: ["Streetwear", "Retro"],
+      };
+    },
+  });
+
+  assert.deepEqual(calls, ["save:creator-product-1:ABC123"]);
+  assert.equal(saved.status, "DRAFT");
+  assert.equal(saved.creatorContentOptIn, false);
+  assert.deepEqual(saved.creatorContentTags, ["Streetwear", "Retro"]);
 });
 
 test("explicit Creator final submit saves the same project, calls submit, and reloads PENDING", async () => {
@@ -1314,8 +1347,8 @@ test("creator dashboard reuses in-flight product requests and keeps submit actio
   assert.match(script, /addMenuAction\(menu, "Submit for Review", "submit", product\.id\)/);
   assert.match(script, /addMenuAction\(menu, "Resubmit for Review", "submit", product\.id\)/);
   assert.match(script, /action === "submit" && product\?\.id/);
-  assert.match(script, /const updated = await submitCreatorProductForReview\(product\.id\)/);
-  assert.match(script, /updateCreatorProductInState\(root, updated\)/);
+  assert.match(script, /action === "submit" && product\?\.id\) \{[\s\S]*openDesignReviewModal\(root, product\)/);
+  assert.doesNotMatch(script, /const updated = await submitCreatorProductForReview\(product\.id\)/);
 });
 
 test("creator dashboard PitchPrint bridge uses Creator setup contract instead of order quantities", () => {

@@ -444,12 +444,10 @@ async function saveCreatorContentMetadata(productId, metadata) {
   return body.data?.product;
 }
 
-export async function completeCreatorFinalSubmission({
+export async function saveCreatorFinalProject({
   creatorProductId,
   savePayload,
   saveProject = saveCreatorProductPitchPrintProject,
-  submitProduct = submitCreatorProductForReview,
-  reloadProduct = requestCurrentCreatorProduct,
 }) {
   const productId = String(creatorProductId || "").trim();
   const expectedProjectId = String(savePayload?.projectId || "").trim();
@@ -463,6 +461,22 @@ export async function completeCreatorFinalSubmission({
   if (String(saved.pitchprintProjectId || "").trim() !== expectedProjectId) {
     throw new Error("The latest PitchPrint project was not persisted for this Creator Product.");
   }
+  return saved;
+}
+
+export async function completeCreatorFinalSubmission({
+  creatorProductId,
+  savePayload,
+  saveProject = saveCreatorProductPitchPrintProject,
+  submitProduct = submitCreatorProductForReview,
+  reloadProduct = requestCurrentCreatorProduct,
+}) {
+  const productId = String(creatorProductId || "").trim();
+  const saved = await saveCreatorFinalProject({
+    creatorProductId: productId,
+    savePayload,
+    saveProject,
+  });
 
   const submitted = await submitProduct(productId, {
     creatorContentOptIn: saved.creatorContentOptIn !== false,
@@ -2384,22 +2398,22 @@ function bindPitchPrintManager(root) {
       }
       return;
     }
-    const finalSubmitPromise = completeCreatorFinalSubmission({
+    const finalSubmitPromise = saveCreatorFinalProject({
       creatorProductId: product.id,
       savePayload,
     });
     manager.finalSubmitPromise = finalSubmitPromise;
     try {
-      const result = await finalSubmitPromise;
+      const saved = await finalSubmitPromise;
       if (!hasFinalSubmitIntent(product, token)) return;
       manager.projectSaved = true;
       manager.saveFailureNotified = false;
       resetFinalSubmitState();
-      updateCreatorProductInState(root, result.product);
+      updateCreatorProductInState(root, saved);
       hidePitchPrint();
-      showCreatorToast(root, "Design submitted for review.");
-      openSubmitFeedbackModal(root, { success: true });
       cleanupPitchPrintSession();
+      openDesignReviewModal(root, saved);
+      showCreatorToast(root, "Design saved. Confirm Creator Content settings, then submit your design.");
     } catch (error) {
       if (token === manager.token) showFinalSubmitFailure(error);
     } finally {
@@ -2866,16 +2880,22 @@ function bindCreatorProductSubmission(root) {
   root.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-creator-product-submit]");
     if (!button) return;
-    const restoreButton = setActionLoading(button, "Submitting...");
+    const restoreButton = setActionLoading(button, "Opening review...");
     try {
-      const product = await submitCreatorProductForReview(button.dataset.creatorProductSubmit);
-      updateCreatorProductInState(root, product);
-      openSubmitFeedbackModal(root, { success: true });
+      const productId = button.dataset.creatorProductSubmit;
+      let product = creatorProductById(root, productId);
+      if (!product) {
+        const current = await requestCurrentCreatorProduct(productId);
+        product = current.product;
+        updateCreatorProductInState(root, product);
+      }
+      openDesignReviewModal(root, product);
     } catch (error) {
-      openSubmitFeedbackModal(root, {
-        success: false,
-        message: error instanceof Error ? error.message : "Creator Product could not be submitted.",
-      });
+      showCreatorToast(
+        root,
+        error instanceof Error ? error.message : "Creator Product review could not be opened.",
+        true,
+      );
     } finally {
       restoreButton();
     }
@@ -3190,8 +3210,16 @@ function queueCreatorContentReviewSave(root) {
   window.clearTimeout(root.__customHouseReviewSaveTimer);
   setCreatorContentReviewStatus(root, "Unsaved changes");
   root.__customHouseReviewSaveTimer = window.setTimeout(() => {
-    void persistCreatorContentReview(root).catch(() => {});
+    void flushCreatorContentReview(root).catch(() => {});
   }, 350);
+}
+
+async function flushCreatorContentReview(root) {
+  window.clearTimeout(root.__customHouseReviewSaveTimer);
+  if (root.__customHouseReviewSavePromise) {
+    await root.__customHouseReviewSavePromise;
+  }
+  return persistCreatorContentReview(root);
 }
 
 async function loadCreatorContentTagSuggestions(root) {
@@ -3238,7 +3266,7 @@ function openDesignReviewModal(root, product) {
     status.className = `customhouse-status-badge customhouse-status-badge--${String(product.status || "DRAFT").toLowerCase()}`;
     status.textContent = creatorProductStatusLabel(product.status);
   }
-  if (primary) primary.textContent = product.status === "REJECTED" ? "Resubmit for Review" : "Submit for Review";
+  if (primary) primary.textContent = product.status === "REJECTED" ? "Resubmit Design" : "Submit Design";
   const optIn = modal.querySelector("[data-dashboard-creator-content-opt-in]");
   if (optIn) optIn.checked = product.creatorContentOptIn !== false;
   root.__customHouseReviewTags = Array.isArray(product.creatorContentTags)
@@ -3258,11 +3286,18 @@ function bindDesignReviewModal(root) {
   if (root.__customHouseDesignReviewBound) return;
   root.__customHouseDesignReviewBound = true;
   dashboardModalQueryAll(root, "[data-dashboard-review-close]").forEach((button) => {
-    button.addEventListener("click", () => closeDesignReviewModal(root));
+    button.addEventListener("click", async () => {
+      try {
+        await flushCreatorContentReview(root);
+        closeDesignReviewModal(root);
+      } catch {
+        // Keep the panel open until the current Creator metadata is saved.
+      }
+    });
   });
   dashboardModalQuery(root, "[data-dashboard-review-draft]")?.addEventListener("click", async () => {
     try {
-      await persistCreatorContentReview(root);
+      await flushCreatorContentReview(root);
       closeDesignReviewModal(root);
       showCreatorToast(root, "Design and Creator Content settings saved as draft.");
     } catch {
@@ -3271,7 +3306,7 @@ function bindDesignReviewModal(root) {
   });
   dashboardModalQuery(root, "[data-dashboard-review-edit]")?.addEventListener("click", async (event) => {
     try {
-      const product = await persistCreatorContentReview(root);
+      const product = await flushCreatorContentReview(root);
       closeDesignReviewModal(root);
       if (product) await root.__customHouseOpenPitchPrintDesigner?.(product, event.currentTarget);
     } catch {
@@ -3283,7 +3318,7 @@ function bindDesignReviewModal(root) {
     if (!product?.id) return;
     const restoreButton = setActionLoading(event.currentTarget, "Submitting...");
     try {
-      window.clearTimeout(root.__customHouseReviewSaveTimer);
+      await flushCreatorContentReview(root);
       const updated = await submitCreatorProductForReview(
         product.id,
         creatorContentReviewMetadata(root),
@@ -3312,9 +3347,15 @@ function bindDesignReviewModal(root) {
     event.preventDefault();
     addCreatorContentReviewTag(root);
   });
-  document.addEventListener("keydown", (event) => {
+  document.addEventListener("keydown", async (event) => {
     const modal = dashboardModalQuery(root, "[data-dashboard-review-modal]");
-    if (event.key === "Escape" && modal && !modal.hidden) closeDesignReviewModal(root);
+    if (event.key !== "Escape" || !modal || modal.hidden) return;
+    try {
+      await flushCreatorContentReview(root);
+      closeDesignReviewModal(root);
+    } catch {
+      // Keep the panel open until the current Creator metadata is saved.
+    }
   });
 }
 
@@ -3601,19 +3642,7 @@ function bindMyDesignsUx(root) {
       const action = menuAction.dataset.designMenuAction;
       if (action === "details") openDesignDetailsModal(root, product, menuAction);
       else if (action === "submit" && product?.id) {
-        const restoreButton = setActionLoading(menuAction, "Submitting...");
-        try {
-          const updated = await submitCreatorProductForReview(product.id);
-          updateCreatorProductInState(root, updated);
-          openSubmitFeedbackModal(root, { success: true });
-        } catch (error) {
-          openSubmitFeedbackModal(root, {
-            success: false,
-            message: error instanceof Error ? error.message : "Creator Product could not be submitted.",
-          });
-        } finally {
-          restoreButton();
-        }
+        openDesignReviewModal(root, product);
       }
       else openDesignActionModal(root, product, action, menuAction);
       return;
