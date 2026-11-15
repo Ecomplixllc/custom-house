@@ -858,6 +858,37 @@ test("Creator Content keeps the desktop filter sidebar visible with collapsed op
   assert.match(markup, /drawer\.inert = false/);
 });
 
+test("Creator Content uses arrow controls instead of visible creator and pagination scrollbars", async () => {
+  const { db, shopify } = fakePublicDiscovery();
+  const data = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+  const response = creatorContentHtml({
+    ...data,
+    headerAccount: { loggedIn: false },
+  });
+  const markup = await response.text();
+
+  assert.match(markup, /data-creator-content-featured-prev/);
+  assert.match(markup, /data-creator-content-featured-next/);
+  assert.match(markup, /data-creator-content-featured-track/);
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__featured\{[^}]*scrollbar-width:none/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__featured::-webkit-scrollbar\{display:none\}/,
+  );
+  assert.match(markup, /featuredTrack\.scrollBy\(\{/);
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__pagination>\[data-creator-content-page-prev\],\.customhouse-creator-content__pagination>\[data-creator-content-page-next\]\{display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap\}/,
+  );
+});
+
 test("Creator Content renderer provides responsive real-data discovery without customization controls", async () => {
   const { db, shopify } = fakePublicDiscovery();
   const data = await loadPublicCreatorContent(
