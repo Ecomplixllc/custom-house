@@ -17,6 +17,7 @@ import {
   normalizeCreatorSetupEvent,
   normalizePitchPrintSaveEvent,
   pitchPrintSaveFlags,
+  requestDashboard,
   resolveDashboardState,
   saveCreatorFinalProject,
 } from "../extensions/customhouse-creator-storefront/assets/customhouse-dashboard.js";
@@ -36,6 +37,45 @@ const styles = readFileSync(
   "extensions/customhouse-creator-storefront/assets/customhouse.css",
   "utf8",
 );
+
+test("creator dashboard retries a temporary server failure and recovers", async () => {
+  let requests = 0;
+  const data = await requestDashboard(
+    { attempts: 2, retryDelayMs: 0 },
+    async () => {
+      requests += 1;
+      if (requests === 1) {
+        return Response.json(
+          { ok: false, error: { code: "DATABASE_TEMPORARILY_UNAVAILABLE" } },
+          { status: 503 },
+        );
+      }
+      return Response.json({ ok: true, data: { state: "APPROVED" } });
+    },
+  );
+
+  assert.deepEqual(data, { state: "APPROVED" });
+  assert.equal(requests, 2);
+});
+
+test("creator dashboard does not retry authentication failures", async () => {
+  let requests = 0;
+  await assert.rejects(
+    () => requestDashboard(
+      { attempts: 3, retryDelayMs: 0 },
+      async () => {
+        requests += 1;
+        return Response.json(
+          { ok: false, error: { code: "AUTHENTICATION_REQUIRED" } },
+          { status: 401 },
+        );
+      },
+    ),
+    /Dashboard request failed/,
+  );
+
+  assert.equal(requests, 1);
+});
 
 test("creator PitchPrint labels describe the final action as design submission", () => {
   const clientGlobal = {

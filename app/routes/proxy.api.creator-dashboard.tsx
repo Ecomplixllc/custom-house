@@ -2,6 +2,11 @@ import type { LoaderFunctionArgs } from "react-router";
 import { creatorDashboard } from "../services/submission.server";
 import { apiData, apiError, proxyContext } from "../services/proxy.server";
 import { enforceRateLimit } from "../services/rate-limit.server";
+import { DomainError } from "../services/domain";
+import {
+  isTransientDatabaseConnectivityError,
+  withTransientDatabaseRetry,
+} from "../services/session-recovery.server";
 
 type DashboardStatus = "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED" | "NOT_APPLIED" | "SYNC_CONFLICT";
 
@@ -54,8 +59,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return apiData({ state: "LOGGED_OUT", loggedIn: false });
     }
 
-    enforceRateLimit(`${shop}:${context.customerId}:dashboard`);
-    const dashboard = await creatorDashboard(shop, context.customerId);
+    const authenticatedCustomerId = context.customerId;
+    enforceRateLimit(`${shop}:${authenticatedCustomerId}:dashboard`);
+    const dashboard = await withTransientDatabaseRetry(() =>
+      creatorDashboard(context.shop, authenticatedCustomerId),
+    );
     const liveProfileImageUrl =
       dashboard.creatorFound && dashboard.profileImageUrl?.startsWith("gid://")
         ? await profileImageUrl(context.client, dashboard.profileImageUrl)
@@ -75,6 +83,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     });
   } catch (error) {
     diagnostic({ shop, customerIdExists, creatorFound: false, creatorStatus: null });
+    if (isTransientDatabaseConnectivityError(error)) {
+      return apiError(
+        new DomainError(
+          "DATABASE_TEMPORARILY_UNAVAILABLE",
+          "The Creator Dashboard is temporarily unavailable. Please try again.",
+          503,
+        ),
+      );
+    }
     return apiError(error);
   }
 }

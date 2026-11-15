@@ -69,7 +69,13 @@ export const authenticate = {
   public: {
     appProxy: (request: Request) =>
       observeAuthentication("app_proxy_authentication", request, () =>
-        getShopify().authenticate.public.appProxy(request),
+        withSessionStorageRecovery(
+          () => getShopify().authenticate.public.appProxy(request),
+          () => prisma.session.count(),
+          () => {
+            shopifyInstance = undefined;
+          },
+        ),
       ),
   },
 };

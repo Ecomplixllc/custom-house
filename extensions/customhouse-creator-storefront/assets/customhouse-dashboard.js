@@ -18,6 +18,7 @@ const CREATOR_DRAFT_AUTOSAVE_HEARTBEAT_MS = 12000;
 const CREATOR_DRAFT_SAVE_TIMEOUT_MS = 30000;
 let creatorProductsLoadPromise = null;
 let creatorBaseProductsLoadPromise = null;
+let creatorDashboardLoadPromise = null;
 
 /**
  * @param {{
@@ -125,12 +126,43 @@ export async function loadDashboardState(request, emit, options = {}) {
   }
 }
 
-async function requestDashboard(options = {}) {
-  const url = options.sync ? `${DASHBOARD_ENDPOINT}?sync=1` : DASHBOARD_ENDPOINT;
-  const response = await fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } });
-  const body = await response.json();
-  if (!response.ok || !body?.ok) throw new Error("Dashboard request failed");
-  return body.data;
+export async function requestDashboard(options = {}, fetcher = fetch) {
+  if (!options.sync && creatorDashboardLoadPromise) return creatorDashboardLoadPromise;
+  const request = (async () => {
+    const url = options.sync ? `${DASHBOARD_ENDPOINT}?sync=1` : DASHBOARD_ENDPOINT;
+    const attempts = Math.max(1, Math.min(3, Number(options.attempts) || 3));
+    const retryDelayMs = options.retryDelayMs == null
+      ? 250
+      : Math.max(0, Number(options.retryDelayMs) || 0);
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      let response;
+      try {
+        response = await fetcher(url, {
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+        const body = await response.json().catch(() => null);
+        if (response.ok && body?.ok) return body.data;
+        const error = new Error("Dashboard request failed");
+        error.status = response.status;
+        throw error;
+      } catch (error) {
+        const status = Number(error?.status || response?.status || 0);
+        const retryable = status === 0 || status >= 500;
+        if (!retryable || attempt === attempts) throw error;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
+      }
+    }
+    throw new Error("Dashboard request failed");
+  })();
+  if (!options.sync) creatorDashboardLoadPromise = request;
+  try {
+    return await request;
+  } finally {
+    if (!options.sync && creatorDashboardLoadPromise === request) {
+      creatorDashboardLoadPromise = null;
+    }
+  }
 }
 
 function readCookie(name) {
