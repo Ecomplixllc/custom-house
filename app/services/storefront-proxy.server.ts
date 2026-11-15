@@ -1047,6 +1047,7 @@ export function creatorContentHtml(
             const activeFilters = root.querySelector("[data-creator-content-active-filters]");
             let activeCategory = "all";
             let serverHasMore = Boolean(root.dataset.nextOffset);
+            let catalogLoadError = false;
             let currentPage = 1;
             const pageSize = 12;
             const paginationModel = ${creatorContentPaginationModel.toString()};
@@ -1056,7 +1057,7 @@ export function creatorContentHtml(
             const values = (card, key) => String(card.dataset[key] || "").split("||").filter(Boolean);
             const intersects = (selectedValues, cardValues) => !selectedValues.length || selectedValues.some((value) => cardValues.includes(value));
             const filterNames = ["creator", "productType", "size", "color", "availability"];
-            const syncUrlState = () => {
+            const syncUrlState = (pushHistory = false) => {
               const params = new URLSearchParams(window.location.search);
               ["q", "category", "sort", "minPrice", "maxPrice", "page", ...filterNames].forEach((name) => params.delete(name));
               const query = String(search?.value || "").trim();
@@ -1070,7 +1071,8 @@ export function creatorContentHtml(
               if (maxPrice) params.set("maxPrice", maxPrice);
               if (currentPage > 1) params.set("page", String(currentPage));
               const nextUrl = window.location.pathname + (params.size ? "?" + params.toString() : "") + window.location.hash;
-              window.history.replaceState(null, "", nextUrl);
+              if (pushHistory) window.history.pushState(null, "", nextUrl);
+              else window.history.replaceState(null, "", nextUrl);
             };
             const restoreUrlState = () => {
               const params = new URLSearchParams(window.location.search);
@@ -1152,7 +1154,7 @@ export function creatorContentHtml(
               if (pagination) pagination.hidden = total === 0;
               if (previousPage) previousPage.disabled = model.page <= 1;
               if (nextPage) nextPage.disabled = model.page >= model.pageCount;
-              if (paginationStatus) paginationStatus.textContent = "PAGE " + model.page + " OF " + model.pageCount;
+              if (paginationStatus) paginationStatus.textContent = (catalogLoadError ? "PARTIAL CATALOG · " : "") + "PAGE " + model.page + " OF " + model.pageCount;
               if (!paginationPages) return;
               paginationPages.replaceChildren();
               visiblePageNumbers(model).forEach((page) => {
@@ -1173,7 +1175,7 @@ export function creatorContentHtml(
                 paginationPages.append(button);
               });
             };
-            const applyFilters = ({ resetPage = true } = {}) => {
+            const applyFilters = ({ resetPage = true, pushHistory = false } = {}) => {
               const query = String(search?.value || "").trim().toLocaleLowerCase();
               const creators = selected("creator");
               const productTypes = selected("productType");
@@ -1204,7 +1206,7 @@ export function creatorContentHtml(
               empty?.classList.toggle("is-visible", matching.length === 0);
               renderPagination(model, matching.length);
               renderActiveFilters();
-              syncUrlState();
+              syncUrlState(pushHistory);
             };
             const bindCategoryChip = (chip) => {
               if (chip.dataset.creatorContentBound === "true") return;
@@ -1300,11 +1302,11 @@ export function creatorContentHtml(
                 root.querySelectorAll("[data-creator-content-filter], [data-creator-content-price-min], [data-creator-content-price-max]").forEach(bindFilterControl);
                 root.dataset.nextOffset = parsedRoot.dataset.nextOffset || "";
                 serverHasMore = Boolean(root.dataset.nextOffset);
+                catalogLoadError = false;
                 if (applyState) restoreUrlState();
                 return true;
                 } catch {
-                  serverHasMore = false;
-                  root.dataset.nextOffset = "";
+                  catalogLoadError = true;
                   if (paginationStatus) paginationStatus.textContent = "MORE PRODUCTS UNAVAILABLE";
                   return false;
                 } finally {
@@ -1340,7 +1342,7 @@ export function creatorContentHtml(
             });
             const showPage = (page) => {
               currentPage = page;
-              applyFilters({ resetPage: false });
+              applyFilters({ resetPage: false, pushHistory: true });
               grid?.scrollIntoView({ behavior: "smooth", block: "start" });
             };
             previousPage?.addEventListener("click", () => showPage(currentPage - 1));

@@ -864,6 +864,7 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /event\.key === "Tab"/);
   assert.match(markup, /new URLSearchParams\(window\.location\.search\)/);
   assert.match(markup, /window\.history\.replaceState/);
+  assert.match(markup, /window\.history\.pushState/);
   assert.match(markup, /window\.addEventListener\("popstate", \(\) => \{ void restoreCompleteUrlState\(\); \}\)/);
   assert.match(markup, /class="customhouse-header__nav"[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /class="customhouse-mobile-drawer__nav"[\s\S]*CREATOR CONTENT/);
