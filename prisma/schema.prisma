@@ -421,6 +421,9 @@ model CreatorProduct {
   baseVariantMappingJson        String               @default("{}")
   creatorPricingMode            String?
   creatorPricingPreviewJson     String               @default("{}")
+  creatorContentOptIn           Boolean              @default(true)
+  creatorContentTags            String[]             @default([])
+  creatorContentHiddenByAdmin   Boolean              @default(false)
   submittedAt                   DateTime?
   publishedAt                   DateTime?
   rejectedAt                    DateTime?

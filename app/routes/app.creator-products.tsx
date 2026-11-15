@@ -11,6 +11,7 @@ import { AdminGraphqlClient } from "../services/shopify-graphql.server";
 import {
   listCreatorProductsForAdmin,
   cleanupCreatorProductAsAdmin,
+  moderateCreatorContentAsAdmin,
   moderateCreatorProductAsAdmin,
 } from "../services/creator-products.server";
 import { publishCreatorProductToShopify } from "../services/creator-product-publishing.server";
@@ -82,6 +83,29 @@ export async function action({ request }: ActionFunctionArgs) {
   const form = await request.formData();
   const decision = String(form.get("decision") || "");
   const creatorProductId = String(form.get("creatorProductId") || "");
+  if (decision === "UPDATE_CREATOR_CONTENT") {
+    const product = await moderateCreatorContentAsAdmin(
+      session.shop,
+      session.id || null,
+      {
+        creatorProductId,
+        creatorContentTags: String(form.get("creatorContentTags") || "")
+          .split(/[,\n]/u)
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        creatorContentHiddenByAdmin: form
+          .getAll("creatorContentHiddenByAdmin")
+          .map(String)
+          .includes("true"),
+      },
+    );
+    return {
+      ok: true,
+      message: product.creatorContentHiddenByAdmin
+        ? "Product hidden from Creator Content only; publication and buying remain unchanged."
+        : "Creator Content tags and visibility restored.",
+    };
+  }
   if (decision === "ARCHIVE" || decision === "DELETE") {
     const result = await cleanupCreatorProductAsAdmin(
       session.shop,
@@ -239,6 +263,41 @@ export default function CreatorProductsAdmin() {
                         <small>Publishing recalculates these prices from fresh Shopify and Admin data.</small>
                       </div>
                     ) : null}
+                    <div className="creator-pricing-preview">
+                      <p>
+                        Creator Content: <strong>{product.creatorContentOptIn ? "Yes" : "No"}</strong>
+                        {product.creatorContentHiddenByAdmin ? " · Hidden by admin" : ""}
+                      </p>
+                      <p>
+                        Tags: {product.creatorContentTags.length
+                          ? product.creatorContentTags.join(" · ")
+                          : "No tags"}
+                      </p>
+                      <Form method="post" className="creator-decision-form">
+                        <input type="hidden" name="creatorProductId" value={product.id} />
+                        <label>
+                          <span>Creator Content tags (maximum 5, comma separated)</span>
+                          <input
+                            name="creatorContentTags"
+                            defaultValue={product.creatorContentTags.join(", ")}
+                            maxLength={164}
+                          />
+                        </label>
+                        <label>
+                          <input type="hidden" name="creatorContentHiddenByAdmin" value="false" />
+                          <input
+                            type="checkbox"
+                            name="creatorContentHiddenByAdmin"
+                            value="true"
+                            defaultChecked={product.creatorContentHiddenByAdmin}
+                          />{" "}
+                          Hide from Creator Content only
+                        </label>
+                        <SubmitButton name="decision" value="UPDATE_CREATOR_CONTENT">
+                          Save Creator Content settings
+                        </SubmitButton>
+                      </Form>
+                    </div>
                     {product.rejectionReason ? (
                       <p>Rejection reason: {product.rejectionReason}</p>
                     ) : null}

@@ -65,6 +65,9 @@ type PublicCreatorContentRecord = {
   publishedShopifyProductId: string | null;
   creatorPricingMode: string | null;
   designVariantSelectionsJson: string;
+  creatorContentOptIn: boolean;
+  creatorContentTags: string[];
+  creatorContentHiddenByAdmin: boolean;
   creator: EligibleCreator;
 };
 
@@ -125,6 +128,7 @@ export type PublicCreatorContentProduct = {
   creatorPublicHandle: string;
   creatorAvatarUrl: string | null;
   creatorCategories: string[];
+  creatorContentTags: string[];
   collectionName: string;
   title: string;
   description: string | null;
@@ -487,6 +491,8 @@ async function validFeaturedCreatorIds(
           shop,
           creatorId,
           status: "PUBLISHED",
+          creatorContentOptIn: true,
+          creatorContentHiddenByAdmin: false,
           creator: {
             status: "APPROVED",
             marketplaceCollection: { is: { status: "ACTIVE" } },
@@ -617,6 +623,8 @@ export async function loadPublicCreatorContent(
       where: {
         shop,
         status: "PUBLISHED",
+        creatorContentOptIn: true,
+        creatorContentHiddenByAdmin: false,
         creator: {
           status: "APPROVED",
           marketplaceCollection: { is: { status: "ACTIVE" } },
@@ -697,6 +705,9 @@ export async function loadPublicCreatorContent(
   );
   const products = pageRecords
     .map((record): PublicCreatorContentProduct | null => {
+      if (record.creatorContentOptIn === false || record.creatorContentHiddenByAdmin === true) {
+        return null;
+      }
       const collection = record.creator.marketplaceCollection;
       if (!collection || collection.status !== "ACTIVE") return null;
       const shopifyId = discoveryShopifyProductId(record);
@@ -727,6 +738,9 @@ export async function loadPublicCreatorContent(
           ? profileImageUrls.get(record.creator.profileImageUrl) ?? null
           : null,
         creatorCategories: categoriesFromJson(record.creator.categoriesJson),
+        creatorContentTags: Array.isArray(record.creatorContentTags)
+          ? record.creatorContentTags
+          : [],
         collectionName: collection.displayName,
         title: record.title,
         description: record.description,
@@ -771,12 +785,13 @@ export async function loadPublicCreatorContent(
         : null,
       viewUrl: getCreatorCollectionStorefrontUrl({ publicHandle: creator.publicHandle })!,
     })),
-    categories: uniqueSorted(products.flatMap((product) => product.creatorCategories)),
+    categories: uniqueSorted(products.flatMap((product) => product.creatorContentTags)),
     products,
     filters: {
       creators: [...productCreators.values()].sort((left, right) =>
         left.displayName.localeCompare(right.displayName),
       ),
+      tags: uniqueSorted(products.flatMap((product) => product.creatorContentTags)),
       productTypes: uniqueSorted(products.map((product) => product.productType)),
       sizes: sortSizes(products.flatMap((product) => product.sizes)),
       colors: uniqueSorted(products.flatMap((product) => product.colors)),

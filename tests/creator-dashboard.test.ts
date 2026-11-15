@@ -533,7 +533,10 @@ test("creator dashboard submits final designs and confirms refreshed My Products
   assert.match(script, /saveCreatorProductPitchPrintProject/);
   assert.match(script, /completeCreatorFinalSubmission/);
   assert.match(script, /const saved = await saveProject\(productId, savePayload\)/);
-  assert.match(script, /const submitted = await submitProduct\(productId\)/);
+  assert.match(
+    script,
+    /const submitted = await submitProduct\(productId, \{[\s\S]*creatorContentOptIn: saved\.creatorContentOptIn !== false,[\s\S]*creatorContentTags: Array\.isArray\(saved\.creatorContentTags\)/,
+  );
   assert.match(script, /reloaded = await reloadProduct\(productId\)/);
   assert.match(script, /updateCreatorProductInState\(root, result\.product\)/);
   assert.match(script, /Design submitted for review\./);
@@ -549,7 +552,7 @@ test("creator dashboard submits final designs and confirms refreshed My Products
   assert.match(script, /data-dashboard-review-submit/);
   assert.match(script, /Submit for Review/);
   assert.match(script, /Resubmit for Review/);
-  assert.match(script, /Design saved as draft/);
+  assert.match(script, /Design and Creator Content settings saved as draft/);
   assert.match(script, /openSubmitFeedbackModal\(root, \{ success: true \}\)/);
   assert.match(script, /openSubmitFeedbackModal\(root, \{\s*success: false,/s);
   assert.match(script, /goToMyProductsTab\(root\)/);

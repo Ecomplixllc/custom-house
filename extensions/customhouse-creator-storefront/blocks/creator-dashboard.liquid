@@ -959,6 +959,32 @@
       </header>
       <div class="ch-creator-modal__previews" data-dashboard-review-previews></div>
       <div class="ch-creator-modal__variant-summary" data-dashboard-review-variants></div>
+      <section class="ch-creator-content-editor" data-dashboard-creator-content-editor>
+        <div class="ch-creator-content-editor__heading">
+          <div>
+            <strong>Creator Content</strong>
+            <p>This product will appear on the Creator Content page after it is approved and published. Turn this off if you do not want it shown there.</p>
+          </div>
+          <label class="ch-creator-content-editor__toggle">
+            <input type="checkbox" data-dashboard-creator-content-opt-in checked>
+            <span>Show in Creator Content</span>
+          </label>
+        </div>
+        <div data-dashboard-creator-content-tags-panel>
+          <label class="ch-creator-content-editor__tag-label" for="customhouse-creator-content-tag">Tags</label>
+          <p>Add up to 5 tags that describe your design.</p>
+          <div class="ch-creator-content-editor__tags" data-dashboard-creator-content-tags></div>
+          <div class="ch-creator-content-editor__add">
+            <input id="customhouse-creator-content-tag" type="text" maxlength="30" list="customhouse-creator-content-tag-suggestions" autocomplete="off" placeholder="Add a tag" data-dashboard-creator-content-tag-input>
+            <datalist id="customhouse-creator-content-tag-suggestions" data-dashboard-creator-content-tag-suggestions></datalist>
+            <button type="button" data-dashboard-creator-content-tag-add>Add tag</button>
+          </div>
+          <div class="ch-creator-content-editor__meta">
+            <span data-dashboard-creator-content-tag-count>0 / 5 tags</span>
+            <span role="status" aria-live="polite" data-dashboard-creator-content-status></span>
+          </div>
+        </div>
+      </section>
       <dl class="ch-creator-modal__summary">
         <div data-summary-icon="sell"><dt>Product</dt><dd data-dashboard-review-product>Creator product</dd></div>
         <div data-summary-icon="layers"><dt>Status</dt><dd><span class="customhouse-status-badge customhouse-status-badge--draft" data-dashboard-review-status>Draft</span></dd></div>

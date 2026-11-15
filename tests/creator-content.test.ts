@@ -314,6 +314,8 @@ function fakePublicDiscovery(options: {
   prolificAlpha?: boolean;
   appProxyOnly?: boolean;
   profileImageMode?: "resolved" | "unresolved";
+  optOutBeta?: boolean;
+  hideAlpha?: boolean;
 } = {}) {
   const adminDb = fakeFeaturedDb();
   if (options.profileImageMode) {
@@ -340,6 +342,9 @@ function fakePublicDiscovery(options: {
       shopifyProductId: "gid://shopify/Product/100",
       publishedShopifyProductId: "gid://shopify/Product/900",
       creatorPricingMode: "BAKED_IN_V1",
+      creatorContentOptIn: true,
+      creatorContentTags: ["Streetwear", "Art & Design"],
+      creatorContentHiddenByAdmin: Boolean(options.hideAlpha),
       designVariantSelectionsJson: JSON.stringify({ fixedColor: "Black" }),
       creator: adminDb.creators[0],
     },
@@ -358,6 +363,9 @@ function fakePublicDiscovery(options: {
       shopifyProductId: "gid://shopify/Product/200",
       publishedShopifyProductId: "gid://shopify/Product/901",
       creatorPricingMode: options.legacyBeta ? null : "BAKED_IN_V1",
+      creatorContentOptIn: !options.optOutBeta,
+      creatorContentTags: ["Music"],
+      creatorContentHiddenByAdmin: false,
       designVariantSelectionsJson: JSON.stringify(options.legacyBeta
         ? { fixedColor: "White", productionMethod: "DTF", placementCount: 2 }
         : { fixedColor: "White" }),
@@ -378,6 +386,9 @@ function fakePublicDiscovery(options: {
       shopifyProductId: "gid://shopify/Product/300",
       publishedShopifyProductId: "gid://shopify/Product/902",
       creatorPricingMode: "BAKED_IN_V1",
+      creatorContentOptIn: true,
+      creatorContentTags: ["Hidden"],
+      creatorContentHiddenByAdmin: false,
       designVariantSelectionsJson: JSON.stringify({ fixedColor: "Black" }),
       creator: adminDb.creators[0],
     },
@@ -686,6 +697,26 @@ test("public Creator Content exposes real price and variant facets only", async 
   assert.deepEqual(result.filters.colors, ["Black", "White"]);
   assert.deepEqual(result.filters.sizes, ["S", "M", "L"]);
   assert.deepEqual(result.categories, ["Art & Design", "Music", "Streetwear"]);
+  assert.deepEqual(result.filters.tags, ["Art & Design", "Music", "Streetwear"]);
+  assert.deepEqual(alpha.creatorContentTags, ["Streetwear", "Art & Design"]);
+});
+
+test("public Creator Content requires creator opt-in and honors the admin hide override", async () => {
+  const optedOut = fakePublicDiscovery({ optOutBeta: true });
+  const optedOutResult = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    optedOut.shopify as unknown as PublicContentClient,
+    optedOut.db as unknown as PublicContentDb,
+  );
+  assert.equal(optedOutResult.products.some((product) => product.id === "creator-product-b"), false);
+
+  const adminHidden = fakePublicDiscovery({ hideAlpha: true });
+  const adminHiddenResult = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    adminHidden.shopify as unknown as PublicContentClient,
+    adminHidden.db as unknown as PublicContentDb,
+  );
+  assert.equal(adminHiddenResult.products.some((product) => product.id === "creator-product-a"), false);
 });
 
 test("legacy Creator Content prices include the configured production surcharge", async () => {
@@ -911,6 +942,10 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /data-creator-content-search/);
   assert.match(markup, /aria-label="Search creators, collections, designs, or tags"/);
   assert.match(markup, /data-creator-content-category="Streetwear"/);
+  assert.match(markup, /name="tags" value="streetwear"/i);
+  assert.match(markup, /data-tags="streetwear\|\|art &amp; design"/i);
+  assert.match(markup, /params\.set\("tag", activeCategory\)/);
+  assert.match(markup, /Streetwear/);
   assert.match(markup, /Featured Creators/);
   assert.match(markup, /href="\/apps\/customhouse\/creators\/beta-b1c2d"/);
   assert.match(markup, /href="\/apps\/customhouse\/creators\/beta-b1c2d\/products\/creator-product-b"/);

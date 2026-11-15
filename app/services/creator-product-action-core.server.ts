@@ -4,6 +4,7 @@ import {
   creatorProductColorInputDiagnostics,
   deleteCreatorProductForCustomer,
   restoreCreatorProductToDraftForCustomer,
+  saveCreatorContentMetadataForCustomer,
   savePitchPrintDraftSessionForCustomer,
   submitCreatorProductForReview,
   updateCreatorProductDetailsForCustomer,
@@ -35,6 +36,7 @@ export type CreatorProductActionCoreDependencies = {
   attachPitchPrintProjectToCreatorProduct: typeof attachPitchPrintProjectToCreatorProduct;
   deleteCreatorProductForCustomer: typeof deleteCreatorProductForCustomer;
   restoreCreatorProductToDraftForCustomer: typeof restoreCreatorProductToDraftForCustomer;
+  saveCreatorContentMetadataForCustomer: typeof saveCreatorContentMetadataForCustomer;
   savePitchPrintDraftSessionForCustomer: typeof savePitchPrintDraftSessionForCustomer;
   submitCreatorProductForReview: typeof submitCreatorProductForReview;
   updateCreatorProductDetailsForCustomer: typeof updateCreatorProductDetailsForCustomer;
@@ -47,6 +49,7 @@ export const creatorProductActionServices = {
   attachPitchPrintProjectToCreatorProduct,
   deleteCreatorProductForCustomer,
   restoreCreatorProductToDraftForCustomer,
+  saveCreatorContentMetadataForCustomer,
   savePitchPrintDraftSessionForCustomer,
   submitCreatorProductForReview,
   updateCreatorProductDetailsForCustomer,
@@ -78,6 +81,17 @@ export async function creatorProductActionCore(
           context.shop,
           context.customerId!,
           creatorProductId,
+          body,
+        ),
+      });
+    }
+    if (actionName === "update-creator-content") {
+      return dependencies.apiData({
+        product: await dependencies.saveCreatorContentMetadataForCustomer(
+          context.shop,
+          context.customerId!,
+          creatorProductId,
+          body,
         ),
       });
     }

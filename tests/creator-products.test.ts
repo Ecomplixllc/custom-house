@@ -444,6 +444,9 @@ function fakeDb() {
           rejectionReason: null,
           creatorPricingMode: args.data.creatorPricingMode ?? null,
           creatorPricingPreviewJson: args.data.creatorPricingPreviewJson ?? "{}",
+          creatorContentOptIn: args.data.creatorContentOptIn ?? true,
+          creatorContentTags: args.data.creatorContentTags ?? [],
+          creatorContentHiddenByAdmin: args.data.creatorContentHiddenByAdmin ?? false,
           createdAt: new Date("2026-08-11T00:00:00.000Z"),
           updatedAt: new Date("2026-08-11T00:00:00.000Z"),
         };

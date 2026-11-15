@@ -11497,3 +11497,135 @@ body:has([data-customhouse-dashboard]) {
 .customhouse-base-product-card__setup select:not([multiple])::-ms-expand {
   display: none !important;
 }
+
+/* Draft-only Creator Content metadata editor in the final review panel. */
+.ch-design-review-modal .ch-creator-content-editor {
+  display: grid;
+  gap: 14px;
+  margin: 0 24px;
+  padding: 18px;
+  border: 1px solid rgba(138, 44, 255, 0.28);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(138, 44, 255, 0.08), rgba(255, 255, 255, 0.035));
+}
+
+.ch-creator-content-editor__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.ch-creator-content-editor strong,
+.ch-creator-content-editor__tag-label {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ch-creator-content-editor p {
+  margin: 5px 0 0;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ch-creator-content-editor__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ch-creator-content-editor__toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: #8a2cff;
+}
+
+.ch-creator-content-editor__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 31px;
+  margin-top: 10px;
+}
+
+.ch-creator-content-editor__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(200, 255, 0, 0.45);
+  border-radius: 999px;
+  background: rgba(200, 255, 0, 0.08);
+  color: #eaffb8;
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.ch-creator-content-editor__tag button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.ch-creator-content-editor__add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ch-creator-content-editor__add input,
+.ch-creator-content-editor__add button {
+  min-height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+}
+
+.ch-creator-content-editor__add input {
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  padding: 0 12px;
+}
+
+.ch-creator-content-editor__add button {
+  background: #8a2cff;
+  color: #fff;
+  padding: 0 15px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ch-creator-content-editor__add button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ch-creator-content-editor__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+}
+
+@media (max-width: 767px) {
+  .ch-design-review-modal .ch-creator-content-editor {
+    margin: 0 14px;
+    padding: 14px;
+  }
+
+  .ch-creator-content-editor__heading {
+    display: grid;
+  }
+}

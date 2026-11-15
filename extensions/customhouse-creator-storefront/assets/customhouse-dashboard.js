@@ -410,7 +410,7 @@ async function saveCreatorProductPitchPrintDraftSession(productId, payload) {
   return body.data?.product;
 }
 
-async function submitCreatorProductForReview(productId) {
+async function submitCreatorProductForReview(productId, metadata = {}) {
   const response = await fetch(`${CREATOR_PRODUCTS_ENDPOINT}/${encodeURIComponent(productId)}`, {
     method: "POST",
     credentials: "same-origin",
@@ -418,11 +418,28 @@ async function submitCreatorProductForReview(productId) {
       Accept: "application/json",
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ intent: "submit" }),
+    body: JSON.stringify({ intent: "submit", ...metadata }),
   });
   const body = await response.json().catch(() => null);
   if (!response.ok || !body?.ok) {
     throw new Error(body?.error?.message || "Creator Product could not be submitted");
+  }
+  return body.data?.product;
+}
+
+async function saveCreatorContentMetadata(productId, metadata) {
+  const response = await fetch(`${CREATOR_PRODUCTS_ENDPOINT}/${encodeURIComponent(productId)}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action: "update-creator-content", ...metadata }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body?.ok) {
+    throw new Error(body?.error?.message || "Creator Content settings could not be saved.");
   }
   return body.data?.product;
 }
@@ -447,7 +464,10 @@ export async function completeCreatorFinalSubmission({
     throw new Error("The latest PitchPrint project was not persisted for this Creator Product.");
   }
 
-  const submitted = await submitProduct(productId);
+  const submitted = await submitProduct(productId, {
+    creatorContentOptIn: saved.creatorContentOptIn !== false,
+    creatorContentTags: Array.isArray(saved.creatorContentTags) ? saved.creatorContentTags : [],
+  });
   if (
     !submitted?.id ||
     String(submitted.id) !== productId ||
@@ -3055,6 +3075,146 @@ function renderReviewVariantSelections(root, product) {
   summary.append(title, list);
 }
 
+function creatorContentReviewMetadata(root) {
+  const modal = dashboardModalQuery(root, "[data-dashboard-review-modal]");
+  return {
+    creatorContentOptIn: modal?.querySelector("[data-dashboard-creator-content-opt-in]")?.checked !== false,
+    creatorContentTags: Array.isArray(root.__customHouseReviewTags)
+      ? [...root.__customHouseReviewTags]
+      : [],
+  };
+}
+
+function normalizeCreatorContentTagInput(value) {
+  return String(value || "").trim().replace(/\s+/gu, " ");
+}
+
+function setCreatorContentReviewStatus(root, message, isError = false) {
+  const status = dashboardModalQuery(root, "[data-dashboard-creator-content-status]");
+  if (!status) return;
+  status.textContent = message || "";
+  status.dataset.error = isError ? "true" : "false";
+}
+
+function renderCreatorContentReviewEditor(root) {
+  const modal = dashboardModalQuery(root, "[data-dashboard-review-modal]");
+  if (!modal) return;
+  const tags = Array.isArray(root.__customHouseReviewTags) ? root.__customHouseReviewTags : [];
+  const list = modal.querySelector("[data-dashboard-creator-content-tags]");
+  const input = modal.querySelector("[data-dashboard-creator-content-tag-input]");
+  const add = modal.querySelector("[data-dashboard-creator-content-tag-add]");
+  const counter = modal.querySelector("[data-dashboard-creator-content-tag-count]");
+  const optIn = modal.querySelector("[data-dashboard-creator-content-opt-in]");
+  const panel = modal.querySelector("[data-dashboard-creator-content-tags-panel]");
+  if (list) {
+    list.replaceChildren();
+    tags.forEach((tag, index) => {
+      const chip = document.createElement("span");
+      chip.className = "ch-creator-content-editor__tag";
+      chip.append(document.createTextNode(tag));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove ${tag}`);
+      remove.textContent = "×";
+      remove.addEventListener("click", () => {
+        root.__customHouseReviewTags.splice(index, 1);
+        renderCreatorContentReviewEditor(root);
+        queueCreatorContentReviewSave(root);
+      });
+      chip.append(remove);
+      list.append(chip);
+    });
+  }
+  if (counter) counter.textContent = `${tags.length} / 5 tags`;
+  if (input) input.disabled = tags.length >= 5 || optIn?.checked === false;
+  if (add) add.disabled = tags.length >= 5 || optIn?.checked === false;
+  if (panel) panel.hidden = optIn?.checked === false;
+}
+
+function addCreatorContentReviewTag(root) {
+  const input = dashboardModalQuery(root, "[data-dashboard-creator-content-tag-input]");
+  const tag = normalizeCreatorContentTagInput(input?.value);
+  if (!tag) {
+    setCreatorContentReviewStatus(root, "Enter a tag first.", true);
+    return;
+  }
+  if ([...tag].length > 30 || /[<>]/u.test(tag)) {
+    setCreatorContentReviewStatus(root, "Use a safe tag with 30 characters or fewer.", true);
+    return;
+  }
+  const tags = Array.isArray(root.__customHouseReviewTags) ? root.__customHouseReviewTags : [];
+  if (tags.length >= 5) {
+    setCreatorContentReviewStatus(root, "You can add up to 5 tags.", true);
+    return;
+  }
+  if (tags.some((value) => value.toLocaleLowerCase() === tag.toLocaleLowerCase())) {
+    setCreatorContentReviewStatus(root, "That tag is already added.", true);
+    return;
+  }
+  tags.push(tag);
+  root.__customHouseReviewTags = tags;
+  if (input) input.value = "";
+  setCreatorContentReviewStatus(root, "");
+  renderCreatorContentReviewEditor(root);
+  queueCreatorContentReviewSave(root);
+}
+
+async function persistCreatorContentReview(root) {
+  const product = root.__customHouseReviewProduct;
+  if (!product?.id || !["DRAFT", "REJECTED"].includes(String(product.status || "").toUpperCase())) {
+    return product;
+  }
+  if (root.__customHouseReviewSavePromise) return root.__customHouseReviewSavePromise;
+  setCreatorContentReviewStatus(root, "Updating…");
+  const promise = saveCreatorContentMetadata(product.id, creatorContentReviewMetadata(root));
+  root.__customHouseReviewSavePromise = promise;
+  try {
+    const updated = await promise;
+    updateCreatorProductInState(root, updated);
+    root.__customHouseReviewProduct = updated;
+    setCreatorContentReviewStatus(root, "Saved");
+    return updated;
+  } catch (error) {
+    setCreatorContentReviewStatus(
+      root,
+      error instanceof Error ? error.message : "Settings could not be saved.",
+      true,
+    );
+    throw error;
+  } finally {
+    root.__customHouseReviewSavePromise = null;
+  }
+}
+
+function queueCreatorContentReviewSave(root) {
+  window.clearTimeout(root.__customHouseReviewSaveTimer);
+  setCreatorContentReviewStatus(root, "Unsaved changes");
+  root.__customHouseReviewSaveTimer = window.setTimeout(() => {
+    void persistCreatorContentReview(root).catch(() => {});
+  }, 350);
+}
+
+async function loadCreatorContentTagSuggestions(root) {
+  if (root.__customHouseCreatorContentSuggestionsLoaded) return;
+  root.__customHouseCreatorContentSuggestionsLoaded = true;
+  try {
+    const response = await fetch("/apps/customhouse/creator-content?format=json", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    const body = await response.json().catch(() => null);
+    const suggestions = Array.isArray(body?.data?.categories) ? body.data.categories : [];
+    const datalist = dashboardModalQuery(root, "[data-dashboard-creator-content-tag-suggestions]");
+    suggestions.slice(0, 50).forEach((tag) => {
+      const option = document.createElement("option");
+      option.value = String(tag);
+      datalist?.append(option);
+    });
+  } catch {
+    // Suggestions are optional; creators may always enter a new valid tag.
+  }
+}
+
 function closeDesignReviewModal(root) {
   const modal = dashboardModalQuery(root, "[data-dashboard-review-modal]");
   if (modal) modal.hidden = true;
@@ -3079,6 +3239,14 @@ function openDesignReviewModal(root, product) {
     status.textContent = creatorProductStatusLabel(product.status);
   }
   if (primary) primary.textContent = product.status === "REJECTED" ? "Resubmit for Review" : "Submit for Review";
+  const optIn = modal.querySelector("[data-dashboard-creator-content-opt-in]");
+  if (optIn) optIn.checked = product.creatorContentOptIn !== false;
+  root.__customHouseReviewTags = Array.isArray(product.creatorContentTags)
+    ? [...product.creatorContentTags].slice(0, 5)
+    : [];
+  setCreatorContentReviewStatus(root, "");
+  renderCreatorContentReviewEditor(root);
+  void loadCreatorContentTagSuggestions(root);
   renderReviewPreviews(root, product);
   renderReviewVariantSelections(root, product);
   modal.hidden = false;
@@ -3092,21 +3260,34 @@ function bindDesignReviewModal(root) {
   dashboardModalQueryAll(root, "[data-dashboard-review-close]").forEach((button) => {
     button.addEventListener("click", () => closeDesignReviewModal(root));
   });
-  dashboardModalQuery(root, "[data-dashboard-review-draft]")?.addEventListener("click", () => {
-    closeDesignReviewModal(root);
-    showCreatorToast(root, "Design saved as draft.");
+  dashboardModalQuery(root, "[data-dashboard-review-draft]")?.addEventListener("click", async () => {
+    try {
+      await persistCreatorContentReview(root);
+      closeDesignReviewModal(root);
+      showCreatorToast(root, "Design and Creator Content settings saved as draft.");
+    } catch {
+      // The inline status keeps the modal open with the authoritative server error.
+    }
   });
   dashboardModalQuery(root, "[data-dashboard-review-edit]")?.addEventListener("click", async (event) => {
-    const product = root.__customHouseReviewProduct;
-    closeDesignReviewModal(root);
-    if (product) await root.__customHouseOpenPitchPrintDesigner?.(product, event.currentTarget);
+    try {
+      const product = await persistCreatorContentReview(root);
+      closeDesignReviewModal(root);
+      if (product) await root.__customHouseOpenPitchPrintDesigner?.(product, event.currentTarget);
+    } catch {
+      // Keep the modal open until the metadata is saved safely.
+    }
   });
   dashboardModalQuery(root, "[data-dashboard-review-submit]")?.addEventListener("click", async (event) => {
     const product = root.__customHouseReviewProduct;
     if (!product?.id) return;
     const restoreButton = setActionLoading(event.currentTarget, "Submitting...");
     try {
-      const updated = await submitCreatorProductForReview(product.id);
+      window.clearTimeout(root.__customHouseReviewSaveTimer);
+      const updated = await submitCreatorProductForReview(
+        product.id,
+        creatorContentReviewMetadata(root),
+      );
       updateCreatorProductInState(root, updated);
       closeDesignReviewModal(root);
       openSubmitFeedbackModal(root, { success: true });
@@ -3118,6 +3299,18 @@ function bindDesignReviewModal(root) {
     } finally {
       restoreButton();
     }
+  });
+  dashboardModalQuery(root, "[data-dashboard-creator-content-opt-in]")?.addEventListener("change", () => {
+    renderCreatorContentReviewEditor(root);
+    queueCreatorContentReviewSave(root);
+  });
+  dashboardModalQuery(root, "[data-dashboard-creator-content-tag-add]")?.addEventListener("click", () => {
+    addCreatorContentReviewTag(root);
+  });
+  dashboardModalQuery(root, "[data-dashboard-creator-content-tag-input]")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    addCreatorContentReviewTag(root);
   });
   document.addEventListener("keydown", (event) => {
     const modal = dashboardModalQuery(root, "[data-dashboard-review-modal]");

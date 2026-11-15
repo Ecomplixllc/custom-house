@@ -48,6 +48,10 @@ import {
   creatorProductionPricingPreview,
   CREATOR_PRICING_MODE_BAKED_IN_V1,
 } from "./creator-product-pricing.server.ts";
+import {
+  normalizeCreatorContentBoolean,
+  normalizeCreatorContentTags,
+} from "./creator-content-metadata.ts";
 
 export type CreatorProductRecord = {
   id: string;
@@ -76,6 +80,9 @@ export type CreatorProductRecord = {
   baseVariantMappingJson?: string;
   creatorPricingMode?: string | null;
   creatorPricingPreviewJson?: string;
+  creatorContentOptIn: boolean;
+  creatorContentTags: string[];
+  creatorContentHiddenByAdmin: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -196,6 +203,17 @@ export type PitchPrintProjectFetcher = (
 export type UpdateCreatorProductDetailsInput = {
   title?: unknown;
   description?: unknown;
+};
+
+export type CreatorContentMetadataInput = {
+  creatorContentOptIn?: unknown;
+  creatorContentTags?: unknown;
+};
+
+export type AdminCreatorContentMetadataInput = {
+  creatorProductId?: unknown;
+  creatorContentTags?: unknown;
+  creatorContentHiddenByAdmin?: unknown;
 };
 
 export type EligibleCreatorBaseProduct = {
@@ -1888,6 +1906,9 @@ export async function createCreatorProductDraft(
       previewUrls: safeJson(previewUrl ? [previewUrl] : []),
       baseProductVariantsJson: safeJson(baseProductVariants),
       designVariantSelectionsJson: safeJson(initialSetup),
+      creatorContentOptIn: true,
+      creatorContentTags: [],
+      creatorContentHiddenByAdmin: false,
       status: "DRAFT",
     },
   });
@@ -2346,8 +2367,19 @@ export async function submitCreatorProductForReview(
   shop: string,
   customerId: string,
   creatorProductId: string,
-  database: CreatorProductDb = db,
+  metadataOrDatabase: CreatorContentMetadataInput | CreatorProductDb = {},
+  databaseOverride?: CreatorProductDb,
 ) {
+  const metadataIsDatabase =
+    typeof metadataOrDatabase === "object" &&
+    metadataOrDatabase !== null &&
+    "creatorProduct" in metadataOrDatabase;
+  const metadata = metadataIsDatabase
+    ? {}
+    : metadataOrDatabase as CreatorContentMetadataInput;
+  const database = metadataIsDatabase
+    ? metadataOrDatabase as CreatorProductDb
+    : databaseOverride || db;
   const creator = await approvedCreatorForCustomer(shop, customerId, database);
   const existing = await database.creatorProduct.findFirst({
     where: {
@@ -2371,6 +2403,14 @@ export async function submitCreatorProductForReview(
     );
   }
   validateCompletableCreatorProduct(existing);
+  const creatorContentOptIn = normalizeCreatorContentBoolean(
+    metadata.creatorContentOptIn,
+    existing.creatorContentOptIn ?? true,
+    "Creator Content visibility",
+  );
+  const creatorContentTags = metadata.creatorContentTags === undefined
+    ? existing.creatorContentTags ?? []
+    : normalizeCreatorContentTags(metadata.creatorContentTags);
   const updated = await database.creatorProduct.update({
     where: { id: existing.id },
     data: {
@@ -2378,6 +2418,8 @@ export async function submitCreatorProductForReview(
       submittedAt: new Date(),
       rejectedAt: null,
       rejectionReason: null,
+      creatorContentOptIn,
+      creatorContentTags,
     },
   });
   await database.auditLog?.create({
@@ -2389,7 +2431,78 @@ export async function submitCreatorProductForReview(
       entityType: "CreatorProduct",
       entityId: existing.id,
       beforeJson: safeJson({ status: existing.status }),
-      afterJson: safeJson({ creatorId: creator.id, status: "PENDING" }),
+      afterJson: safeJson({
+        creatorId: creator.id,
+        status: "PENDING",
+        creatorContentOptIn,
+        creatorContentTagCount: creatorContentTags.length,
+      }),
+    },
+  });
+  return updated;
+}
+
+export async function saveCreatorContentMetadataForCustomer(
+  shop: string,
+  customerId: string,
+  creatorProductId: string,
+  input: CreatorContentMetadataInput,
+  database: CreatorProductDb = db,
+) {
+  const creator = await approvedCreatorForCustomer(shop, customerId, database);
+  const existing = await database.creatorProduct.findFirst({
+    where: {
+      id: cleanCreatorProductId(creatorProductId),
+      shop,
+      creatorId: creator.id,
+    },
+  });
+  if (!existing) {
+    throw new DomainError(
+      "CREATOR_PRODUCT_NOT_FOUND",
+      "Creator Product not found.",
+      404,
+    );
+  }
+  if (!["DRAFT", "REJECTED"].includes(existing.status)) {
+    throw new DomainError(
+      "CREATOR_CONTENT_METADATA_LOCKED",
+      "Creator Content settings can be changed by the Creator only while the design is a draft or rejected.",
+      409,
+    );
+  }
+  const creatorContentOptIn = normalizeCreatorContentBoolean(
+    input.creatorContentOptIn,
+    existing.creatorContentOptIn ?? true,
+    "Creator Content visibility",
+  );
+  const creatorContentTags = input.creatorContentTags === undefined
+    ? existing.creatorContentTags ?? []
+    : normalizeCreatorContentTags(input.creatorContentTags);
+  const updated = await database.creatorProduct.update({
+    where: { id: existing.id },
+    data: {
+      creatorContentOptIn,
+      creatorContentTags,
+    },
+  });
+  await database.auditLog?.create({
+    data: {
+      shop,
+      actorType: "CUSTOMER",
+      actorId: normalizeCustomerGid(customerId),
+      action: "creator_product.creator_content_updated",
+      entityType: "CreatorProduct",
+      entityId: existing.id,
+      beforeJson: safeJson({
+        creatorContentOptIn: existing.creatorContentOptIn ?? true,
+        creatorContentTags: existing.creatorContentTags ?? [],
+      }),
+      afterJson: safeJson({
+        creatorContentOptIn,
+        creatorContentTags,
+        status: existing.status,
+      }),
     },
   });
   return updated;
@@ -2948,6 +3061,9 @@ export async function listCreatorProductsForAdmin(
       baseVariantMappingJson: true,
       creatorPricingMode: true,
       creatorPricingPreviewJson: true,
+      creatorContentOptIn: true,
+      creatorContentTags: true,
+      creatorContentHiddenByAdmin: true,
       submittedAt: true,
       publishedAt: true,
       rejectedAt: true,
@@ -2977,6 +3093,59 @@ export async function listCreatorProductsForAdmin(
       }
     >
   >;
+}
+
+export async function moderateCreatorContentAsAdmin(
+  shop: string,
+  adminId: string | null,
+  input: AdminCreatorContentMetadataInput,
+  database: CreatorProductDb = db,
+) {
+  const creatorProductId = cleanCreatorProductId(input.creatorProductId);
+  const existing = await database.creatorProduct.findFirst({
+    where: { id: creatorProductId, shop },
+  });
+  if (!existing) {
+    throw new DomainError(
+      "CREATOR_PRODUCT_NOT_FOUND",
+      "Creator Product not found.",
+      404,
+    );
+  }
+  const creatorContentTags = normalizeCreatorContentTags(input.creatorContentTags ?? []);
+  const creatorContentHiddenByAdmin = normalizeCreatorContentBoolean(
+    input.creatorContentHiddenByAdmin,
+    existing.creatorContentHiddenByAdmin ?? false,
+    "Admin Creator Content visibility override",
+  );
+  const updated = await database.creatorProduct.update({
+    where: { id: existing.id },
+    data: {
+      creatorContentTags,
+      creatorContentHiddenByAdmin,
+    },
+  });
+  await database.auditLog?.create({
+    data: {
+      shop,
+      actorType: "ADMIN",
+      actorId: adminId,
+      action: "creator_product.creator_content_moderated",
+      entityType: "CreatorProduct",
+      entityId: existing.id,
+      beforeJson: safeJson({
+        creatorContentTags: existing.creatorContentTags ?? [],
+        creatorContentHiddenByAdmin: existing.creatorContentHiddenByAdmin ?? false,
+        status: existing.status,
+      }),
+      afterJson: safeJson({
+        creatorContentTags,
+        creatorContentHiddenByAdmin,
+        status: existing.status,
+      }),
+    },
+  });
+  return updated;
 }
 
 export async function moderateCreatorProductAsAdmin(
