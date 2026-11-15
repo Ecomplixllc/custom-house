@@ -812,6 +812,41 @@ test("Creator Content pagination model clamps pages and keeps 12 products per pa
   assert.equal(creatorContentPaginationModel(13, 1, 0.5).pageSize, 12);
 });
 
+test("Creator Content desktop filters start collapsed and toggle from the toolbar", async () => {
+  const { db, shopify } = fakePublicDiscovery();
+  const data = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+  const response = creatorContentHtml({
+    ...data,
+    headerAccount: { loggedIn: false },
+  });
+  const markup = await response.text();
+
+  assert.match(
+    markup,
+    /data-creator-content-filter-open[^>]*aria-expanded="false"/,
+  );
+  assert.match(
+    markup,
+    /data-creator-content-filter-drawer[^>]*aria-hidden="true"[^>]*inert/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__filter-open\{display:block/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__results\.is-filter-open\{display:grid;grid-template-columns:250px minmax\(0,1fr\)/,
+  );
+  assert.match(
+    markup,
+    /openButton\?\.addEventListener\("click", \(\) => setDrawer\(openButton\.getAttribute\("aria-expanded"\) !== "true"\)\)/,
+  );
+});
+
 test("Creator Content renderer provides responsive real-data discovery without customization controls", async () => {
   const { db, shopify } = fakePublicDiscovery();
   const data = await loadPublicCreatorContent(
