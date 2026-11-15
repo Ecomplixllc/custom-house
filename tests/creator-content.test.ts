@@ -809,6 +809,7 @@ test("Creator Content pagination model clamps pages and keeps 12 products per pa
   });
   assert.equal(creatorContentPaginationModel(13, 99).page, 2);
   assert.equal(creatorContentPaginationModel(13, -2).page, 1);
+  assert.equal(creatorContentPaginationModel(13, 1, 0.5).pageSize, 12);
 });
 
 test("Creator Content renderer provides responsive real-data discovery without customization controls", async () => {

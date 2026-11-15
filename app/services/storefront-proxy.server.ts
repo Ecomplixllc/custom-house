@@ -767,9 +767,10 @@ export function creatorContentPaginationModel(
   requestedPageSize = 12,
 ) {
   const total = Number.isFinite(totalItems) ? Math.max(0, Math.floor(totalItems)) : 0;
-  const pageSize = Number.isFinite(requestedPageSize) && requestedPageSize > 0
+  const normalizedPageSize = Number.isFinite(requestedPageSize)
     ? Math.floor(requestedPageSize)
-    : 12;
+    : 0;
+  const pageSize = normalizedPageSize >= 1 ? normalizedPageSize : 12;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const candidatePage = Number.isFinite(requestedPage)
     ? Math.max(1, Math.floor(requestedPage))

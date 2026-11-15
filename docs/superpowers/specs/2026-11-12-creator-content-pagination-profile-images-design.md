@@ -31,4 +31,3 @@ Polish the public Creator Content discovery page by replacing the Load More cont
 3. New JSON pagination API. Flexible, but adds unnecessary surface area for the current page and duplicates the existing safe HTML fetch path.
 
 The selected approach reuses the current app-proxy HTML pagination batches, loads remaining safe pages in the background, and paginates the resulting filtered card set in the browser.
-

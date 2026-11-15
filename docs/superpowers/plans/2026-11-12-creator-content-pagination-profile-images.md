@@ -72,4 +72,3 @@
 - [ ] **Step 3: Commit and push `development`.**
 - [ ] **Step 4: Deploy a development preview and inspect pagination, filters, profile images, desktop, and mobile behavior.**
 - [ ] **Step 5: Report the preview and stop for explicit production approval.**
-
