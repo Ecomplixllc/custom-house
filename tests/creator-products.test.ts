@@ -3795,6 +3795,15 @@ test("admin creator products list avoids PitchPrint variant selection columns", 
   assert.doesNotMatch(route, /variantSelections/);
 });
 
+test("admin Creator Product approval keeps recoverable inventory errors in-page", () => {
+  const route = readFileSync("app/routes/app.creator-products.tsx", "utf8");
+
+  assert.match(route, /creatorProductPublishingRecoveryMessage/);
+  assert.match(route, /code: "CREATOR_SHARED_INVENTORY_SETUP_FAILED"/);
+  assert.match(route, /actionData && !actionData\.ok/);
+  assert.match(route, /<s-banner tone="critical">\{actionData\.message\}<\/s-banner>/);
+});
+
 test("PitchPrint clone credentials stay in server-only code", () => {
   const cloneService = readFileSync(
     "app/services/pitchprint-clone.server.ts",

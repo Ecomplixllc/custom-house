@@ -14,7 +14,10 @@ import {
   moderateCreatorContentAsAdmin,
   moderateCreatorProductAsAdmin,
 } from "../services/creator-products.server";
-import { publishCreatorProductToShopify } from "../services/creator-product-publishing.server";
+import {
+  creatorProductPublishingRecoveryMessage,
+  publishCreatorProductToShopify,
+} from "../services/creator-product-publishing.server";
 
 const FILTERS = ["PENDING", "PUBLISHED", "REJECTED", "DRAFT", "ARCHIVED", "ALL"] as const;
 
@@ -121,21 +124,36 @@ export async function action({ request }: ActionFunctionArgs) {
         : "Creator Product archived; order and financial history remain preserved.",
     };
   }
-  const product = decision === "PUBLISHED"
-    ? await publishCreatorProductToShopify(
+  let product;
+  if (decision === "PUBLISHED") {
+    try {
+      product = await publishCreatorProductToShopify(
         session.shop,
         creatorProductId,
         new AdminGraphqlClient(admin),
-      )
-    : await moderateCreatorProductAsAdmin(
-        session.shop,
-        session.id || null,
-        {
-          creatorProductId,
-          decision,
-          rejectionReason: form.get("rejectionReason"),
-        },
       );
+    } catch (error) {
+      const recoveryMessage = creatorProductPublishingRecoveryMessage(error);
+      if (recoveryMessage) {
+        return {
+          ok: false,
+          code: "CREATOR_SHARED_INVENTORY_SETUP_FAILED",
+          message: recoveryMessage,
+        };
+      }
+      throw error;
+    }
+  } else {
+    product = await moderateCreatorProductAsAdmin(
+      session.shop,
+      session.id || null,
+      {
+        creatorProductId,
+        decision,
+        rejectionReason: form.get("rejectionReason"),
+      },
+    );
+  }
   return {
     ok: true,
     message:
@@ -169,7 +187,10 @@ export default function CreatorProductsAdmin() {
             Compatibility / Legacy Repair
           </Link>
         </header>
-        {actionData?.message && (
+        {actionData && !actionData.ok ? (
+          <s-banner tone="critical">{actionData.message}</s-banner>
+        ) : null}
+        {actionData?.ok && actionData.message && (
           <div className="creator-admin-message">{actionData.message}</div>
         )}
         <section className="creator-admin-panel">

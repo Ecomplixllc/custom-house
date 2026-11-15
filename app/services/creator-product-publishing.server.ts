@@ -96,6 +96,25 @@ export type CreatorProductForPublish = {
   };
 };
 
+export function creatorProductPublishingRecoveryMessage(error: unknown) {
+  if (
+    !(error instanceof DomainError) ||
+    error.code !== "CREATOR_SHARED_INVENTORY_SETUP_FAILED"
+  ) {
+    return null;
+  }
+  if (error.message.includes("BLOCKED_BASE_INVENTORY_UNTRACKED")) {
+    return "Approval is blocked because the base product does not track inventory. In Shopify, open the base product shown on this card, enable Track quantity for every variant used by this design, enter the available inventory, and keep Continue selling when out of stock disabled. Then return here and click Approve again.";
+  }
+  if (error.message.includes("BLOCKED_BASE_INVENTORY_POLICY")) {
+    return "Approval is blocked because a base-product variant allows overselling. In Shopify, open the base product shown on this card and disable Continue selling when out of stock for every variant used by this design. Then return here and click Approve again.";
+  }
+  if (error.message.includes("BLOCKED_BUNDLES_INELIGIBLE")) {
+    return "Approval is blocked because Shopify shared inventory is not available for this store. Confirm Shopify Bundles eligibility before retrying publication.";
+  }
+  return "Approval could not complete because the base product is not ready for shared inventory. Review its inventory tracking, quantities, and overselling settings in Shopify, then retry approval.";
+}
+
 function productUrl(handle: string) {
   return `/products/${encodeURIComponent(handle)}`;
 }
