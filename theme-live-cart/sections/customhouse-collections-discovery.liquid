@@ -1,6 +1,3 @@
-{{ 'customhouse-collections-discovery.css' | asset_url | stylesheet_tag }}
-<script src="{{ 'customhouse-collections-discovery.js' | asset_url }}" defer="defer"></script>
-
 {% liquid
   assign source_collection = section.settings.base_products_collection
   assign product_limit = section.settings.product_limit | default: 48 | plus: 0
@@ -8,180 +5,172 @@
   if hero_image == blank and source_collection.image != blank
     assign hero_image = source_collection.image
   endif
+  if hero_image == blank
+    for hero_product in source_collection.products
+      assign hero_origin = hero_product.metafields.customhouse.product_origin.value | downcase
+      assign hero_type = hero_product.metafields.customhouse.product_type.value | downcase
+      assign hero_mode = hero_product.metafields.customhouse.design_mode.value | downcase
+      if hero_origin == 'global' or hero_type == 'global_customizable' or hero_mode == 'customizable'
+        if hero_product.featured_image != blank
+          assign hero_image = hero_product.featured_image
+          break
+        endif
+      endif
+    endfor
+  endif
 %}
 
 <section
   id="CustomHouseCollectionsDiscovery-{{ section.id }}"
   class="customhouse-collections-discovery"
   data-chd-root
-  data-creator-endpoint="{{ section.settings.creator_endpoint | escape }}"
 >
-  <div class="chd-hero">
-    <div class="chd-container chd-hero__grid">
+  <div class="chd-container">
+    <nav class="chd-breadcrumb" aria-label="Breadcrumb">
+      <a href="{{ routes.root_url }}">Home</a><span aria-hidden="true">›</span><span>Collections</span><span aria-hidden="true">›</span><strong>Base products</strong>
+    </nav>
+
+    <header class="chd-hero">
       <div class="chd-hero__content">
         <p class="chd-eyebrow">{{ section.settings.hero_eyebrow | escape }}</p>
-        <h1>
-          <span>{{ section.settings.hero_heading | escape }}</span>
-          <strong>{{ section.settings.hero_accent | escape }}</strong>
-        </h1>
+        <h1><span>{{ section.settings.hero_heading | escape }}</span><strong>{{ section.settings.hero_accent | escape }}</strong></h1>
         <p class="chd-hero__copy">{{ section.settings.hero_copy | escape }}</p>
         <ul class="chd-value-list" role="list">
-          <li><span aria-hidden="true">◆</span> Premium Quality</li>
-          <li><span aria-hidden="true">◆</span> Your Design</li>
-          <li><span aria-hidden="true">◆</span> Worldwide Shipping</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.2 2 5 13h6l-.2 9L19 10h-6l.2-8Z"/></svg><span><strong>Premium quality</strong><small>Built to last</small></span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 15l9 5 9-5"/></svg><span><strong>Your design</strong><small>Print, embroidery or patch</small></span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 5h13v11H2V5Zm13 4h4l3 4v3h-7V9ZM6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm12 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/></svg><span><strong>Worldwide shipping</strong><small>Fast and reliable</small></span></li>
         </ul>
-        <a class="chd-button chd-button--primary" href="#chd-base-products-{{ section.id }}">Explore base products</a>
       </div>
-      <div class="chd-hero__visual">
+      <div class="chd-hero__art">
+        <svg class="chd-hero__crown" viewBox="0 0 90 70" aria-hidden="true"><path d="M8 56 2 22l24 18L45 7l19 33 24-18-7 34H8Zm0 9h73"/></svg>
+        <span class="chd-hero__slash chd-hero__slash--lime" aria-hidden="true"></span>
+        <span class="chd-hero__slash chd-hero__slash--purple" aria-hidden="true"></span>
         {% if hero_image != blank %}
-          {{ hero_image | image_url: width: 1400 | image_tag: loading: 'eager', widths: '600,900,1200,1400', sizes: '(max-width: 767px) 100vw, 48vw', alt: section.settings.hero_image_alt }}
+          {{ hero_image | image_url: width: 1400 | image_tag: loading: 'eager', widths: '480,720,1000,1400', sizes: '(max-width: 767px) 100vw, 52vw', alt: section.settings.hero_image_alt, class: 'chd-hero__image' }}
         {% else %}
-          <div class="chd-hero__placeholder" aria-hidden="true"><span>CH</span></div>
+          <div class="chd-hero__fallback" aria-hidden="true"></div>
         {% endif %}
       </div>
-    </div>
-  </div>
-
-  <nav class="chd-categories" aria-label="Product categories">
-    <div class="chd-container chd-categories__track">
-      {% for block in section.blocks %}
-        {% if block.type == 'category' %}
-          {% assign category_collection = block.settings.collection %}
-          {% if category_collection != blank %}
-            <a class="chd-category" href="{{ category_collection.url }}" {{ block.shopify_attributes }}>
-              <span class="chd-category__icon" aria-hidden="true">{{ forloop.index | prepend: '0' }}</span>
-              <span><strong>{{ block.settings.label | escape }}</strong><small>{{ block.settings.description | escape }}</small></span>
-            </a>
-          {% endif %}
-        {% endif %}
-      {% endfor %}
-    </div>
-  </nav>
-
-  <div id="chd-base-products-{{ section.id }}" class="chd-base chd-container">
-    <header class="chd-section-heading">
-      <div><p class="chd-eyebrow">Build your own</p><h2>Base Products</h2></div>
-      <p>Choose a real CustomHouse base product and open the current PitchPrint customization flow.</p>
     </header>
 
-    {% if source_collection != blank %}
-      <div class="chd-toolbar" data-chd-toolbar>
-        <button class="chd-filter-toggle" type="button" data-chd-filter-toggle aria-expanded="false">Filters <span data-chd-result-count></span></button>
-        <div class="chd-filter-panel" data-chd-filter-panel>
-          {% assign filter_names = 'category:Category,fit:Fit,brand:Brand,color:Color,method:Print method' | split: ',' %}
-          {% for filter_definition in filter_names %}
-            {% assign filter_parts = filter_definition | split: ':' %}
-            <details class="chd-filter" data-chd-filter="{{ filter_parts[0] }}">
-              <summary>{{ filter_parts[1] }} <span aria-hidden="true">+</span></summary>
-              <div class="chd-filter__options" data-chd-filter-options="{{ filter_parts[0] }}"></div>
-            </details>
-          {% endfor %}
-          <details class="chd-filter chd-filter--price" data-chd-filter="price">
-            <summary>Price <span aria-hidden="true">+</span></summary>
-            <div class="chd-price-range">
-              <label>Min <input type="number" min="0" step="1" inputmode="numeric" data-chd-price-min></label>
-              <label>Max <input type="number" min="0" step="1" inputmode="numeric" data-chd-price-max></label>
-            </div>
-          </details>
-        </div>
-        <label class="chd-sort">Sort
-          <select data-chd-sort>
-            <option value="relevant">Most relevant</option>
-            <option value="newest">Newest</option>
-            <option value="price-asc">Price low to high</option>
-            <option value="price-desc">Price high to low</option>
-          </select>
-        </label>
-      </div>
-      <div class="chd-active-filters" data-chd-active-filters aria-live="polite"></div>
-
-      <div class="chd-product-grid" data-chd-product-grid>
-        {% assign rendered_products = 0 %}
-        {% for product in source_collection.products limit: product_limit %}
-          {% liquid
-            assign product_origin = product.metafields.customhouse.product_origin.value | downcase
-            assign design_mode = product.metafields.customhouse.design_mode.value | downcase
-            assign product_type = product.metafields.customhouse.product_type.value | downcase
-            assign pitchprint_enabled = product.metafields.customhouse.pitchprint_enabled.value
-            assign is_creator_product = false
-            if product_origin == 'creator' or design_mode == 'buy_only' or product_type == 'creator_fixed'
-              assign is_creator_product = true
-            endif
-            assign is_global_product = false
-            if product_origin == 'global' or product_type == 'global_customizable' or design_mode == 'customizable'
-              assign is_global_product = true
-            endif
-          %}
-          {% if is_creator_product == false and is_global_product %}
-            {% assign rendered_products = rendered_products | plus: 1 %}
-            {% capture product_categories %}{% for product_collection in product.collections %}{{ product_collection.handle }}{% unless forloop.last %}||{% endunless %}{% endfor %}{% endcapture %}
-            {% capture product_colors %}{% for option in product.options_with_values %}{% assign normalized_option = option.name | downcase %}{% if normalized_option contains 'color' or normalized_option contains 'colour' %}{% for value in option.values %}{{ value }}{% unless forloop.last %}||{% endunless %}{% endfor %}{% endif %}{% endfor %}{% endcapture %}
-            <article
-              class="chd-product-card"
-              data-chd-product
-              data-index="{{ rendered_products }}"
-              data-title="{{ product.title | escape }}"
-              data-category="{{ product_categories | strip | escape }}"
-              data-fit="{{ product.metafields.customhouse.fit.value | json | escape }}"
-              data-brand="{{ product.vendor | escape }}"
-              data-color="{{ product_colors | strip | escape }}"
-              data-price="{{ product.price_min }}"
-              data-published="{{ product.published_at | date: '%s' }}"
-              data-production-pricing="{{ product.metafields.customhouse.production_method_pricing.value | json | escape }}"
-            >
-              <a class="chd-product-card__media" href="{{ product.url }}" aria-label="View {{ product.title | escape }}">
-                {% if product.featured_image != blank %}
-                  {{ product.featured_image | image_url: width: 720 | image_tag: loading: 'lazy', widths: '320,480,720', sizes: '(max-width: 767px) 50vw, 25vw', alt: product.title }}
-                {% else %}
-                  {{ 'product-apparel-1' | placeholder_svg_tag: 'chd-product-card__placeholder' }}
-                {% endif %}
-              </a>
-              <div class="chd-product-card__body">
-                {% if product.vendor != blank %}<p>{{ product.vendor | escape }}</p>{% endif %}
-                <h3><a href="{{ product.url }}">{{ product.title | escape }}</a></h3>
-                <strong>{{ product.price_min | money }}{% if product.price_varies %}+{% endif %}</strong>
-                <div class="chd-product-card__actions">
-                  {% if pitchprint_enabled == true %}
-                    <a class="chd-button chd-button--primary" href="{{ product.url }}?open_customizer=1">Customize</a>
-                  {% endif %}
-                  <a class="chd-button chd-button--secondary" href="{{ product.url }}">View Product</a>
-                </div>
-              </div>
-            </article>
-          {% endif %}
+    <nav class="chd-categories" aria-label="Product categories" role="tablist">
+      <div class="chd-categories__track">
+        {% liquid
+          assign default_category_handles = 't-shirts,hoodies,pants,caps,accessories' | split: ','
+          assign default_category_labels = 'T-SHIRTS,HOODIES,PANTS,CAPS,ACCESSORIES' | split: ','
+          assign default_category_descriptions = 'Design your t-shirt||Design your hoodie||Joggers, sweats & more||Design your cap||Bags, beanies, patches & more' | split: '||'
+        %}
+        {% for category_handle in default_category_handles %}
+          <button
+            id="chd-category-tab-{{ section.id }}-{{ category_handle }}"
+            class="chd-category{% if forloop.first %} is-active{% endif %}"
+            type="button"
+            role="tab"
+            aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+            aria-controls="chd-product-grid-{{ section.id }}"
+            tabindex="{% if forloop.first %}0{% else %}-1{% endif %}"
+            data-chd-category-tab
+            data-category-handle="{{ category_handle }}"
+          >
+            <span class="chd-category__icon" aria-hidden="true">
+              {% case forloop.index %}
+                {% when 1 %}<svg viewBox="0 0 36 36"><path d="m12 6 6 3 6-3 8 5-4 7-4-2v14H12V16l-4 2-4-7 8-5Z"/></svg>
+                {% when 2 %}<svg viewBox="0 0 36 36"><path d="M10 14 14 7h8l4 7 5 4-3 12H8L5 18l5-4Zm4-7 4 5 4-5"/></svg>
+                {% when 3 %}<svg viewBox="0 0 36 36"><path d="M12 5h12l2 25h-7l-1-15-1 15h-7l2-25Zm0 6h12"/></svg>
+                {% when 4 %}<svg viewBox="0 0 36 36"><path d="M5 20c2-9 8-14 15-14 6 0 10 4 12 10-5 0-10 1-14 4H5Zm13 0c7 0 12 2 14 5H18"/></svg>
+                {% else %}<svg viewBox="0 0 36 36"><path d="M8 12h20l3 19H5l3-19Zm6 2V9a4 4 0 0 1 8 0v5"/></svg>
+              {% endcase %}
+            </span>
+            <span><strong>{{ default_category_labels[forloop.index0] }}</strong><small>{{ default_category_descriptions[forloop.index0] }}</small></span>
+          </button>
         {% endfor %}
       </div>
-      <div class="chd-empty" data-chd-product-empty hidden>No base products match these filters.</div>
-      {% if rendered_products == 0 %}
-        <div class="chd-setup-note">Select a collection containing products classified as <code>global_customizable</code> in this section's settings.</div>
+    </nav>
+
+    <div id="chd-base-products-{{ section.id }}" class="chd-base">
+      {% if source_collection != blank %}
+        <div class="chd-toolbar" data-chd-toolbar>
+          <button class="chd-filter-toggle" type="button" data-chd-filter-toggle aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filters <span data-chd-result-count></span></button>
+          <div class="chd-filter-panel" data-chd-filter-panel>
+            {% assign filter_names = 'category:Category,fit:Fit,brand:Brand,color:Color,method:Print method' | split: ',' %}
+            {% for filter_definition in filter_names %}
+              {% assign filter_parts = filter_definition | split: ':' %}
+              <details class="chd-filter" data-chd-filter="{{ filter_parts[0] }}">
+                <summary>{{ filter_parts[1] }}: <b>All</b><svg class="chd-filter__chevron" viewBox="0 0 12 8" aria-hidden="true"><path d="m1 1 5 5 5-5"/></svg></summary>
+                <div class="chd-filter__options" data-chd-filter-options="{{ filter_parts[0] }}"></div>
+              </details>
+            {% endfor %}
+            <details class="chd-filter chd-filter--price" data-chd-filter="price">
+              <summary>Price: <b>All</b><svg class="chd-filter__chevron" viewBox="0 0 12 8" aria-hidden="true"><path d="m1 1 5 5 5-5"/></svg></summary>
+              <div class="chd-price-range"><label>Min <input type="number" min="0" step="1" inputmode="numeric" data-chd-price-min></label><label>Max <input type="number" min="0" step="1" inputmode="numeric" data-chd-price-max></label></div>
+            </details>
+          </div>
+          <div class="chd-toolbar__end">
+            <label class="chd-sort"><span>Sort by:</span><select data-chd-sort><option value="relevant">Most relevant</option><option value="newest">Newest</option><option value="price-asc">Price low to high</option><option value="price-desc">Price high to low</option></select></label>
+            <div class="chd-view-switcher" aria-label="Product layout">
+              <button type="button" data-chd-view="grid" aria-pressed="true" aria-label="Grid view"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 2h6v6H2V2Zm10 0h6v6h-6V2ZM2 12h6v6H2v-6Zm10 0h6v6h-6v-6Z"/></svg></button>
+              <button type="button" data-chd-view="list" aria-pressed="false" aria-label="List view"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 3h4v4H2V3Zm7 1h9v2H9V4ZM2 9h4v4H2V9Zm7 1h9v2H9v-2ZM2 15h4v4H2v-4Zm7 1h9v2H9v-2Z"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <div class="chd-active-filters" data-chd-active-filters aria-live="polite"></div>
+
+        <div id="chd-product-grid-{{ section.id }}" class="chd-product-grid" role="tabpanel" aria-labelledby="chd-category-tab-{{ section.id }}-t-shirts" data-chd-product-grid>
+          {% assign rendered_products = 0 %}
+          {% for product in source_collection.products limit: product_limit %}
+            {% liquid
+              assign product_origin = product.metafields.customhouse.product_origin.value | downcase
+              assign design_mode = product.metafields.customhouse.design_mode.value | downcase
+              assign product_type = product.metafields.customhouse.product_type.value | downcase
+              assign pitchprint_enabled = product.metafields.customhouse.pitchprint_enabled.value
+              assign is_creator_product = false
+              if product_origin == 'creator' or design_mode == 'buy_only' or product_type == 'creator_fixed'
+                assign is_creator_product = true
+              endif
+              assign is_global_product = false
+              if product_origin == 'global' or product_type == 'global_customizable' or design_mode == 'customizable'
+                assign is_global_product = true
+              endif
+            %}
+            {% if is_creator_product == false and is_global_product %}
+              {% assign rendered_products = rendered_products | plus: 1 %}
+              {% capture product_categories %}{% for product_collection in product.collections %}{{ product_collection.handle }}{% unless forloop.last %}||{% endunless %}{% endfor %}{% endcapture %}
+              {% capture product_colors %}{% for option in product.options_with_values %}{% assign normalized_option = option.name | downcase %}{% if normalized_option contains 'color' or normalized_option contains 'colour' %}{% for value in option.values %}{{ value }}{% unless forloop.last %}||{% endunless %}{% endfor %}{% endif %}{% endfor %}{% endcapture %}
+              <article class="chd-product-card" data-chd-product data-index="{{ rendered_products }}" data-title="{{ product.title | escape }}" data-category="{{ product_categories | strip | escape }}" data-fit="{{ product.metafields.customhouse.fit.value | json | escape }}" data-brand="{{ product.vendor | escape }}" data-color="{{ product_colors | strip | escape }}" data-price="{{ product.price_min }}" data-published="{{ product.published_at | date: '%s' }}" data-production-pricing="{{ product.metafields.customhouse.production_method_pricing.value | json | escape }}">
+                <a class="chd-product-card__media" href="{{ product.url }}" aria-label="View {{ product.title | escape }}">
+                  {% if product.featured_image != blank %}
+                    {{ product.featured_image | image_url: width: 720 | image_tag: loading: 'lazy', widths: '240,360,480,720', sizes: '(max-width: 520px) 100vw, (max-width: 767px) 50vw, (max-width: 1199px) 33vw, 20vw', alt: product.title }}
+                  {% else %}
+                    {{ 'product-apparel-1' | placeholder_svg_tag: 'chd-product-card__placeholder' }}
+                  {% endif %}
+                </a>
+                <div class="chd-product-card__body">
+                  <p class="chd-product-card__vendor">{{ product.vendor | default: shop.name | escape }}<span aria-hidden="true">◆</span></p>
+                  <h2><a href="{{ product.url }}">{{ product.title | escape }}</a></h2>
+                  <strong class="chd-product-card__price">{{ product.price_min | money }}{% if product.price_varies %}+{% endif %}</strong>
+                  <div class="chd-product-card__actions">
+                    {% if pitchprint_enabled == true %}<a class="chd-button chd-button--customize" href="{{ product.url }}?open_customizer=1"><span aria-hidden="true">✎</span> Customize</a>{% endif %}
+                    <a class="chd-button chd-button--view" href="{{ product.url }}">View product <span aria-hidden="true">→</span></a>
+                  </div>
+                </div>
+              </article>
+            {% endif %}
+          {% endfor %}
+        </div>
+        <div class="chd-empty" data-chd-product-empty hidden>No base products match these filters.</div>
+        {% if rendered_products == 0 %}<div class="chd-setup-note">Select a collection containing products classified as <code>global_customizable</code> in this section's settings.</div>{% endif %}
+      {% else %}
+        <div class="chd-setup-note">Choose the real Base Products collection in the Theme Editor.</div>
       {% endif %}
-    {% else %}
-      <div class="chd-setup-note">Choose the real Base Products collection in the Theme Editor.</div>
-    {% endif %}
-  </div>
-
-  <aside class="chd-cta">
-    <div class="chd-container chd-cta__inner">
-      <div><p class="chd-eyebrow">Make it yours</p><h2>{{ section.settings.cta_heading | escape }}</h2><p>{{ section.settings.cta_copy | escape }}</p></div>
-      <a class="chd-button chd-button--light" href="{{ section.settings.design_studio_url | default: '/pages/design-studio' | escape }}">Start Designing</a>
     </div>
-  </aside>
 
-  <div class="chd-creators chd-container" data-chd-creators>
-    <header class="chd-section-heading">
-      <div><p class="chd-eyebrow">From the community</p><h2>Creator Content</h2></div>
-      <p>Discover approved CustomHouse creators, their public collections, and published designs.</p>
-    </header>
-    <div class="chd-creator-tools">
-      <label class="chd-search"><span class="visually-hidden">Search creators, collections, and designs</span><input type="search" placeholder="Search creators, collections, designs" autocomplete="off" data-chd-creator-search></label>
-      <label class="chd-sort">Sort
-        <select data-chd-creator-sort><option value="newest">Newest</option><option value="az">A–Z</option></select>
-      </label>
-    </div>
-    <div class="chd-interest-tags" data-chd-interest-tags aria-label="Creator interests"></div>
-    <div class="chd-creator-status" data-chd-creator-status role="status">Loading creator content…</div>
-    <div class="chd-creator-grid" data-chd-creator-grid></div>
-    <div class="chd-design-grid" data-chd-design-grid></div>
+    <aside class="chd-cta">
+      <svg class="chd-cta__crown" viewBox="0 0 90 70" aria-hidden="true"><path d="M8 56 2 22l24 18L45 7l19 33 24-18-7 34H8Zm0 9h73"/></svg>
+      <h2>{{ section.settings.cta_heading | escape }}</h2>
+      <p>{{ section.settings.cta_copy | escape }}</p>
+      <a class="chd-button chd-button--cta" href="{{ section.settings.design_studio_url | default: '/pages/design-studio' | escape }}">Start designing <span aria-hidden="true">→</span></a>
+    </aside>
+
   </div>
 </section>
 
@@ -196,26 +185,365 @@
     { "type": "text", "id": "hero_eyebrow", "label": "Hero eyebrow", "default": "CUSTOMHOUSE ORIGINALS" },
     { "type": "text", "id": "hero_heading", "label": "Hero heading", "default": "BASE PRODUCTS" },
     { "type": "text", "id": "hero_accent", "label": "Hero accent heading", "default": "DESIGN YOUR OWN" },
-    { "type": "textarea", "id": "hero_copy", "label": "Hero copy", "default": "Premium blank products, ready for your idea. Choose your base and make it unmistakably yours." },
+    { "type": "textarea", "id": "hero_copy", "label": "Hero copy", "default": "High-quality blanks for your ideas. Customize with print, embroidery or patch. No limits, make it truly yours." },
     { "type": "image_picker", "id": "hero_image", "label": "Hero image" },
     { "type": "text", "id": "hero_image_alt", "label": "Hero image alt text", "default": "CustomHouse base products" },
     { "type": "text", "id": "cta_heading", "label": "CTA heading", "default": "CREATE SOMETHING UNIQUE" },
-    { "type": "textarea", "id": "cta_copy", "label": "CTA copy", "default": "Start with a premium base product and bring your next idea to life in the current CustomHouse Design Studio." },
+    { "type": "textarea", "id": "cta_copy", "label": "CTA copy", "default": "Choose a real product, add your design and make it yours in minutes." },
     { "type": "url", "id": "design_studio_url", "label": "Design Studio link" },
     { "type": "text", "id": "creator_endpoint", "label": "Creator directory app-proxy endpoint", "default": "/apps/customhouse/creators?format=json" }
   ],
-  "blocks": [
-    {
-      "type": "category",
-      "name": "Category link",
-      "limit": 5,
-      "settings": [
-        { "type": "text", "id": "label", "label": "Label" },
-        { "type": "text", "id": "description", "label": "Description" },
-        { "type": "collection", "id": "collection", "label": "Collection" }
-      ]
-    }
-  ],
+  "blocks": [{ "type": "category", "name": "Category link", "limit": 5, "settings": [{ "type": "text", "id": "label", "label": "Label" }, { "type": "text", "id": "description", "label": "Description" }, { "type": "collection", "id": "collection", "label": "Collection" }] }],
   "presets": [{ "name": "Collections discovery" }]
 }
 {% endschema %}
+
+{% stylesheet %}
+.customhouse-collections-discovery {
+  --chd-bg: #08090a; --chd-panel: #111214; --chd-line: #34363b; --chd-text: #f8f8f5;
+  --chd-muted: #a3a4a9; --chd-lime: #baff00; --chd-purple: #842bff;
+  overflow: hidden; padding: 0 0 18px; background: var(--chd-bg); color: var(--chd-text); font-family: Arial, Helvetica, sans-serif;
+}
+.customhouse-collections-discovery *, .customhouse-collections-discovery *::before, .customhouse-collections-discovery *::after { box-sizing: border-box; }
+.customhouse-collections-discovery a { color: inherit; text-decoration: none; }
+.customhouse-collections-discovery button, .customhouse-collections-discovery input, .customhouse-collections-discovery select { font: inherit; }
+.customhouse-collections-discovery .chd-container { width: min(1460px, calc(100% - 48px)); margin: 0 auto; }
+.customhouse-collections-discovery .chd-breadcrumb { min-height: 42px; display: flex; align-items: center; gap: 9px; color: #777a80; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.customhouse-collections-discovery .chd-breadcrumb a:hover, .customhouse-collections-discovery .chd-breadcrumb strong { color: var(--chd-purple); }
+.customhouse-collections-discovery .chd-hero { min-height: 330px; display: grid; grid-template-columns: 55% 45%; position: relative; overflow: hidden; border: 1px solid var(--chd-line); border-bottom: 0; background: radial-gradient(circle at 72% 40%, #25252a 0, #111216 46%, #090a0b 75%); }
+.customhouse-collections-discovery .chd-hero__content { position: relative; z-index: 3; padding: 32px 0 30px 28px; }
+.customhouse-collections-discovery .chd-eyebrow { margin: 0 0 8px; color: var(--chd-lime); font-size: 10px; font-weight: 900; letter-spacing: .17em; text-transform: uppercase; }
+.customhouse-collections-discovery .chd-hero h1 { max-width: 720px; margin: 0; font-size: clamp(44px, 4.2vw, 62px); font-weight: 1000; letter-spacing: -.065em; line-height: .84; text-transform: uppercase; transform: skew(-5deg); }
+.customhouse-collections-discovery .chd-hero h1 span, .customhouse-collections-discovery .chd-hero h1 strong { display: block; }
+.customhouse-collections-discovery .chd-hero h1 span { white-space: nowrap; }
+.customhouse-collections-discovery .chd-hero h1 strong { margin-top: 12px; color: var(--chd-lime); font-size: .67em; letter-spacing: -.045em; }
+.customhouse-collections-discovery .chd-hero__copy { max-width: 540px; margin: 20px 0 18px; color: #d1d1d4; font-size: 15px; line-height: 1.45; }
+.customhouse-collections-discovery .chd-value-list { max-width: 650px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin: 0; padding: 0; list-style: none; }
+.customhouse-collections-discovery .chd-value-list li { min-width: 0; display: flex; align-items: center; gap: 10px; }
+.customhouse-collections-discovery .chd-value-list svg { width: 29px; height: 29px; flex: 0 0 auto; fill: none; stroke: var(--chd-lime); stroke-width: 1.8; }
+.customhouse-collections-discovery .chd-value-list strong, .customhouse-collections-discovery .chd-value-list small { display: block; }
+.customhouse-collections-discovery .chd-value-list strong { font-size: 10px; text-transform: uppercase; }
+.customhouse-collections-discovery .chd-value-list small { margin-top: 2px; color: var(--chd-muted); font-size: 9px; }
+.customhouse-collections-discovery .chd-hero__art { position: relative; min-width: 0; min-height: 330px; display: flex; align-items: center; justify-content: flex-end; isolation: isolate; }
+.customhouse-collections-discovery .chd-hero__art::before, .customhouse-collections-discovery .chd-hero__art::after { content: ''; position: absolute; z-index: -1; top: -70px; right: 20%; width: 38px; height: 470px; transform: rotate(47deg); background: var(--chd-lime); box-shadow: 0 0 45px rgba(186,255,0,.3); }
+.customhouse-collections-discovery .chd-hero__art::after { right: 8%; background: var(--chd-purple); box-shadow: 0 0 45px rgba(132,43,255,.35); }
+.customhouse-collections-discovery .chd-hero__image { width: min(100%, 330px); height: auto; min-height: 0; aspect-ratio: 1 / 1; display: block; margin-left: auto; object-fit: cover; object-position: center 28%; filter: saturate(.9) contrast(1.08); mask-image: linear-gradient(90deg, transparent 0, #000 18%, #000 100%); }
+.customhouse-collections-discovery .chd-hero__fallback { width: min(100%, 330px); min-height: 0; aspect-ratio: 1 / 1; margin-left: auto; background: linear-gradient(120deg, transparent 0 33%, #151619 33% 67%, transparent 67%), radial-gradient(circle at 50% 80%, #2b2c30, #101114 58%); }
+.customhouse-collections-discovery .chd-hero__crown { position: absolute; z-index: 2; top: 30px; left: 9%; width: 64px; fill: none; stroke: var(--chd-lime); stroke-width: 4; transform: rotate(-8deg); }
+.customhouse-collections-discovery .chd-hero__slash { position: absolute; z-index: 2; right: 6%; bottom: 22px; width: 110px; height: 8px; transform: rotate(-18deg); background: var(--chd-lime); }
+.customhouse-collections-discovery .chd-hero__slash--purple { right: 1%; bottom: 5px; background: var(--chd-purple); }
+.customhouse-collections-discovery .chd-categories { border: 1px solid var(--chd-line); background: #0d0e10; }
+.customhouse-collections-discovery .chd-categories__track { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 8px; }
+.customhouse-collections-discovery .chd-category { width: 100%; min-width: 0; min-height: 68px; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 0 12px; border: 1px solid #45474c; border-radius: 9px; background: linear-gradient(180deg, #18191c, #111214); color: var(--chd-text); text-align: left; cursor: pointer; transition: border-color .2s, transform .2s, background .2s; }
+.customhouse-collections-discovery .chd-category:hover { border-color: var(--chd-purple); transform: translateY(-1px); }
+.customhouse-collections-discovery .chd-category.is-active { border-color: var(--chd-lime); background: linear-gradient(180deg, rgba(186,255,0,.08), #111214); box-shadow: 0 0 0 1px rgba(186,255,0,.18) inset; }
+.customhouse-collections-discovery .chd-category__icon { width: 34px; height: 34px; color: #fff; }
+.customhouse-collections-discovery .chd-category__icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.customhouse-collections-discovery .chd-category.is-active .chd-category__icon { color: var(--chd-lime); }
+.customhouse-collections-discovery .chd-category strong, .customhouse-collections-discovery .chd-category small { display: block; }
+.customhouse-collections-discovery .chd-category strong { font-size: 12px; text-transform: uppercase; }
+.customhouse-collections-discovery .chd-category small { margin-top: 3px; color: var(--chd-muted); font-size: 9px; }
+.customhouse-collections-discovery .chd-base { padding-top: 10px; }
+.customhouse-collections-discovery .chd-toolbar { min-height: 54px; display: flex; align-items: center; gap: 10px; padding: 7px 8px; border: 1px solid var(--chd-line); background: #0d0e10; }
+.customhouse-collections-discovery .chd-filter-toggle, .customhouse-collections-discovery .chd-filter summary, .customhouse-collections-discovery .chd-sort, .customhouse-collections-discovery .chd-view-switcher button { min-height: 38px; border: 1px solid #3b3d42; border-radius: 7px; background: #17181b; color: var(--chd-text); }
+.customhouse-collections-discovery .chd-filter-toggle { display: inline-flex; align-items: center; gap: 7px; padding: 0 13px; font-size: 10px; font-weight: 900; text-transform: uppercase; cursor: pointer; }
+.customhouse-collections-discovery .chd-filter-toggle svg { width: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.customhouse-collections-discovery .chd-filter-toggle span { min-width: 18px; min-height: 18px; display: inline-grid; place-items: center; border-radius: 99px; background: var(--chd-purple); }
+.customhouse-collections-discovery .chd-filter-panel { min-width: 0; display: flex; flex: 1; gap: 7px; }
+.customhouse-collections-discovery .chd-filter { position: relative; min-width: 0; }
+.customhouse-collections-discovery .chd-filter summary { min-width: 104px; display: grid; grid-template-columns: max-content minmax(24px, 1fr) 12px; align-items: center; column-gap: 4px; padding: 0 11px; list-style: none; white-space: nowrap; font-size: 10px; line-height: 1; cursor: pointer; }
+.customhouse-collections-discovery .chd-filter summary::-webkit-details-marker { display: none; }
+.customhouse-collections-discovery .chd-filter summary b { min-width: 0; overflow: hidden; color: var(--chd-text); font-weight: 800; text-overflow: ellipsis; }
+.customhouse-collections-discovery .chd-filter__chevron { width: 9px; height: 6px; justify-self: end; overflow: visible; fill: none; stroke: var(--chd-muted); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; transition: transform .18s ease; }
+.customhouse-collections-discovery .chd-filter[open] .chd-filter__chevron { transform: rotate(180deg); }
+.customhouse-collections-discovery .chd-filter__options, .customhouse-collections-discovery .chd-price-range { position: absolute; z-index: 20; top: calc(100% + 7px); left: 0; min-width: 210px; max-height: 260px; overflow: auto; padding: 9px; border: 1px solid #44464c; border-radius: 7px; background: #151619; box-shadow: 0 18px 40px rgba(0,0,0,.45); }
+.customhouse-collections-discovery .chd-filter__options label { display: flex; gap: 8px; padding: 7px; font-size: 11px; cursor: pointer; }
+.customhouse-collections-discovery .chd-filter__empty { display: block; padding: 7px; color: var(--chd-muted); font-size: 10px; white-space: nowrap; }
+.customhouse-collections-discovery .chd-filter__options input { accent-color: var(--chd-purple); }
+.customhouse-collections-discovery .chd-price-range { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.customhouse-collections-discovery .chd-price-range label { color: var(--chd-muted); font-size: 9px; }
+.customhouse-collections-discovery .chd-price-range input { width: 90px; display: block; margin-top: 4px; padding: 7px; border: 1px solid var(--chd-line); background: #090a0b; color: #fff; }
+.customhouse-collections-discovery .chd-toolbar__end { display: flex; align-items: center; gap: 7px; margin-left: auto; }
+.customhouse-collections-discovery .chd-sort { display: flex; align-items: center; gap: 6px; padding: 0 8px 0 11px; color: var(--chd-muted); font-size: 9px; white-space: nowrap; }
+.customhouse-collections-discovery .chd-sort select { min-width: 104px; border: 0; outline: 0; background: transparent; color: #fff; font-size: 10px; font-weight: 700; }
+.customhouse-collections-discovery .chd-sort option { color: #111; }
+.customhouse-collections-discovery .chd-view-switcher { display: flex; gap: 4px; }
+.customhouse-collections-discovery .chd-view-switcher button { width: 39px; display: grid; place-items: center; padding: 0; cursor: pointer; }
+.customhouse-collections-discovery .chd-view-switcher button[aria-pressed='true'] { border-color: var(--chd-purple); background: var(--chd-purple); }
+.customhouse-collections-discovery .chd-view-switcher svg { width: 17px; fill: currentColor; }
+.customhouse-collections-discovery .chd-active-filters { min-height: 8px; display: flex; flex-wrap: wrap; gap: 6px; padding-top: 7px; }
+.customhouse-collections-discovery .chd-filter-chip { padding: 5px 8px; border: 1px solid var(--chd-purple); border-radius: 99px; background: transparent; color: #fff; font-size: 9px; cursor: pointer; }
+.customhouse-collections-discovery .chd-product-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; padding-top: 8px; }
+@media (min-width: 1280px) {
+  .customhouse-collections-discovery .chd-product-grid:has(.chd-product-card:nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.customhouse-collections-discovery .chd-product-card { min-width: 0; overflow: hidden; border: 1px solid #37393e; border-radius: 10px; background: linear-gradient(180deg, #17181b, #101113); transition: transform .2s, border-color .2s; }
+.customhouse-collections-discovery .chd-product-card:hover { transform: translateY(-3px); border-color: #5a5d64; }
+.customhouse-collections-discovery .chd-product-card[hidden] { display: none; }
+.customhouse-collections-discovery .chd-product-card__media { height: 265px; display: block; overflow: hidden; background: radial-gradient(circle at 50% 55%, #2c2e32, #121315 72%); }
+.customhouse-collections-discovery .chd-product-card__media img, .customhouse-collections-discovery .chd-product-card__placeholder { width: 100%; height: 100%; display: block; object-fit: contain; transition: transform .3s; }
+.customhouse-collections-discovery .chd-product-card:hover .chd-product-card__media img { transform: scale(1.025); }
+.customhouse-collections-discovery .chd-product-card__body { padding: 10px; }
+.customhouse-collections-discovery .chd-product-card__vendor { margin: 0 0 4px; color: var(--chd-muted); font-size: 9px; }
+.customhouse-collections-discovery .chd-product-card__vendor span { margin-left: 3px; color: var(--chd-purple); font-size: 7px; }
+.customhouse-collections-discovery .chd-product-card h2 { min-height: 31px; margin: 0 0 7px; font-size: 13px; line-height: 1.18; }
+.customhouse-collections-discovery .chd-product-card__price { display: block; color: var(--chd-lime); font-size: 13px; }
+.customhouse-collections-discovery .chd-product-card__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+.customhouse-collections-discovery .chd-button { min-height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border-radius: 4px; font-size: 9px; font-weight: 900; text-align: center; text-transform: uppercase; }
+.customhouse-collections-discovery .chd-button--customize { border: 1px solid var(--chd-purple); }
+.customhouse-collections-discovery .chd-button--customize:hover { background: var(--chd-purple); }
+.customhouse-collections-discovery .chd-button--view { border: 1px solid #45474c; }
+.customhouse-collections-discovery .chd-button--view:hover { border-color: var(--chd-lime); color: var(--chd-lime); }
+.customhouse-collections-discovery .chd-product-grid.is-list-view { grid-template-columns: 1fr; }
+.customhouse-collections-discovery .chd-product-grid.is-list-view .chd-product-card { display: grid; grid-template-columns: 180px 1fr; }
+.customhouse-collections-discovery .chd-product-grid.is-list-view .chd-product-card__media { height: 160px; }
+.customhouse-collections-discovery .chd-product-grid.is-list-view .chd-product-card__body { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px 18px; padding: 18px; }
+.customhouse-collections-discovery .chd-product-grid.is-list-view .chd-product-card h2 { min-height: 0; font-size: 17px; }
+.customhouse-collections-discovery .chd-product-grid.is-list-view .chd-product-card__actions { grid-column: 2; grid-row: 1 / span 3; min-width: 260px; }
+.customhouse-collections-discovery .chd-cta { position: relative; min-height: 92px; display: grid; grid-template-columns: auto minmax(260px, 1.5fr) minmax(220px, 1fr) auto; align-items: center; gap: 22px; overflow: hidden; margin-top: 22px; padding: 15px 24px; border: 1px solid var(--chd-purple); border-radius: 10px; background: linear-gradient(100deg, rgba(186,255,0,.07), rgba(132,43,255,.11)), #101113; }
+.customhouse-collections-discovery .chd-cta::after { content: ''; position: absolute; top: -65px; right: -15px; width: 150px; height: 210px; transform: rotate(28deg); background: linear-gradient(90deg, var(--chd-lime) 0 22%, transparent 22% 36%, var(--chd-purple) 36% 65%, transparent 65%); opacity: .65; }
+.customhouse-collections-discovery .chd-cta__crown { width: 58px; fill: none; stroke: var(--chd-lime); stroke-width: 4; transform: rotate(-7deg); }
+.customhouse-collections-discovery .chd-cta h2 { z-index: 1; margin: 0; font-size: clamp(24px, 3.1vw, 44px); font-style: italic; font-weight: 1000; letter-spacing: -.055em; text-transform: uppercase; }
+.customhouse-collections-discovery .chd-cta p { z-index: 1; margin: 0; color: #c5c5c8; font-size: 11px; line-height: 1.45; }
+.customhouse-collections-discovery .chd-button--cta { z-index: 2; min-width: 190px; min-height: 42px; padding: 0 18px; background: linear-gradient(90deg, var(--chd-purple), #a445ff); box-shadow: 0 0 25px rgba(132,43,255,.25); }
+.customhouse-collections-discovery .chd-empty, .customhouse-collections-discovery .chd-setup-note { padding: 22px 0; color: var(--chd-muted); font-size: 11px; }
+.customhouse-collections-discovery .visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+@media (max-width: 1279px) {
+  .customhouse-collections-discovery .chd-hero { grid-template-columns: 56% 44%; }
+  .customhouse-collections-discovery .chd-hero h1 { font-size: 46px; }
+  .customhouse-collections-discovery .chd-toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .customhouse-collections-discovery .chd-filter-panel { order: 3; flex-basis: 100%; }
+  .customhouse-collections-discovery .chd-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 767px) {
+  .customhouse-collections-discovery { padding-bottom: 14px; }
+  .customhouse-collections-discovery .chd-container { width: min(100% - 24px, 1460px); }
+  .customhouse-collections-discovery .chd-breadcrumb { min-height: 34px; overflow: hidden; white-space: nowrap; }
+  .customhouse-collections-discovery .chd-hero { grid-template-columns: 1fr; }
+  .customhouse-collections-discovery .chd-hero__content { padding: 24px 18px 20px; }
+  .customhouse-collections-discovery .chd-hero h1 { font-size: clamp(42px, 14vw, 64px); }
+  .customhouse-collections-discovery .chd-hero h1 span { white-space: normal; }
+  .customhouse-collections-discovery .chd-value-list { grid-template-columns: 1fr; gap: 10px; }
+  .customhouse-collections-discovery .chd-hero__art { min-height: 0; }
+  .customhouse-collections-discovery .chd-hero__image, .customhouse-collections-discovery .chd-hero__fallback { width: 100%; min-height: 0; margin-left: 0; mask-image: linear-gradient(180deg, transparent, #000 18%); }
+  .customhouse-collections-discovery .chd-categories__track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; }
+  .customhouse-collections-discovery .chd-category { flex: 0 0 190px; scroll-snap-align: start; }
+  .customhouse-collections-discovery .chd-filter-panel { display: none; width: 100%; flex-wrap: wrap; }
+  .customhouse-collections-discovery .chd-filter-panel.is-open { display: flex; }
+  .customhouse-collections-discovery .chd-filter { flex: 1 1 calc(50% - 8px); }
+  .customhouse-collections-discovery .chd-filter summary { width: 100%; }
+  .customhouse-collections-discovery .chd-toolbar__end { flex: 1; justify-content: flex-end; margin-left: 0; }
+  .customhouse-collections-discovery .chd-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .customhouse-collections-discovery .chd-product-card__media { height: 220px; }
+  .customhouse-collections-discovery .chd-product-card__actions { grid-template-columns: 1fr; }
+  .customhouse-collections-discovery .chd-product-grid.is-list-view .chd-product-card { grid-template-columns: 110px 1fr; }
+  .customhouse-collections-discovery .chd-product-grid.is-list-view .chd-product-card__media { height: 150px; }
+  .customhouse-collections-discovery .chd-product-grid.is-list-view .chd-product-card__body { display: block; padding: 10px; }
+  .customhouse-collections-discovery .chd-product-grid.is-list-view .chd-product-card__actions { min-width: 0; }
+  .customhouse-collections-discovery .chd-cta { grid-template-columns: auto 1fr; gap: 10px 14px; padding: 16px; }
+  .customhouse-collections-discovery .chd-cta h2 { font-size: 25px; }
+  .customhouse-collections-discovery .chd-cta p, .customhouse-collections-discovery .chd-button--cta { grid-column: 1 / -1; }
+  .customhouse-collections-discovery .chd-button--cta { justify-self: start; }
+}
+@media (max-width: 479px) {
+  .customhouse-collections-discovery .chd-toolbar__end { width: 100%; justify-content: space-between; }
+  .customhouse-collections-discovery .chd-sort { flex: 1; }
+  .customhouse-collections-discovery .chd-sort select { width: 100%; }
+  .customhouse-collections-discovery .chd-product-grid { grid-template-columns: 1fr; }
+  .customhouse-collections-discovery .chd-product-card__media { height: 300px; }
+}
+{% endstylesheet %}
+
+{% javascript %}
+(() => {
+  const clean = (value) => String(value ?? '').trim();
+  const normalize = (value) => clean(value).toLocaleLowerCase();
+  const unique = (values) => [...new Set(values.map(clean).filter(Boolean))];
+  const split = (value) => unique(clean(value).split('||'));
+  const titleCase = (value) => clean(value).replaceAll('-', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const parseJson = (value, fallback) => { try { return JSON.parse(value); } catch { return fallback; } };
+  const asList = (value) => Array.isArray(value) ? unique(value) : value && typeof value === 'object' ? unique(Object.values(value)) : clean(value) ? [clean(value)] : [];
+
+  function productionMethods(value) {
+    const parsed = parseJson(value, null);
+    const source = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.productionMethods) ? parsed.productionMethods : [];
+    return unique(source.map((method) => typeof method === 'string' ? method : method?.label || method?.id || method?.code || method?.method || ''));
+  }
+
+  document.querySelectorAll('[data-chd-root]').forEach((root) => {
+    const cards = [...root.querySelectorAll('[data-chd-product]')];
+    const grid = root.querySelector('[data-chd-product-grid]');
+    const empty = root.querySelector('[data-chd-product-empty]');
+    const activeFilters = root.querySelector('[data-chd-active-filters]');
+    const resultCount = root.querySelector('[data-chd-result-count]');
+    const sort = root.querySelector('[data-chd-sort]');
+    const priceMin = root.querySelector('[data-chd-price-min]');
+    const priceMax = root.querySelector('[data-chd-price-max]');
+    const categoryTabs = [...root.querySelectorAll('[data-chd-category-tab]')];
+    const filterDetails = [...root.querySelectorAll('[data-chd-filter]')];
+    const selected = new Map(['category', 'fit', 'brand', 'color', 'method'].map((key) => [key, new Set()]));
+    const urlState = new URLSearchParams(window.location.search);
+    const requestedCategory = normalize(urlState.get('tab'));
+    const initialTab = categoryTabs.find((button) => normalize(button.dataset.categoryHandle) === requestedCategory) || categoryTabs[0];
+    let activeCategory = clean(initialTab?.dataset.categoryHandle);
+    const records = cards.map((card, index) => ({
+      card, index, title: clean(card.dataset.title), category: split(card.dataset.category),
+      fit: asList(parseJson(card.dataset.fit, card.dataset.fit)), brand: clean(card.dataset.brand) ? [clean(card.dataset.brand)] : [],
+      color: split(card.dataset.color), method: productionMethods(card.dataset.productionPricing),
+      price: Number(card.dataset.price || 0), published: Number(card.dataset.published || 0),
+    }));
+
+    const valuesFor = (key) => unique(records.flatMap((record) => record[key] || [])).sort((a, b) => a.localeCompare(b));
+    selected.forEach((values, key) => {
+      const container = root.querySelector(`[data-chd-filter-options="${key}"]`);
+      if (!container) return;
+      const available = valuesFor(key);
+      if (!available.length) {
+        const message = document.createElement('span');
+        message.className = 'chd-filter__empty';
+        message.textContent = 'No options available';
+        container.append(message);
+        return;
+      }
+      available.forEach((value) => {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        const text = document.createElement('span');
+        input.type = 'checkbox'; input.value = value; input.dataset.chdFacetInput = key;
+        input.checked = urlState.getAll(key).some((item) => normalize(item) === normalize(value));
+        if (input.checked) values.add(value);
+        text.textContent = key === 'category' ? titleCase(value) : value;
+        label.append(input, text); container.append(label);
+      });
+    });
+    if (records.length && priceMin && priceMax) {
+      const prices = records.map((record) => record.price).filter(Number.isFinite);
+      priceMin.placeholder = String(Math.floor(Math.min(...prices) / 100));
+      priceMax.placeholder = String(Math.ceil(Math.max(...prices) / 100));
+      priceMin.value = urlState.get('price_min') || '';
+      priceMax.value = urlState.get('price_max') || '';
+    }
+    if (sort && urlState.has('sort')) sort.value = urlState.get('sort');
+
+    function syncUrl() {
+      const params = new URLSearchParams(window.location.search);
+      selected.forEach((values, key) => { params.delete(key); values.forEach((value) => params.append(key, value)); });
+      ['price_min', 'price_max', 'sort'].forEach((key) => params.delete(key));
+      params.delete('tab');
+      if (clean(priceMin?.value)) params.set('price_min', clean(priceMin.value));
+      if (clean(priceMax?.value)) params.set('price_max', clean(priceMax.value));
+      if (sort?.value && sort.value !== 'relevant') params.set('sort', sort.value);
+      if (activeCategory) params.set('tab', activeCategory);
+      const query = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    }
+
+    function renderChips() {
+      if (!activeFilters) return;
+      activeFilters.replaceChildren();
+      selected.forEach((values, key) => values.forEach((value) => {
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'chd-filter-chip'; button.dataset.key = key; button.dataset.value = value;
+        button.textContent = `${titleCase(key)}: ${key === 'category' ? titleCase(value) : value} ×`;
+        activeFilters.append(button);
+      }));
+      [['price_min', priceMin, 'Min price'], ['price_max', priceMax, 'Max price']].forEach(([key, input, label]) => {
+        if (!clean(input?.value)) return;
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'chd-filter-chip'; button.dataset.priceKey = key;
+        button.textContent = `${label}: ${input.value} ×`; activeFilters.append(button);
+      });
+    }
+
+    const includesSelected = (record, key) => {
+      const values = selected.get(key);
+      if (!values?.size) return true;
+      const actual = (record[key] || []).map(normalize);
+      return [...values].some((value) => actual.includes(normalize(value)));
+    };
+    function applyProducts() {
+      const min = clean(priceMin?.value) ? Number(priceMin.value) * 100 : null;
+      const max = clean(priceMax?.value) ? Number(priceMax.value) * 100 : null;
+      const visible = records.filter((record) => (!activeCategory || record.category.map(normalize).includes(normalize(activeCategory))) && [...selected.keys()].every((key) => includesSelected(record, key)) && (min === null || record.price >= min) && (max === null || record.price <= max));
+      const order = [...records];
+      if (sort?.value === 'newest') order.sort((a, b) => b.published - a.published || a.index - b.index);
+      if (sort?.value === 'price-asc') order.sort((a, b) => a.price - b.price || a.index - b.index);
+      if (sort?.value === 'price-desc') order.sort((a, b) => b.price - a.price || a.index - b.index);
+      if (sort?.value === 'relevant') order.sort((a, b) => a.index - b.index);
+      order.forEach((record) => grid?.append(record.card));
+      records.forEach((record) => { record.card.hidden = !visible.includes(record); });
+      if (empty) empty.hidden = visible.length > 0;
+      if (resultCount) resultCount.textContent = String(visible.length);
+      renderChips(); syncUrl();
+    }
+
+    root.addEventListener('change', (event) => {
+      const input = event.target.closest('[data-chd-facet-input]');
+      if (input) {
+        const values = selected.get(input.dataset.chdFacetInput);
+        if (input.checked) values?.add(input.value); else values?.delete(input.value);
+      }
+      if (input || event.target === sort || event.target === priceMin || event.target === priceMax) applyProducts();
+    });
+    root.addEventListener('input', (event) => { if (event.target === priceMin || event.target === priceMax) applyProducts(); });
+    activeFilters?.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) return;
+      if (button.dataset.key) {
+        selected.get(button.dataset.key)?.delete(button.dataset.value);
+        root.querySelectorAll(`[data-chd-facet-input="${button.dataset.key}"]`).forEach((input) => { if (input.value === button.dataset.value) input.checked = false; });
+      }
+      if (button.dataset.priceKey === 'price_min' && priceMin) priceMin.value = '';
+      if (button.dataset.priceKey === 'price_max' && priceMax) priceMax.value = '';
+      applyProducts();
+    });
+    const filterToggle = root.querySelector('[data-chd-filter-toggle]');
+    const filterPanel = root.querySelector('[data-chd-filter-panel]');
+    filterToggle?.addEventListener('click', () => {
+      const open = filterPanel?.classList.toggle('is-open') || false;
+      filterToggle.setAttribute('aria-expanded', String(open));
+    });
+    filterDetails.forEach((details) => details.addEventListener('toggle', () => {
+      if (!details.open) return;
+      filterDetails.forEach((other) => {
+        if (other !== details) other.open = false;
+      });
+    }));
+    root.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      filterDetails.forEach((details) => { details.open = false; });
+    });
+    root.querySelectorAll('[data-chd-view]').forEach((button) => button.addEventListener('click', () => {
+      grid?.classList.toggle('is-list-view', button.dataset.chdView === 'list');
+      root.querySelectorAll('[data-chd-view]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+    }));
+    function activateCategory(button, moveFocus = false) {
+      if (!button) return;
+      activeCategory = clean(button.dataset.categoryHandle);
+      categoryTabs.forEach((item) => {
+        const selectedTab = item === button;
+        item.classList.toggle('is-active', selectedTab);
+        item.setAttribute('aria-selected', String(selectedTab));
+        item.tabIndex = selectedTab ? 0 : -1;
+      });
+      if (grid && button.id) grid.setAttribute('aria-labelledby', button.id);
+      if (moveFocus) button.focus();
+      applyProducts();
+    }
+    categoryTabs.forEach((button, index) => {
+      button.addEventListener('click', () => activateCategory(button));
+      button.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        let nextIndex = index;
+        if (event.key === 'ArrowLeft') nextIndex = (index - 1 + categoryTabs.length) % categoryTabs.length;
+        if (event.key === 'ArrowRight') nextIndex = (index + 1) % categoryTabs.length;
+        if (event.key === 'Home') nextIndex = 0;
+        if (event.key === 'End') nextIndex = categoryTabs.length - 1;
+        activateCategory(categoryTabs[nextIndex], true);
+      });
+    });
+    if (initialTab) activateCategory(initialTab);
+  });
+})();
+{% endjavascript %}
