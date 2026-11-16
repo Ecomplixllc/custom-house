@@ -43,6 +43,11 @@ test("new Collections discovery page uses a dedicated page template and isolated
   assert.match(css, /\.customhouse-collections-discovery/);
   assert.match(css, /@media \(max-width: 1279px\)/);
   assert.match(css, /@media \(max-width: 767px\)/);
+  assert.match(
+    section,
+    /@media \(min-width: 1280px\) \{[\s\S]*?\.chd-product-grid:has\(\.chd-product-card:nth-child\(4\):last-child\)/,
+    "the four-product grid optimization must be desktop-only so mobile breakpoints can win",
+  );
 });
 
 test("global header adds one duplicate-safe Collections discovery link without replacing menu links", () => {
