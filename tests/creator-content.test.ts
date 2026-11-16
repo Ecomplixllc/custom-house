@@ -808,6 +808,10 @@ test("Creator Content is added to theme navigation without duplicating merchant 
     "theme-live-cart/sections/header.liquid",
     "utf8",
   );
+  const primaryNavigation = readFileSync(
+    "theme-live-cart/snippets/customhouse-primary-navigation.liquid",
+    "utf8",
+  );
 
   assert.match(fallback, /where:\s*'url',\s*'\/apps\/customhouse\/creator-content'/);
   assert.match(fallback, /creator_content_absolute/);
@@ -816,8 +820,12 @@ test("Creator Content is added to theme navigation without duplicating merchant 
   assert.match(desktopHeader, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'mobile_bar'/);
   assert.match(desktopHeader, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'desktop'/);
   assert.match(drawer, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'drawer'/);
-  assert.match(customHeader, /customhouse-header__nav[\s\S]*href="\/apps\/customhouse\/creator-content"[\s\S]*CREATOR CONTENT/);
-  assert.match(customHeader, /customhouse-mobile-drawer__nav[\s\S]*href="\/apps\/customhouse\/creator-content"[\s\S]*CREATOR CONTENT/);
+  assert.match(customHeader, /customhouse-primary-navigation'[\s\S]*variant:\s*'desktop'/);
+  assert.match(customHeader, /customhouse-primary-navigation'[\s\S]*variant:\s*'mobile'/);
+  assert.match(primaryNavigation, /T-SHIRTS\|HOODIES\|DESIGN SELV\|INSPIRATION\|DESIGN YOUR OWN\|CREATOR CONTENT/);
+  assert.match(primaryNavigation, /\/pages\/collections\|\/apps\/customhouse\/creator-content/);
+  assert.match(primaryNavigation, /variant == 'mobile'/);
+  assert.match(primaryNavigation, /request_path contains '\/apps\/customhouse\/creators\/'/);
   assert.match(customHeader, /gap:\s*clamp\(14px, 1\.8vw, 28px\)/);
   assert.match(customHeader, /font-size:\s*clamp\(11px, 0\.72vw, 13px\)/);
   assert.match(desktopHeader, /font-size:\s*min\(var\(--menu-top-level-font-size-desktop\), 13px\)/);
@@ -980,7 +988,11 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /window\.addEventListener\("popstate", \(\) => \{ void restoreCompleteUrlState\(\); \}\)/);
   assert.match(markup, /class="customhouse-header__nav"[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /class="customhouse-mobile-drawer__nav"[\s\S]*CREATOR CONTENT/);
+  assert.match(markup, /href="\/pages\/collections">DESIGN YOUR OWN<\/a>/);
+  assert.match(markup, /href="\/pages\/collections"[\s\S]*<span>DESIGN YOUR OWN<\/span>/);
   assert.match(markup, /href="\/apps\/customhouse\/creator-content"[^>]*aria-current="page"/);
+  assert.match(markup, /data-customhouse-cart-count hidden/);
+  assert.match(markup, /fetch\("\/cart\.js"/);
   assert.match(markup, /@media screen and \(min-width:901px\) and \(max-width:1500px\)/);
   assert.match(markup, /customhouse-header__nav\{[^}]*gap:clamp\(14px,1\.8vw,28px\)/);
   assert.match(markup, /customhouse-header__nav a\{[^}]*font-size:clamp\(11px,\.72vw,13px\)/);

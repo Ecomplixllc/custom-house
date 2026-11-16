@@ -162,6 +162,7 @@ test("final marketplace approval and links are app managed", () => {
 
 test("app managed creator cart uses base variants and signed attribution", () => {
   const proxy = readFileSync("app/services/storefront-proxy.server.ts", "utf8");
+  const navigation = readFileSync("app/services/storefront-navigation.ts", "utf8");
   const products = readFileSync("app/services/creator-products.server.ts", "utf8");
   const sales = readFileSync("app/services/creator-sales.server.ts", "utf8");
   const attribution = readFileSync("app/services/creator-attribution.server.ts", "utf8");
@@ -216,10 +217,10 @@ test("app managed creator cart uses base variants and signed attribution", () =>
   assert.match(proxy, /async function siteHeaderAccount\(context: VerifiedProxyContext\)/);
   assert.match(
     proxy,
-    /function siteHeader\(\s*account: SiteHeaderAccount = \{ loggedIn: false \},\s*activePage\?: "creatorContent",\s*\)/,
+    /function siteHeader\(\s*account: SiteHeaderAccount = \{ loggedIn: false \},\s*activePage\?: PublicStorefrontNavKey,\s*\)/,
   );
   assert.match(proxy, /function siteFooter\(\)/);
-  assert.match(proxy, /\$\{siteHeader\(input\.headerAccount\)\}/);
+  assert.match(proxy, /\$\{siteHeader\(input\.headerAccount, "creator-content"\)\}/);
   assert.match(proxy, /headerAccount: await siteHeaderAccount\(context\)/);
   assert.match(proxy, /Creator dashboard/);
   assert.match(proxy, /Log out/);
@@ -244,10 +245,12 @@ test("app managed creator cart uses base variants and signed attribution", () =>
   assert.match(proxy, /customhouse-header__profile-choice\{[^}]*display:grid;gap:6px;[^}]*border-top:1px solid rgb\(255 255 255 \/ \.1\)/);
   assert.match(proxy, /customhouse-header__profile-choice strong\{display:block/);
   assert.match(proxy, /customhouse-header__profile-choice small\{display:block;[^}]*line-height:1\.45/);
-  assert.match(proxy, /T-SHIRTS/);
-  assert.match(proxy, /HOODIES/);
-  assert.match(proxy, /DESIGN SELV/);
-  assert.match(proxy, /INSPIRATION/);
+  assert.match(navigation, /T-SHIRTS/);
+  assert.match(navigation, /HOODIES/);
+  assert.match(navigation, /DESIGN SELV/);
+  assert.match(navigation, /INSPIRATION/);
+  assert.match(navigation, /DESIGN YOUR OWN/);
+  assert.match(navigation, /CREATOR CONTENT/);
   assert.match(proxy, /FÖLJ OSS/);
   assert.match(proxy, /BECOME A CREATOR/);
   assert.match(proxy, /Material\+Symbols\+Outlined/);

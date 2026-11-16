@@ -17,6 +17,10 @@ import { normalizeCustomerGid } from "./helium-sync.ts";
 import { formatMinorMoney } from "./money.ts";
 import { listPublicCreatorDirectory } from "./creator-discovery.server.ts";
 import { loadPublicCreatorContent } from "./creator-content.server.ts";
+import {
+  PUBLIC_STOREFRONT_NAV_ITEMS,
+  type PublicStorefrontNavKey,
+} from "./storefront-navigation.ts";
 
 const SAFE_HEADERS = {
   "Cache-Control": "no-store",
@@ -343,6 +347,7 @@ function publicCss() {
     .customhouse-header__icon{position:relative;display:inline-grid;place-items:center;width:34px;height:34px;border:0;background:transparent;color:#fff;padding:0;cursor:pointer}
     .customhouse-header__icon svg{display:block;width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
     .customhouse-header__cart-count{position:absolute;right:-6px;bottom:-4px;display:grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:#fff;color:#111;font-size:.68rem;font-weight:950;line-height:1}
+    .customhouse-header__cart-count[hidden]{display:none}
     .customhouse-header__menu-button{display:none}
     .customhouse-mobile-drawer{position:fixed;inset:0;z-index:70;display:grid;grid-template-columns:minmax(260px,82vw) 1fr;pointer-events:none;visibility:hidden}
     .customhouse-mobile-drawer.is-open{pointer-events:auto;visibility:visible}
@@ -497,6 +502,7 @@ function publicCss() {
     .customhouse-header__wordmark{font-family:Impact,Haettenschweiler,"Arial Narrow Bold","Arial Narrow",sans-serif;font-size:var(--customhouse-logo-wordmark-size);font-weight:900;letter-spacing:0;line-height:1;font-stretch:condensed;white-space:nowrap}
     .customhouse-header__nav{display:flex;align-items:center;justify-content:flex-end;gap:clamp(14px,1.8vw,28px);min-width:0;overflow:hidden}
     .customhouse-header__nav a{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:clamp(11px,.72vw,13px);font-weight:800;letter-spacing:.015em;line-height:1;white-space:nowrap;text-transform:uppercase;text-shadow:none}
+    .customhouse-header__nav a[aria-current="page"],.customhouse-mobile-drawer__nav a[aria-current="page"]{color:#9bd21a}
     .customhouse-header__actions{display:flex;align-items:center;gap:clamp(18px,2.1vw,28px);min-width:0;justify-content:flex-end}
     .customhouse-header__icon{position:relative;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;flex:0 0 auto}
     .customhouse-header__icon svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:3.1;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 2px 3px rgb(0 0 0 / .35))}
@@ -577,9 +583,44 @@ async function siteHeaderAccount(context: VerifiedProxyContext): Promise<SiteHea
   };
 }
 
+function mobileNavigationIcon(key: PublicStorefrontNavKey) {
+  if (key === "t-shirts") {
+    return `<path d="M17 8h14l10 8-5 8-5-3v19H17V21l-5 3-5-8 10-8Z"></path><path d="M20 8c1.1 3 2.4 4.5 4 4.5S26.9 11 28 8"></path><path d="M18 35h12"></path>`;
+  }
+  if (key === "hoodies") {
+    return `<path d="M15 20c0-7.6 3.8-13 9-13s9 5.4 9 13"></path><path d="M13 18 7 32l8 4 3-8v13h12V28l3 8 8-4-6-14"></path><path d="M18 20h12"></path><path d="M21 41v-8h6v8"></path>`;
+  }
+  if (key === "design-selv") {
+    return `<path d="M10 37 36 11l6 6-26 26-8 2 2-8Z"></path><path d="m31 16 6 6"></path><path d="M8 43h26"></path>`;
+  }
+  if (key === "inspiration") {
+    return `<path d="M18 30c-2.8-2.2-4.5-5.3-4.5-9 0-6.3 4.7-11 10.5-11s10.5 4.7 10.5 11c0 3.7-1.7 6.8-4.5 9"></path><path d="M19 34h10"></path><path d="M20.5 39h7"></path><path d="M24 3v4"></path><path d="M9 10l3 3"></path><path d="M39 10l-3 3"></path><path d="M7 22h4"></path><path d="M37 22h4"></path>`;
+  }
+  if (key === "design-your-own") {
+    return `<path d="M8 36h32l-3-20-9 9-4-14-4 14-9-9-3 20Z"></path><path d="M10 41h28"></path>`;
+  }
+  return `<circle cx="17" cy="17" r="7"></circle><circle cx="33" cy="19" r="5"></circle><path d="M5 40c1.6-8 5.6-12 12-12s10.4 4 12 12"></path><path d="M27 30c6.8 0 11 3.3 12.5 10"></path>`;
+}
+
+export function publicStorefrontNavigationHtml(
+  variant: "desktop" | "mobile",
+  activePage?: PublicStorefrontNavKey,
+) {
+  return PUBLIC_STOREFRONT_NAV_ITEMS.map((item) => {
+    const current = item.key === activePage ? ' aria-current="page"' : "";
+    if (variant === "desktop") {
+      return `<a href="${item.href}"${current}>${item.label}</a>`;
+    }
+    return `<a href="${item.href}"${current}>
+          <span class="customhouse-mobile-drawer__line-icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false">${mobileNavigationIcon(item.key)}</svg></span>
+          <span>${item.label}</span>
+        </a>`;
+  }).join("\n        ");
+}
+
 function siteHeader(
   account: SiteHeaderAccount = { loggedIn: false },
-  activePage?: "creatorContent",
+  activePage?: PublicStorefrontNavKey,
 ) {
   const logoUrl =
     publicImageUrl(process.env.CUSTOMHOUSE_HEADER_LOGO_URL) ||
@@ -597,7 +638,6 @@ function siteHeader(
   const becomeCreatorLoginUrl = "/customer_authentication/login?return_to=%2Fpages%2Fbecome-a-creator";
   const creatorDashboardUrl = "/pages/creator-dashboard";
   const logoutUrl = "/account/logout";
-  const creatorContentCurrent = activePage === "creatorContent";
   const profileMenu = account.loggedIn
     ? `<p class="customhouse-header__profile-name">${escapeHtml(account.displayName || "Customer account")}</p>
             ${
@@ -639,11 +679,7 @@ function siteHeader(
         ${logoMarkup}
       </a>
       <nav class="customhouse-header__nav" aria-label="Main navigation">
-        <a href="/collections/t-shirts">T-SHIRTS</a>
-        <a href="/collections/hoodies">HOODIES</a>
-        <a href="/pages/design-selv">DESIGN SELV</a>
-        <a href="/blogs/news">INSPIRATION</a>
-        <a href="/apps/customhouse/creator-content"${creatorContentCurrent ? ' aria-current="page"' : ""}>CREATOR CONTENT</a>
+        ${publicStorefrontNavigationHtml("desktop", activePage)}
       </nav>
       <div class="customhouse-header__actions">
         <a class="customhouse-header__icon" href="/search" aria-label="Search">
@@ -651,6 +687,7 @@ function siteHeader(
         </a>
         <a class="customhouse-header__icon" href="/cart" aria-label="Cart">
           <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M3 5h4l3 17h15l4-12H9"></path><circle cx="13" cy="27" r="1.8"></circle><circle cx="24" cy="27" r="1.8"></circle></svg>
+          <span class="customhouse-header__cart-count" data-customhouse-cart-count hidden></span>
         </a>
         <details class="customhouse-header__profile">
           <summary class="customhouse-header__icon" aria-label="Open profile menu">
@@ -674,26 +711,7 @@ function siteHeader(
         </button>
       </div>
       <nav class="customhouse-mobile-drawer__nav" aria-label="Mobile navigation">
-        <a href="/collections/t-shirts">
-          <span class="customhouse-mobile-drawer__line-icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M17 8h14l10 8-5 8-5-3v19H17V21l-5 3-5-8 10-8Z"></path><path d="M20 8c1.1 3 2.4 4.5 4 4.5S26.9 11 28 8"></path><path d="M18 35h12"></path></svg></span>
-          <span>T-SHIRTS</span>
-        </a>
-        <a href="/collections/hoodies">
-          <span class="customhouse-mobile-drawer__line-icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M15 20c0-7.6 3.8-13 9-13s9 5.4 9 13"></path><path d="M13 18 7 32l8 4 3-8v13h12V28l3 8 8-4-6-14"></path><path d="M18 20h12"></path><path d="M21 41v-8h6v8"></path></svg></span>
-          <span>HOODIES</span>
-        </a>
-        <a href="/pages/design-selv">
-          <span class="customhouse-mobile-drawer__line-icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M10 37 36 11l6 6-26 26-8 2 2-8Z"></path><path d="m31 16 6 6"></path><path d="M8 43h26"></path></svg></span>
-          <span>DESIGN SELV</span>
-        </a>
-        <a href="/blogs/news">
-          <span class="customhouse-mobile-drawer__line-icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><path d="M18 30c-2.8-2.2-4.5-5.3-4.5-9 0-6.3 4.7-11 10.5-11s10.5 4.7 10.5 11c0 3.7-1.7 6.8-4.5 9"></path><path d="M19 34h10"></path><path d="M20.5 39h7"></path><path d="M24 3v4"></path><path d="M9 10l3 3"></path><path d="M39 10l-3 3"></path><path d="M7 22h4"></path><path d="M37 22h4"></path></svg></span>
-          <span>INSPIRATION</span>
-        </a>
-        <a href="/apps/customhouse/creator-content"${creatorContentCurrent ? ' aria-current="page"' : ""}>
-          <span class="customhouse-mobile-drawer__line-icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false"><circle cx="17" cy="17" r="7"></circle><circle cx="33" cy="19" r="5"></circle><path d="M5 40c1.6-8 5.6-12 12-12s10.4 4 12 12"></path><path d="M27 30c6.8 0 11 3.3 12.5 10"></path></svg></span>
-          <span>CREATOR CONTENT</span>
-        </a>
+        ${publicStorefrontNavigationHtml("mobile", activePage)}
       </nav>
       <div class="customhouse-mobile-drawer__account">
         ${mobileAccountLinks}
@@ -739,6 +757,20 @@ function siteShellScript() {
       const drawer = document.querySelector("[data-customhouse-mobile-drawer]");
       const openButton = document.querySelector("[data-customhouse-menu-open]");
       const overlay = document.querySelector(".customhouse-mobile-drawer__overlay");
+      const cartCount = document.querySelector("[data-customhouse-cart-count]");
+      if (cartCount) {
+        fetch("/cart.js", {
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        })
+          .then((response) => response.ok ? response.json() : null)
+          .then((cart) => {
+            const count = Number(cart?.item_count || 0);
+            cartCount.textContent = count > 99 ? "99+" : String(count);
+            cartCount.hidden = count < 1;
+          })
+          .catch(() => {});
+      }
       if (!drawer || !openButton || !overlay) return;
       const setOpen = (open) => {
         drawer.classList.toggle("is-open", open);
@@ -988,7 +1020,7 @@ export function creatorContentHtml(
         </style>
       </head>
       <body>
-        ${siteHeader(input.headerAccount, "creatorContent")}
+        ${siteHeader(input.headerAccount, "creator-content")}
         <main class="customhouse-creator-content-page" data-creator-content-root data-next-offset="${escapeHtml(String(input.nextOffset ?? ""))}">
           <div class="customhouse-creator-content__container">
             <nav class="customhouse-creator-content__breadcrumb" aria-label="Breadcrumb"><a href="/">HOME</a><span>›</span><a href="/pages/collections">COLLECTIONS</a><span>›</span><span>CREATOR CONTENT</span></nav>
@@ -1527,7 +1559,7 @@ export function collectionHtml(input: {
         ${publicCss()}
       </head>
       <body>
-        ${siteHeader(input.headerAccount)}
+        ${siteHeader(input.headerAccount, "creator-content")}
         <main class="customhouse-public-page" data-customhouse>
           <header class="customhouse-public-hero${heroImageUrl ? " customhouse-public-hero--with-banner" : ""}"${heroBackgroundAttr(heroImageUrl)}>
             <div class="customhouse-public-hero-copy">
@@ -1933,7 +1965,7 @@ function productHtml(input: {
         ${publicCss()}
       </head>
       <body>
-        ${siteHeader(input.headerAccount)}
+        ${siteHeader(input.headerAccount, "creator-content")}
         <main class="customhouse-product-page" data-customhouse>
           <section class="customhouse-product-layout">
             <div>
