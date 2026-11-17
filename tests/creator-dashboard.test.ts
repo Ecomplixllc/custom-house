@@ -617,7 +617,7 @@ test("creator dashboard submits final designs and confirms refreshed My Products
   assert.match(script, /Unavailable/);
   assert.doesNotMatch(script, /data-base-product-color/);
   assert.match(script, /data-base-product-method/);
-  assert.match(script, /Choose one printing method before starting your design/);
+  assert.match(script, /Please select a printing method\./);
   assert.match(script, /existing\?\.readyState === "complete"/);
   assert.match(script, /src === JQUERY_SRC && window\.jQuery/);
   assert.match(script, /root\.__customHouseCreatorDesignActionsBound/);
@@ -1506,8 +1506,11 @@ test("Creator Add Product renders canonical method options and a safe empty stat
   );
   assert.match(
     script,
-    /!product\.pitchprintDesignId \|\| !methodSelect\.value/,
+    /button\.disabled = !product\.pitchprintDesignId \|\| methods\.length === 0/,
   );
+  assert.doesNotMatch(script, /button\.disabled = !product\.pitchprintDesignId \|\| !methodSelect\.value/);
+  assert.match(script, /Please select a printing method\./);
+  assert.match(script, /methodSelect\?\.focus\(\)/);
   assert.doesNotMatch(script, /colorSelect/);
   assert.doesNotMatch(script, /Product Color/);
   assert.doesNotMatch(
