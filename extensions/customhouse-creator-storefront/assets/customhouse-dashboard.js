@@ -704,20 +704,6 @@ function clearCreatorPrintingMethodError(root) {
   target.classList.remove("customhouse-error");
 }
 
-export function creatorStartDesignControlState() {
-  return { disabled: false, clickable: true };
-}
-
-export function activateCreatorStartDesignControls(root) {
-  const buttons = root?.querySelectorAll?.("[data-base-product-start]") || [];
-  buttons.forEach((button) => {
-    button.disabled = false;
-    button.removeAttribute("disabled");
-    button.setAttribute("aria-disabled", "false");
-  });
-  return buttons.length;
-}
-
 export function creatorStartDesignGate(selectedProductionMethod) {
   const normalizedMethod = String(selectedProductionMethod || "").trim();
   return normalizedMethod
@@ -839,7 +825,7 @@ function creatorProductById(root, productId) {
   );
 }
 
-function renderBaseProducts(root, products) {
+export function renderBaseProducts(root, products) {
   const wrap = root.querySelector("[data-dashboard-base-products]");
   if (!wrap) return;
   dashboardState(root).baseProducts = products;
@@ -921,17 +907,12 @@ function renderBaseProducts(root, products) {
     button.type = "button";
     button.className = "ch-design-card__button ch-design-card__button--primary";
     button.dataset.baseProductStart = product.id || "";
-    button.dataset.startDesignState = creatorStartDesignControlState().clickable
-      ? "enabled"
-      : "disabled";
     button.textContent = "Start Design";
-    button.removeAttribute("disabled");
     actions.append(button);
 
     card.append(top, copy, actions);
     wrap.append(card);
   });
-  activateCreatorStartDesignControls(root);
 }
 
 function projectPreviewUrls(product) {
@@ -2977,12 +2958,13 @@ function bindCreatorProductSubmission(root) {
   });
 }
 
-function bindCreatorDesignActions(root) {
+export function bindCreatorDesignActions(root) {
   if (root.__customHouseCreatorDesignActionsBound) return;
   root.__customHouseCreatorDesignActionsBound = true;
   root.addEventListener("click", async (event) => {
     const startButton = event.target.closest("[data-base-product-start]");
     if (startButton) {
+      event.preventDefault();
       const state = dashboardState(root);
       const baseProduct = (state.baseProducts || []).find(
         (product) => product.id === startButton.dataset.baseProductStart,
@@ -2992,8 +2974,6 @@ function bindCreatorDesignActions(root) {
       const startDecision = creatorStartDesignGate(methodSelect?.value);
       if (!startDecision.allowed) {
         showCreatorToast(root, startDecision.error, true);
-        startButton.disabled = false;
-        startButton.removeAttribute("disabled");
         methodSelect?.focus();
         methodSelect?.scrollIntoView({ block: "nearest", behavior: "smooth" });
         return;

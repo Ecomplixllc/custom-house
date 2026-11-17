@@ -1,15 +1,6 @@
-{% assign creator_dashboard_asset_release = '2026-11-17-start-design-active' %}
+{% assign creator_dashboard_asset_release = '2026-11-17-start-design-click-only' %}
 {% assign creator_dashboard_stylesheet_url = 'customhouse.css' | asset_url | append: '?v=' | append: creator_dashboard_asset_release %}
 <link rel="stylesheet" href="{{ creator_dashboard_stylesheet_url }}">
-<style>
-  [data-customhouse-dashboard] [data-base-product-start],
-  [data-customhouse-dashboard] [data-base-product-start]:disabled {
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    cursor: pointer !important;
-    background: #4f46e5 !important;
-  }
-</style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,500,0,0">
 {% assign creator_dashboard_url = request.path | default: '/pages/creator-dashboard' %}
 {% assign creator_dashboard_return_to = creator_dashboard_url | url_encode %}

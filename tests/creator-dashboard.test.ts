@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { JSDOM } from "jsdom";
 import * as dashboardModule from "../extensions/customhouse-creator-storefront/assets/customhouse-dashboard.js";
 import {
   creatorPitchPrintClientOptions,
@@ -38,34 +39,13 @@ const styles = readFileSync(
   "utf8",
 );
 const startDesignContracts = dashboardModule as unknown as {
-  creatorStartDesignControlState: (context?: {
-    selectedProductionMethod?: string | null;
-    methodsLoading?: boolean;
-    productLoading?: boolean;
-    viewportWidth?: number;
-  }) => { disabled: boolean; clickable: boolean };
   creatorStartDesignGate: (selectedProductionMethod?: string | null) => {
     allowed: boolean;
     error: string;
     selectedProductionMethod: string;
   };
-  activateCreatorStartDesignControls: (root: {
-    querySelectorAll: (selector: string) => Array<{
-      disabled: boolean;
-      removeAttribute: (name: string) => void;
-      setAttribute: (name: string, value: string) => void;
-    }>;
-  }) => number;
-};
-const creatorStartDesignControlState = (
-  context?: Parameters<typeof startDesignContracts.creatorStartDesignControlState>[0],
-) => {
-  assert.equal(
-    typeof startDesignContracts.creatorStartDesignControlState,
-    "function",
-    "creatorStartDesignControlState must be exported",
-  );
-  return startDesignContracts.creatorStartDesignControlState(context);
+  renderBaseProducts: (root: HTMLElement, products: Array<Record<string, unknown>>) => void;
+  bindCreatorDesignActions: (root: HTMLElement) => void;
 };
 const creatorStartDesignGate = (
   selectedProductionMethod?: string | null,
@@ -78,16 +58,57 @@ const creatorStartDesignGate = (
   return startDesignContracts.creatorStartDesignGate(selectedProductionMethod);
 };
 
-const activateCreatorStartDesignControls = (
-  root: Parameters<typeof startDesignContracts.activateCreatorStartDesignControls>[0],
-) => {
-  assert.equal(
-    typeof startDesignContracts.activateCreatorStartDesignControls,
-    "function",
-    "activateCreatorStartDesignControls must be exported",
+function creatorAddProductDom() {
+  const dom = new JSDOM(
+    `<!doctype html><html><head><style>${styles}</style></head><body>
+      <section data-customhouse-dashboard>
+        <p data-dashboard-creator-products-message></p>
+        <div data-dashboard-base-products></div>
+      </section>
+    </body></html>`,
+    { url: "https://customhouse.se/pages/creator-dashboard" },
   );
-  return startDesignContracts.activateCreatorStartDesignControls(root);
-};
+  const previous = new Map<string, unknown>();
+  for (const [key, value] of [
+    ["window", dom.window],
+    ["document", dom.window.document],
+    ["Option", dom.window.Option],
+  ] as const) {
+    previous.set(key, Reflect.get(globalThis, key));
+    Reflect.set(globalThis, key, value);
+  }
+  Object.defineProperty(dom.window.HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value() {},
+  });
+  const root = dom.window.document.querySelector<HTMLElement>("[data-customhouse-dashboard]");
+  assert.ok(root);
+  return {
+    dom,
+    root,
+    cleanup() {
+      for (const [key, value] of previous) {
+        if (value === undefined) Reflect.deleteProperty(globalThis, key);
+        else Reflect.set(globalThis, key, value);
+      }
+      dom.window.close();
+    },
+  };
+}
+
+function creatorBaseProduct(productionMethods: Array<{ id: string; label: string }>) {
+  return {
+    id: "gid://shopify/Product/1001",
+    title: "Creator T-shirt",
+    pitchprintDesignId: "pitchprint-template-1001",
+    productionMethods,
+  };
+}
+
+async function settleCreatorClick() {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
 
 test("creator dashboard retries a temporary server failure and recovers", async () => {
   let requests = 0;
@@ -1571,22 +1592,6 @@ test("Creator Add Product renders canonical method options and a safe empty stat
   );
 });
 
-test("Start Design is enabled when no printing method is selected", () => {
-  const state = creatorStartDesignControlState({
-    selectedProductionMethod: null,
-  });
-  assert.deepEqual(state, { disabled: false, clickable: true });
-});
-
-test("Start Design stays enabled while printing methods and product data load", () => {
-  const state = creatorStartDesignControlState({
-    methodsLoading: true,
-    productLoading: true,
-  });
-  assert.deepEqual(state, { disabled: false, clickable: true });
-  assert.doesNotMatch(script, /methodsLoading.*disabled|loadingMethods.*disabled/s);
-});
-
 test("missing printing method blocks draft and PitchPrint launch on click", () => {
   const gate = creatorStartDesignGate("");
   assert.deepEqual(gate, {
@@ -1603,42 +1608,10 @@ test("missing printing method blocks draft and PitchPrint launch on click", () =
   assert.ok(handler.indexOf("createCreatorProductDraft") < handler.indexOf("__customHouseOpenPitchPrintDesigner"));
 });
 
-test("Start Design remains enabled after missing-method validation", () => {
-  assert.match(script, /if \(!startDecision\.allowed\)[\s\S]*startButton\.disabled = false;[\s\S]*return;/);
-  assert.doesNotMatch(script, /if \(!startDecision\.allowed\)[\s\S]*startButton\.disabled = true;/);
-});
-
-test("dashboard activation repairs Start Design controls disabled by stale storefront state", () => {
-  const removed: string[] = [];
-  const attributes = new Map<string, string>([["aria-disabled", "true"]]);
-  const button = {
-    disabled: true,
-    removeAttribute(name: string) {
-      removed.push(name);
-      attributes.delete(name);
-    },
-    setAttribute(name: string, value: string) {
-      attributes.set(name, value);
-    },
-  };
-
-  const repaired = activateCreatorStartDesignControls({
-    querySelectorAll(selector: string) {
-      assert.equal(selector, "[data-base-product-start]");
-      return [button];
-    },
-  });
-
-  assert.equal(repaired, 1);
-  assert.equal(button.disabled, false);
-  assert.deepEqual(removed, ["disabled"]);
-  assert.equal(attributes.get("aria-disabled"), "false");
-});
-
 test("Creator Dashboard assets use a release key so browsers cannot reuse stale disabled-button files", () => {
   assert.match(
     block,
-    /assign creator_dashboard_asset_release = '2026-11-17-start-design-active'/,
+    /assign creator_dashboard_asset_release = '2026-11-17-start-design-click-only'/,
   );
   assert.match(
     block,
@@ -1671,26 +1644,151 @@ test("valid method preserves the existing Creator design start flow", () => {
   assert.match(script, /setActionLoading\(startButton, "Preparing designer\.\.\.", \{ disable: false \}\)/);
 });
 
-test("rerendering base products never disables Start Design", () => {
-  const first = creatorStartDesignControlState();
-  const rerendered = creatorStartDesignControlState({
-    selectedProductionMethod: "",
-    methodsLoading: false,
-  });
-  assert.equal(first.disabled, false);
-  assert.equal(rerendered.disabled, false);
-  assert.doesNotMatch(script, /button\.disabled\s*=\s*![^;]*productionMethod/);
+test("real Creator Add Product UI keeps Start Design active and validates a missing method only after click", async () => {
+  const fixture = creatorAddProductDom();
+  const previousFetch = globalThis.fetch;
+  let draftCalls = 0;
+  let pitchPrintCalls = 0;
+  globalThis.fetch = async () => {
+    draftCalls += 1;
+    throw new Error("missing method must stop before draft creation");
+  };
+  try {
+    assert.equal(typeof startDesignContracts.renderBaseProducts, "function");
+    assert.equal(typeof startDesignContracts.bindCreatorDesignActions, "function");
+    startDesignContracts.renderBaseProducts(fixture.root, [creatorBaseProduct([])]);
+    startDesignContracts.bindCreatorDesignActions(fixture.root);
+    Reflect.set(fixture.root, "__customHouseOpenPitchPrintDesigner", async () => {
+      pitchPrintCalls += 1;
+    });
+
+    const button = fixture.root.querySelector<HTMLButtonElement>("[data-base-product-start]");
+    const method = fixture.root.querySelector<HTMLSelectElement>("[data-base-product-method]");
+    assert.ok(button);
+    assert.ok(method);
+    assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute("disabled"), false);
+    const computed = fixture.dom.window.getComputedStyle(button);
+    assert.notEqual(computed.pointerEvents, "none");
+    assert.notEqual(computed.cursor, "wait");
+
+    button.click();
+    await settleCreatorClick();
+
+    assert.equal(
+      fixture.root.querySelector("[data-dashboard-creator-products-message]")?.textContent,
+      "Please select a printing method before you start.",
+    );
+    assert.equal(fixture.dom.window.document.activeElement, method);
+    assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute("disabled"), false);
+    assert.equal(draftCalls, 0);
+    assert.equal(pitchPrintCalls, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+    fixture.cleanup();
+  }
 });
 
-test("Start Design remains visibly clickable across mobile, tablet, and desktop", () => {
-  for (const viewportWidth of [375, 390, 430, 768, 1024, 1440]) {
-    assert.deepEqual(
-      creatorStartDesignControlState({ viewportWidth }),
-      { disabled: false, clickable: true },
-    );
+test("real Creator Add Product UI preserves the existing design flow with a valid method", async () => {
+  const fixture = creatorAddProductDom();
+  const previousFetch = globalThis.fetch;
+  const draftBodies: Array<Record<string, unknown>> = [];
+  let pitchPrintCalls = 0;
+  globalThis.fetch = async (_input, init) => {
+    draftBodies.push(JSON.parse(String(init?.body || "{}")) as Record<string, unknown>);
+    return Response.json({
+      ok: true,
+      data: { product: { id: "creator-product-1", status: "DRAFT" } },
+    });
+  };
+  try {
+    startDesignContracts.renderBaseProducts(fixture.root, [
+      creatorBaseProduct([{ id: "DTF", label: "DTF printing" }]),
+    ]);
+    startDesignContracts.bindCreatorDesignActions(fixture.root);
+    Reflect.set(fixture.root, "__customHouseOpenPitchPrintDesigner", async () => {
+      pitchPrintCalls += 1;
+    });
+    const button = fixture.root.querySelector<HTMLButtonElement>("[data-base-product-start]");
+    const method = fixture.root.querySelector<HTMLSelectElement>("[data-base-product-method]");
+    assert.ok(button);
+    assert.ok(method);
+    method.value = "DTF";
+    method.dispatchEvent(new fixture.dom.window.Event("change", { bubbles: true }));
+    assert.equal(button.disabled, false);
+
+    button.click();
+    await settleCreatorClick();
+
+    assert.equal(button.disabled, false);
+    assert.equal(draftBodies.length, 1);
+    assert.equal(draftBodies[0].selectedProductionMethod, "DTF");
+    assert.equal(pitchPrintCalls, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    fixture.cleanup();
   }
-  assert.match(styles, /\[data-base-product-start\][\s\S]*opacity:\s*1\s*!important/);
-  assert.match(styles, /\[data-base-product-start\][\s\S]*pointer-events:\s*auto\s*!important/);
+});
+
+test("real Creator Add Product rerender after method data load keeps Start Design enabled", () => {
+  const fixture = creatorAddProductDom();
+  try {
+    startDesignContracts.renderBaseProducts(fixture.root, [creatorBaseProduct([])]);
+    let button = fixture.root.querySelector<HTMLButtonElement>("[data-base-product-start]");
+    assert.ok(button);
+    assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute("disabled"), false);
+
+    startDesignContracts.renderBaseProducts(fixture.root, [
+      creatorBaseProduct([{ id: "EMBROIDERY", label: "Embroidery" }]),
+    ]);
+    button = fixture.root.querySelector<HTMLButtonElement>("[data-base-product-start]");
+    assert.ok(button);
+    assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute("disabled"), false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("real Creator Add Product method reset keeps Start Design enabled and restores click validation", async () => {
+  const fixture = creatorAddProductDom();
+  const previousFetch = globalThis.fetch;
+  let draftCalls = 0;
+  globalThis.fetch = async () => {
+    draftCalls += 1;
+    throw new Error("reset method must stop before draft creation");
+  };
+  try {
+    startDesignContracts.renderBaseProducts(fixture.root, [
+      creatorBaseProduct([{ id: "DTG", label: "DTG printing" }]),
+    ]);
+    startDesignContracts.bindCreatorDesignActions(fixture.root);
+    const button = fixture.root.querySelector<HTMLButtonElement>("[data-base-product-start]");
+    const method = fixture.root.querySelector<HTMLSelectElement>("[data-base-product-method]");
+    assert.ok(button);
+    assert.ok(method);
+    method.value = "DTG";
+    method.dispatchEvent(new fixture.dom.window.Event("change", { bubbles: true }));
+    method.value = "";
+    method.dispatchEvent(new fixture.dom.window.Event("change", { bubbles: true }));
+    assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute("disabled"), false);
+
+    button.click();
+    await settleCreatorClick();
+
+    assert.equal(
+      fixture.root.querySelector("[data-dashboard-creator-products-message]")?.textContent,
+      "Please select a printing method before you start.",
+    );
+    assert.equal(button.disabled, false);
+    assert.equal(draftCalls, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+    fixture.cleanup();
+  }
 });
 
 test("creator PitchPrint launch config separates template design ID from saved project ID", () => {
