@@ -1506,9 +1506,10 @@ test("Creator Add Product renders canonical method options and a safe empty stat
   );
   assert.match(
     script,
-    /button\.disabled = !product\.pitchprintDesignId \|\| methods\.length === 0/,
+    /button\.disabled = !product\.pitchprintDesignId/,
   );
   assert.doesNotMatch(script, /button\.disabled = !product\.pitchprintDesignId \|\| !methodSelect\.value/);
+  assert.doesNotMatch(script, /button\.disabled = !product\.pitchprintDesignId \|\| methods\.length === 0/);
   assert.match(script, /Please select a printing method\./);
   assert.match(script, /methodSelect\?\.focus\(\)/);
   assert.doesNotMatch(script, /colorSelect/);

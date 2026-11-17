@@ -879,7 +879,7 @@ function renderBaseProducts(root, products) {
     button.textContent = product.pitchprintDesignId
       ? "Start Design"
       : "Unavailable";
-    button.disabled = !product.pitchprintDesignId || methods.length === 0;
+    button.disabled = !product.pitchprintDesignId;
     actions.append(button);
 
     card.append(top, copy, actions);
