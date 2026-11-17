@@ -1611,7 +1611,7 @@ test("missing printing method blocks draft and PitchPrint launch on click", () =
 test("Creator Dashboard assets use a release key so browsers cannot reuse stale disabled-button files", () => {
   assert.match(
     block,
-    /assign creator_dashboard_asset_release = '2026-11-17-start-design-click-only'/,
+    /assign creator_dashboard_asset_release = '2026-11-17-start-design-pointer-error'/,
   );
   assert.match(
     block,
@@ -1631,7 +1631,7 @@ test("selecting a valid method clears the printing-method error", () => {
     selectedProductionMethod: "dtf",
   });
   assert.match(script, /methodSelect\.addEventListener\("change"/);
-  assert.match(script, /clearCreatorPrintingMethodError\(root\)/);
+  assert.match(script, /clearCreatorPrintingMethodError\(root, card\)/);
 });
 
 test("valid method preserves the existing Creator design start flow", () => {
@@ -1670,18 +1670,27 @@ test("real Creator Add Product UI keeps Start Design active and validates a miss
     assert.equal(button.hasAttribute("disabled"), false);
     const computed = fixture.dom.window.getComputedStyle(button);
     assert.notEqual(computed.pointerEvents, "none");
-    assert.notEqual(computed.cursor, "wait");
+    assert.equal(computed.cursor, "pointer");
 
     button.click();
     await settleCreatorClick();
 
     assert.equal(
-      fixture.root.querySelector("[data-dashboard-creator-products-message]")?.textContent,
+      fixture.root.querySelector("[data-base-product-method-error]")?.textContent,
       "Please select a printing method before you start.",
+    );
+    assert.equal(
+      fixture.root.querySelector<HTMLElement>("[data-base-product-method-error]")?.hidden,
+      false,
+    );
+    assert.equal(
+      fixture.root.querySelector("[data-dashboard-creator-products-message]")?.textContent,
+      "",
     );
     assert.equal(fixture.dom.window.document.activeElement, method);
     assert.equal(button.disabled, false);
     assert.equal(button.hasAttribute("disabled"), false);
+    assert.equal(fixture.dom.window.getComputedStyle(button).cursor, "pointer");
     assert.equal(draftCalls, 0);
     assert.equal(pitchPrintCalls, 0);
   } finally {
@@ -1714,9 +1723,21 @@ test("real Creator Add Product UI preserves the existing design flow with a vali
     const method = fixture.root.querySelector<HTMLSelectElement>("[data-base-product-method]");
     assert.ok(button);
     assert.ok(method);
+    button.click();
+    await settleCreatorClick();
+    const methodError = fixture.root.querySelector<HTMLElement>("[data-base-product-method-error]");
+    assert.ok(methodError);
+    assert.equal(methodError.hidden, false);
+    assert.equal(methodError.textContent, "Please select a printing method before you start.");
+    assert.equal(draftBodies.length, 0);
+    assert.equal(pitchPrintCalls, 0);
+
     method.value = "DTF";
     method.dispatchEvent(new fixture.dom.window.Event("change", { bubbles: true }));
+    assert.equal(methodError.hidden, true);
+    assert.equal(methodError.textContent, "");
     assert.equal(button.disabled, false);
+    assert.equal(fixture.dom.window.getComputedStyle(button).cursor, "pointer");
 
     button.click();
     await settleCreatorClick();
@@ -1739,6 +1760,16 @@ test("real Creator Add Product rerender after method data load keeps Start Desig
     assert.ok(button);
     assert.equal(button.disabled, false);
     assert.equal(button.hasAttribute("disabled"), false);
+    assert.equal(fixture.dom.window.getComputedStyle(button).cursor, "pointer");
+    assert.notEqual(fixture.dom.window.getComputedStyle(button).pointerEvents, "none");
+    const card = button.closest(".customhouse-base-product-card");
+    assert.ok(card);
+    const pointerBlockingOverlays = [...card.querySelectorAll<HTMLElement>("*")].filter((element) => {
+      if (element === button || button?.contains(element)) return false;
+      const computed = fixture.dom.window.getComputedStyle(element);
+      return ["absolute", "fixed"].includes(computed.position) && computed.pointerEvents !== "none";
+    });
+    assert.deepEqual(pointerBlockingOverlays, []);
 
     startDesignContracts.renderBaseProducts(fixture.root, [
       creatorBaseProduct([{ id: "EMBROIDERY", label: "Embroidery" }]),
@@ -1747,6 +1778,8 @@ test("real Creator Add Product rerender after method data load keeps Start Desig
     assert.ok(button);
     assert.equal(button.disabled, false);
     assert.equal(button.hasAttribute("disabled"), false);
+    assert.equal(fixture.dom.window.getComputedStyle(button).cursor, "pointer");
+    assert.notEqual(fixture.dom.window.getComputedStyle(button).pointerEvents, "none");
   } finally {
     fixture.cleanup();
   }
@@ -1780,10 +1813,11 @@ test("real Creator Add Product method reset keeps Start Design enabled and resto
     await settleCreatorClick();
 
     assert.equal(
-      fixture.root.querySelector("[data-dashboard-creator-products-message]")?.textContent,
+      fixture.root.querySelector("[data-base-product-method-error]")?.textContent,
       "Please select a printing method before you start.",
     );
     assert.equal(button.disabled, false);
+    assert.equal(fixture.dom.window.getComputedStyle(button).cursor, "pointer");
     assert.equal(draftCalls, 0);
   } finally {
     globalThis.fetch = previousFetch;

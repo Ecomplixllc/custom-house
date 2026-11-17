@@ -695,13 +695,31 @@ function showCreatorToast(root, message, error = false) {
   }, 2800);
 }
 
-function clearCreatorPrintingMethodError(root) {
-  const target = root.querySelector("[data-dashboard-creator-products-message]") ||
+function showCreatorPrintingMethodError(root, card) {
+  const target = card?.querySelector("[data-base-product-method-error]");
+  if (!target) {
+    showCreatorToast(root, CREATOR_PRINTING_METHOD_REQUIRED_MESSAGE, true);
+    return;
+  }
+  target.textContent = CREATOR_PRINTING_METHOD_REQUIRED_MESSAGE;
+  target.hidden = false;
+}
+
+function clearCreatorPrintingMethodError(root, card) {
+  const targets = card
+    ? [card.querySelector("[data-base-product-method-error]")]
+    : [...root.querySelectorAll("[data-base-product-method-error]")];
+  targets.filter(Boolean).forEach((target) => {
+    target.textContent = "";
+    target.hidden = true;
+  });
+
+  const legacyTarget = root.querySelector("[data-dashboard-creator-products-message]") ||
     root.querySelector("[data-dashboard-message]");
-  if (!target || target.textContent !== CREATOR_PRINTING_METHOD_REQUIRED_MESSAGE) return;
-  target.dataset.persist = "false";
-  target.textContent = "";
-  target.classList.remove("customhouse-error");
+  if (!legacyTarget || legacyTarget.textContent !== CREATOR_PRINTING_METHOD_REQUIRED_MESSAGE) return;
+  legacyTarget.dataset.persist = "false";
+  legacyTarget.textContent = "";
+  legacyTarget.classList.remove("customhouse-error");
 }
 
 export function creatorStartDesignGate(selectedProductionMethod) {
@@ -887,7 +905,7 @@ export function renderBaseProducts(root, products) {
     });
     methodSelect.addEventListener("change", () => {
       if (creatorStartDesignGate(methodSelect.value).allowed) {
-        clearCreatorPrintingMethodError(root);
+        clearCreatorPrintingMethodError(root, card);
       }
     });
     methodLabel.append(methodSelect);
@@ -903,12 +921,18 @@ export function renderBaseProducts(root, products) {
 
     const actions = document.createElement("div");
     actions.className = "ch-design-card__actions";
+    const methodError = document.createElement("p");
+    methodError.className = "customhouse-base-product-card__method-error";
+    methodError.dataset.baseProductMethodError = product.id || "";
+    methodError.setAttribute("role", "alert");
+    methodError.setAttribute("aria-live", "polite");
+    methodError.hidden = true;
     const button = document.createElement("button");
     button.type = "button";
     button.className = "ch-design-card__button ch-design-card__button--primary";
     button.dataset.baseProductStart = product.id || "";
     button.textContent = "Start Design";
-    actions.append(button);
+    actions.append(methodError, button);
 
     card.append(top, copy, actions);
     wrap.append(card);
@@ -2973,12 +2997,12 @@ export function bindCreatorDesignActions(root) {
       const methodSelect = card?.querySelector("[data-base-product-method]");
       const startDecision = creatorStartDesignGate(methodSelect?.value);
       if (!startDecision.allowed) {
-        showCreatorToast(root, startDecision.error, true);
+        showCreatorPrintingMethodError(root, card);
         methodSelect?.focus();
         methodSelect?.scrollIntoView({ block: "nearest", behavior: "smooth" });
         return;
       }
-      clearCreatorPrintingMethodError(root);
+      clearCreatorPrintingMethodError(root, card);
       const selectedProductionMethod = startDecision.selectedProductionMethod;
       if (!baseProduct?.pitchprintDesignId) {
         showCreatorToast(root, "This product is not available for design yet.", true);
