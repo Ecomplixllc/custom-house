@@ -879,11 +879,7 @@ function renderBaseProducts(root, products) {
     button.textContent = product.pitchprintDesignId
       ? "Start Design"
       : "Unavailable";
-    const syncAvailability = () => {
-      button.disabled = !product.pitchprintDesignId || !methodSelect.value;
-    };
-    methodSelect.addEventListener("change", syncAvailability);
-    syncAvailability();
+    button.disabled = !product.pitchprintDesignId || methods.length === 0;
     actions.append(button);
 
     card.append(top, copy, actions);
@@ -2945,16 +2941,19 @@ function bindCreatorDesignActions(root) {
         (product) => product.id === startButton.dataset.baseProductStart,
       );
       if (!baseProduct?.pitchprintDesignId) return;
+      const card = startButton.closest(".customhouse-base-product-card");
+      const methodSelect = card?.querySelector("[data-base-product-method]");
+      const selectedProductionMethod = methodSelect?.value || "";
+      if (!selectedProductionMethod) {
+        showCreatorToast(root, "Please select a printing method.", true);
+        methodSelect?.focus();
+        return;
+      }
       const key = `start:${baseProduct.id}`;
       if (state.actionLoading.has(key)) return;
       state.actionLoading.add(key);
       const restoreButton = setActionLoading(startButton, "Preparing designer...");
       try {
-        const card = startButton.closest(".customhouse-base-product-card");
-        const selectedProductionMethod = card?.querySelector("[data-base-product-method]")?.value || "";
-        if (!selectedProductionMethod) {
-          throw new Error("Choose one printing method before starting your design.");
-        }
         const created = await createCreatorProductDraft({
           shopifyProductId: baseProduct.id,
           title: baseProduct.title,
