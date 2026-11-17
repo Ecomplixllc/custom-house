@@ -16,6 +16,7 @@ const JQUERY_SRC = "https://code.jquery.com/jquery-3.7.1.min.js";
 const CREATOR_DRAFT_AUTOSAVE_DEBOUNCE_MS = 3500;
 const CREATOR_DRAFT_AUTOSAVE_HEARTBEAT_MS = 12000;
 const CREATOR_DRAFT_SAVE_TIMEOUT_MS = 30000;
+const CUSTOMHOUSE_START_DESIGN_CLICK_VALIDATION_V3 = "click-validation-v3";
 const CREATOR_PRINTING_METHOD_REQUIRED_MESSAGE =
   "Please select a printing method before you start.";
 let creatorProductsLoadPromise = null;
@@ -931,6 +932,7 @@ export function renderBaseProducts(root, products) {
     button.type = "button";
     button.className = "ch-design-card__button ch-design-card__button--primary";
     button.dataset.baseProductStart = product.id || "";
+    button.dataset.chStartDesignVersion = CUSTOMHOUSE_START_DESIGN_CLICK_VALIDATION_V3;
     button.textContent = "Start Design";
     actions.append(methodError, button);
 
@@ -5075,7 +5077,7 @@ function bindDashboardMobileNav(root) {
   window.addEventListener("resize", resetDashboardHorizontalScroll);
 }
 
-function bindDashboardTabs(root) {
+export function bindDashboardTabs(root) {
   root.querySelectorAll("[data-dashboard-tab-target]").forEach((trigger) => {
     trigger.addEventListener("click", (event) => {
       const tabName = trigger.dataset.dashboardTabTarget;
