@@ -49,6 +49,13 @@ const startDesignContracts = dashboardModule as unknown as {
     error: string;
     selectedProductionMethod: string;
   };
+  activateCreatorStartDesignControls: (root: {
+    querySelectorAll: (selector: string) => Array<{
+      disabled: boolean;
+      removeAttribute: (name: string) => void;
+      setAttribute: (name: string, value: string) => void;
+    }>;
+  }) => number;
 };
 const creatorStartDesignControlState = (
   context?: Parameters<typeof startDesignContracts.creatorStartDesignControlState>[0],
@@ -69,6 +76,17 @@ const creatorStartDesignGate = (
     "creatorStartDesignGate must be exported",
   );
   return startDesignContracts.creatorStartDesignGate(selectedProductionMethod);
+};
+
+const activateCreatorStartDesignControls = (
+  root: Parameters<typeof startDesignContracts.activateCreatorStartDesignControls>[0],
+) => {
+  assert.equal(
+    typeof startDesignContracts.activateCreatorStartDesignControls,
+    "function",
+    "activateCreatorStartDesignControls must be exported",
+  );
+  return startDesignContracts.activateCreatorStartDesignControls(root);
 };
 
 test("creator dashboard retries a temporary server failure and recovers", async () => {
@@ -1588,6 +1606,48 @@ test("missing printing method blocks draft and PitchPrint launch on click", () =
 test("Start Design remains enabled after missing-method validation", () => {
   assert.match(script, /if \(!startDecision\.allowed\)[\s\S]*startButton\.disabled = false;[\s\S]*return;/);
   assert.doesNotMatch(script, /if \(!startDecision\.allowed\)[\s\S]*startButton\.disabled = true;/);
+});
+
+test("dashboard activation repairs Start Design controls disabled by stale storefront state", () => {
+  const removed: string[] = [];
+  const attributes = new Map<string, string>([["aria-disabled", "true"]]);
+  const button = {
+    disabled: true,
+    removeAttribute(name: string) {
+      removed.push(name);
+      attributes.delete(name);
+    },
+    setAttribute(name: string, value: string) {
+      attributes.set(name, value);
+    },
+  };
+
+  const repaired = activateCreatorStartDesignControls({
+    querySelectorAll(selector: string) {
+      assert.equal(selector, "[data-base-product-start]");
+      return [button];
+    },
+  });
+
+  assert.equal(repaired, 1);
+  assert.equal(button.disabled, false);
+  assert.deepEqual(removed, ["disabled"]);
+  assert.equal(attributes.get("aria-disabled"), "false");
+});
+
+test("Creator Dashboard assets use a release key so browsers cannot reuse stale disabled-button files", () => {
+  assert.match(
+    block,
+    /assign creator_dashboard_asset_release = '2026-11-17-start-design-active'/,
+  );
+  assert.match(
+    block,
+    /customhouse\.css'[\s\S]*append: '\?v='[\s\S]*creator_dashboard_asset_release/,
+  );
+  assert.match(
+    block,
+    /customhouse-dashboard\.js'[\s\S]*append: '\?v='[\s\S]*creator_dashboard_asset_release/,
+  );
 });
 
 test("selecting a valid method clears the printing-method error", () => {
