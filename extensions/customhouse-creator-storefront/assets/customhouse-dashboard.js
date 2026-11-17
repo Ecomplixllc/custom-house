@@ -16,6 +16,8 @@ const JQUERY_SRC = "https://code.jquery.com/jquery-3.7.1.min.js";
 const CREATOR_DRAFT_AUTOSAVE_DEBOUNCE_MS = 3500;
 const CREATOR_DRAFT_AUTOSAVE_HEARTBEAT_MS = 12000;
 const CREATOR_DRAFT_SAVE_TIMEOUT_MS = 30000;
+const CREATOR_PRINTING_METHOD_REQUIRED_MESSAGE =
+  "Please select a printing method before you start.";
 let creatorProductsLoadPromise = null;
 let creatorBaseProductsLoadPromise = null;
 let creatorDashboardLoadPromise = null;
@@ -665,16 +667,17 @@ function dashboardModalQueryAll(root, selector) {
   ];
 }
 
-function setActionLoading(button, label) {
+function setActionLoading(button, label, { disable = true } = {}) {
   if (!button) return () => {};
   if (!button.dataset.customhouseActionLabel) {
     button.dataset.customhouseActionLabel = button.textContent || "";
   }
   const original = button.dataset.customhouseActionLabel;
-  button.disabled = true;
+  const wasDisabled = button.disabled;
+  if (disable) button.disabled = true;
   button.textContent = label;
   return () => {
-    button.disabled = false;
+    if (disable) button.disabled = wasDisabled;
     button.textContent = original;
   };
 }
@@ -690,6 +693,34 @@ function showCreatorToast(root, message, error = false) {
     target.dataset.persist = "false";
     if (!error && target.textContent === message) target.textContent = "";
   }, 2800);
+}
+
+function clearCreatorPrintingMethodError(root) {
+  const target = root.querySelector("[data-dashboard-creator-products-message]") ||
+    root.querySelector("[data-dashboard-message]");
+  if (!target || target.textContent !== CREATOR_PRINTING_METHOD_REQUIRED_MESSAGE) return;
+  target.dataset.persist = "false";
+  target.textContent = "";
+  target.classList.remove("customhouse-error");
+}
+
+export function creatorStartDesignControlState() {
+  return { disabled: false, clickable: true };
+}
+
+export function creatorStartDesignGate(selectedProductionMethod) {
+  const normalizedMethod = String(selectedProductionMethod || "").trim();
+  return normalizedMethod
+    ? {
+        allowed: true,
+        error: "",
+        selectedProductionMethod: normalizedMethod,
+      }
+    : {
+        allowed: false,
+        error: CREATOR_PRINTING_METHOD_REQUIRED_MESSAGE,
+        selectedProductionMethod: "",
+      };
 }
 
 function goToMyProductsTab(root) {
@@ -858,7 +889,11 @@ function renderBaseProducts(root, products) {
     methods.forEach((method) => {
       methodSelect.append(new Option(method.label, method.id));
     });
-    methodSelect.disabled = methods.length === 0;
+    methodSelect.addEventListener("change", () => {
+      if (creatorStartDesignGate(methodSelect.value).allowed) {
+        clearCreatorPrintingMethodError(root);
+      }
+    });
     methodLabel.append(methodSelect);
     setup.append(methodLabel);
     if (!methods.length) {
@@ -876,10 +911,11 @@ function renderBaseProducts(root, products) {
     button.type = "button";
     button.className = "ch-design-card__button ch-design-card__button--primary";
     button.dataset.baseProductStart = product.id || "";
-    button.textContent = product.pitchprintDesignId
-      ? "Start Design"
-      : "Unavailable";
-    button.disabled = !product.pitchprintDesignId;
+    button.dataset.startDesignState = creatorStartDesignControlState().clickable
+      ? "enabled"
+      : "disabled";
+    button.textContent = "Start Design";
+    button.removeAttribute("disabled");
     actions.append(button);
 
     card.append(top, copy, actions);
@@ -2940,19 +2976,27 @@ function bindCreatorDesignActions(root) {
       const baseProduct = (state.baseProducts || []).find(
         (product) => product.id === startButton.dataset.baseProductStart,
       );
-      if (!baseProduct?.pitchprintDesignId) return;
       const card = startButton.closest(".customhouse-base-product-card");
       const methodSelect = card?.querySelector("[data-base-product-method]");
-      const selectedProductionMethod = methodSelect?.value || "";
-      if (!selectedProductionMethod) {
-        showCreatorToast(root, "Please select a printing method.", true);
+      const startDecision = creatorStartDesignGate(methodSelect?.value);
+      if (!startDecision.allowed) {
+        showCreatorToast(root, startDecision.error, true);
+        startButton.disabled = false;
+        startButton.removeAttribute("disabled");
         methodSelect?.focus();
+        methodSelect?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        return;
+      }
+      clearCreatorPrintingMethodError(root);
+      const selectedProductionMethod = startDecision.selectedProductionMethod;
+      if (!baseProduct?.pitchprintDesignId) {
+        showCreatorToast(root, "This product is not available for design yet.", true);
         return;
       }
       const key = `start:${baseProduct.id}`;
       if (state.actionLoading.has(key)) return;
       state.actionLoading.add(key);
-      const restoreButton = setActionLoading(startButton, "Preparing designer...");
+      const restoreButton = setActionLoading(startButton, "Preparing designer...", { disable: false });
       try {
         const created = await createCreatorProductDraft({
           shopifyProductId: baseProduct.id,
