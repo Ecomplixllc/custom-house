@@ -708,6 +708,16 @@ export function creatorStartDesignControlState() {
   return { disabled: false, clickable: true };
 }
 
+export function activateCreatorStartDesignControls(root) {
+  const buttons = root?.querySelectorAll?.("[data-base-product-start]") || [];
+  buttons.forEach((button) => {
+    button.disabled = false;
+    button.removeAttribute("disabled");
+    button.setAttribute("aria-disabled", "false");
+  });
+  return buttons.length;
+}
+
 export function creatorStartDesignGate(selectedProductionMethod) {
   const normalizedMethod = String(selectedProductionMethod || "").trim();
   return normalizedMethod
@@ -921,6 +931,7 @@ function renderBaseProducts(root, products) {
     card.append(top, copy, actions);
     wrap.append(card);
   });
+  activateCreatorStartDesignControls(root);
 }
 
 function projectPreviewUrls(product) {
