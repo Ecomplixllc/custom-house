@@ -46,6 +46,7 @@ const startDesignContracts = dashboardModule as unknown as {
   };
   renderBaseProducts: (root: HTMLElement, products: Array<Record<string, unknown>>) => void;
   bindCreatorDesignActions: (root: HTMLElement) => void;
+  bindDashboardTabs: (root: HTMLElement) => void;
 };
 const creatorStartDesignGate = (
   selectedProductionMethod?: string | null,
@@ -1611,7 +1612,7 @@ test("missing printing method blocks draft and PitchPrint launch on click", () =
 test("Creator Dashboard assets use a release key so browsers cannot reuse stale disabled-button files", () => {
   assert.match(
     block,
-    /assign creator_dashboard_asset_release = '2026-11-17-start-design-pointer-error'/,
+    /assign creator_dashboard_asset_release = '2026-11-17-start-design-click-validation-v3'/,
   );
   assert.match(
     block,
@@ -1620,6 +1621,14 @@ test("Creator Dashboard assets use a release key so browsers cannot reuse stale 
   assert.match(
     block,
     /customhouse-dashboard\.js'[\s\S]*append: '\?v='[\s\S]*creator_dashboard_asset_release/,
+  );
+});
+
+test("Creator Start Design ships diagnostic markers in the rendered button and active handler source", () => {
+  assert.match(script, /CUSTOMHOUSE_START_DESIGN_CLICK_VALIDATION_V3/);
+  assert.match(
+    script,
+    /button\.dataset\.chStartDesignVersion\s*=\s*CUSTOMHOUSE_START_DESIGN_CLICK_VALIDATION_V3/,
   );
 });
 
@@ -1668,6 +1677,8 @@ test("real Creator Add Product UI keeps Start Design active and validates a miss
     assert.ok(method);
     assert.equal(button.disabled, false);
     assert.equal(button.hasAttribute("disabled"), false);
+    assert.notEqual(button.getAttribute("aria-disabled"), "true");
+    assert.equal(button.dataset.chStartDesignVersion, "click-validation-v3");
     const computed = fixture.dom.window.getComputedStyle(button);
     assert.notEqual(computed.pointerEvents, "none");
     assert.equal(computed.cursor, "pointer");
@@ -1690,6 +1701,8 @@ test("real Creator Add Product UI keeps Start Design active and validates a miss
     assert.equal(fixture.dom.window.document.activeElement, method);
     assert.equal(button.disabled, false);
     assert.equal(button.hasAttribute("disabled"), false);
+    assert.notEqual(button.getAttribute("aria-disabled"), "true");
+    assert.equal(button.dataset.chStartDesignVersion, "click-validation-v3");
     assert.equal(fixture.dom.window.getComputedStyle(button).cursor, "pointer");
     assert.equal(draftCalls, 0);
     assert.equal(pitchPrintCalls, 0);
@@ -1760,6 +1773,8 @@ test("real Creator Add Product rerender after method data load keeps Start Desig
     assert.ok(button);
     assert.equal(button.disabled, false);
     assert.equal(button.hasAttribute("disabled"), false);
+    assert.notEqual(button.getAttribute("aria-disabled"), "true");
+    assert.equal(button.dataset.chStartDesignVersion, "click-validation-v3");
     assert.equal(fixture.dom.window.getComputedStyle(button).cursor, "pointer");
     assert.notEqual(fixture.dom.window.getComputedStyle(button).pointerEvents, "none");
     const card = button.closest(".customhouse-base-product-card");
@@ -1780,6 +1795,73 @@ test("real Creator Add Product rerender after method data load keeps Start Desig
     assert.equal(button.hasAttribute("disabled"), false);
     assert.equal(fixture.dom.window.getComputedStyle(button).cursor, "pointer");
     assert.notEqual(fixture.dom.window.getComputedStyle(button).pointerEvents, "none");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("real Creator Add Product pricing rerender keeps Start Design enabled", () => {
+  const fixture = creatorAddProductDom();
+  try {
+    const product = creatorBaseProduct([{ id: "DTF", label: "DTF printing" }]);
+    startDesignContracts.renderBaseProducts(fixture.root, [
+      { ...product, price: "100.00", currency: "SEK" },
+    ]);
+    startDesignContracts.renderBaseProducts(fixture.root, [
+      { ...product, price: "125.00", currency: "SEK" },
+    ]);
+
+    const button = fixture.root.querySelector<HTMLButtonElement>("[data-base-product-start]");
+    assert.ok(button);
+    assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute("disabled"), false);
+    assert.notEqual(button.getAttribute("aria-disabled"), "true");
+    assert.equal(button.dataset.chStartDesignVersion, "click-validation-v3");
+    assert.equal(fixture.dom.window.getComputedStyle(button).cursor, "pointer");
+    assert.notEqual(fixture.dom.window.getComputedStyle(button).pointerEvents, "none");
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("real Creator Add Product tab leave and return keeps Start Design enabled", () => {
+  const fixture = creatorAddProductDom();
+  try {
+    fixture.root.insertAdjacentHTML(
+      "afterbegin",
+      `<button type="button" data-dashboard-tab-target="overview">Dashboard</button>
+       <button type="button" data-dashboard-tab-target="add-product">Add Product</button>
+       <section data-dashboard-tab-panel="overview"></section>`,
+    );
+    const baseProducts = fixture.root.querySelector<HTMLElement>("[data-dashboard-base-products]");
+    assert.ok(baseProducts);
+    const addProductPanel = fixture.dom.window.document.createElement("section");
+    addProductPanel.dataset.dashboardTabPanel = "add-product";
+    baseProducts.replaceWith(addProductPanel);
+    addProductPanel.append(baseProducts);
+    startDesignContracts.renderBaseProducts(fixture.root, [
+      creatorBaseProduct([{ id: "DTF", label: "DTF printing" }]),
+    ]);
+    startDesignContracts.bindDashboardTabs(fixture.root);
+
+    fixture.root.querySelector<HTMLButtonElement>('[data-dashboard-tab-target="add-product"]')?.click();
+    let button = fixture.root.querySelector<HTMLButtonElement>("[data-base-product-start]");
+    assert.ok(button);
+    assert.equal(addProductPanel.hidden, false);
+    assert.equal(button.disabled, false);
+    assert.equal(button.dataset.chStartDesignVersion, "click-validation-v3");
+
+    fixture.root.querySelector<HTMLButtonElement>('[data-dashboard-tab-target="overview"]')?.click();
+    assert.equal(addProductPanel.hidden, true);
+    fixture.root.querySelector<HTMLButtonElement>('[data-dashboard-tab-target="add-product"]')?.click();
+    button = fixture.root.querySelector<HTMLButtonElement>("[data-base-product-start]");
+    assert.ok(button);
+    assert.equal(addProductPanel.hidden, false);
+    assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute("disabled"), false);
+    assert.notEqual(button.getAttribute("aria-disabled"), "true");
+    assert.equal(button.dataset.chStartDesignVersion, "click-validation-v3");
+    assert.equal(fixture.dom.window.getComputedStyle(button).cursor, "pointer");
   } finally {
     fixture.cleanup();
   }
