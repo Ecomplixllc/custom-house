@@ -5512,12 +5512,6 @@ body:has([data-customhouse-dashboard]) {
   min-height: 2.55rem;
 }
 
-[data-customhouse-dashboard] [data-base-product-start] {
-  opacity: 1 !important;
-  pointer-events: auto !important;
-  cursor: pointer !important;
-}
-
 @media (min-width: 981px) {
   [data-customhouse-dashboard] .customhouse-dashboard-topbar {
     display: none !important;
