@@ -37,6 +37,39 @@ const styles = readFileSync(
   "extensions/customhouse-creator-storefront/assets/customhouse.css",
   "utf8",
 );
+const startDesignContracts = dashboardModule as unknown as {
+  creatorStartDesignControlState: (context?: {
+    selectedProductionMethod?: string | null;
+    methodsLoading?: boolean;
+    productLoading?: boolean;
+    viewportWidth?: number;
+  }) => { disabled: boolean; clickable: boolean };
+  creatorStartDesignGate: (selectedProductionMethod?: string | null) => {
+    allowed: boolean;
+    error: string;
+    selectedProductionMethod: string;
+  };
+};
+const creatorStartDesignControlState = (
+  context?: Parameters<typeof startDesignContracts.creatorStartDesignControlState>[0],
+) => {
+  assert.equal(
+    typeof startDesignContracts.creatorStartDesignControlState,
+    "function",
+    "creatorStartDesignControlState must be exported",
+  );
+  return startDesignContracts.creatorStartDesignControlState(context);
+};
+const creatorStartDesignGate = (
+  selectedProductionMethod?: string | null,
+) => {
+  assert.equal(
+    typeof startDesignContracts.creatorStartDesignGate,
+    "function",
+    "creatorStartDesignGate must be exported",
+  );
+  return startDesignContracts.creatorStartDesignGate(selectedProductionMethod);
+};
 
 test("creator dashboard retries a temporary server failure and recovers", async () => {
   let requests = 0;
@@ -542,7 +575,10 @@ test("creator dashboard submits final designs and confirms refreshed My Products
   assert.match(script, /data-base-product-start/);
   assert.match(script, /createCreatorProductDraft/);
   assert.match(script, /await root\.__customHouseOpenPitchPrintDesigner\?\.\(created, startButton\)/);
-  assert.match(script, /setActionLoading\(startButton, "Preparing designer\.\.\."\)/);
+  assert.match(
+    script,
+    /setActionLoading\(startButton, "Preparing designer\.\.\.", \{ disable: false \}\)/,
+  );
   assert.match(script, /if \(manager\.showAppCalled\) return/);
   assert.match(script, /client\.showApp\(\)/);
   assert.match(script, /bindPitchPrintEvent\(client, "project-saved"/);
@@ -614,10 +650,10 @@ test("creator dashboard submits final designs and confirms refreshed My Products
   assert.match(script, /media\.className = "ch-design-card__preview"/);
   assert.match(script, /copy\.className = "ch-design-card__body customhouse-base-product-card__body"/);
   assert.match(script, /button\.className = "ch-design-card__button ch-design-card__button--primary"/);
-  assert.match(script, /Unavailable/);
+  assert.doesNotMatch(script, /button\.textContent = product\.pitchprintDesignId[\s\S]*Unavailable/);
   assert.doesNotMatch(script, /data-base-product-color/);
   assert.match(script, /data-base-product-method/);
-  assert.match(script, /Please select a printing method\./);
+  assert.match(script, /Please select a printing method before you start\./);
   assert.match(script, /existing\?\.readyState === "complete"/);
   assert.match(script, /src === JQUERY_SRC && window\.jQuery/);
   assert.match(script, /root\.__customHouseCreatorDesignActionsBound/);
@@ -1499,18 +1535,15 @@ test("Creator Add Product renders canonical method options and a safe empty stat
   assert.match(script, /new Option\("Choose one method", ""\)/);
   assert.match(script, /new Option\(method\.label, method\.id\)/);
   assert.match(script, /seenMethods\.has\(id\)/);
-  assert.match(script, /methodSelect\.disabled = methods\.length === 0/);
+  assert.doesNotMatch(script, /methodSelect\.disabled = methods\.length === 0/);
   assert.match(
     script,
     /No printing methods are currently available for this product\./,
   );
-  assert.match(
-    script,
-    /button\.disabled = !product\.pitchprintDesignId/,
-  );
+  assert.doesNotMatch(script, /button\.disabled = !product\.pitchprintDesignId/);
   assert.doesNotMatch(script, /button\.disabled = !product\.pitchprintDesignId \|\| !methodSelect\.value/);
   assert.doesNotMatch(script, /button\.disabled = !product\.pitchprintDesignId \|\| methods\.length === 0/);
-  assert.match(script, /Please select a printing method\./);
+  assert.match(script, /Please select a printing method before you start\./);
   assert.match(script, /methodSelect\?\.focus\(\)/);
   assert.doesNotMatch(script, /colorSelect/);
   assert.doesNotMatch(script, /Product Color/);
@@ -1518,6 +1551,86 @@ test("Creator Add Product renders canonical method options and a safe empty stat
     script,
     /pricing\?\.productionMethods\)\s*\?\s*pricing\.productionMethods\.filter/,
   );
+});
+
+test("Start Design is enabled when no printing method is selected", () => {
+  const state = creatorStartDesignControlState({
+    selectedProductionMethod: null,
+  });
+  assert.deepEqual(state, { disabled: false, clickable: true });
+});
+
+test("Start Design stays enabled while printing methods and product data load", () => {
+  const state = creatorStartDesignControlState({
+    methodsLoading: true,
+    productLoading: true,
+  });
+  assert.deepEqual(state, { disabled: false, clickable: true });
+  assert.doesNotMatch(script, /methodsLoading.*disabled|loadingMethods.*disabled/s);
+});
+
+test("missing printing method blocks draft and PitchPrint launch on click", () => {
+  const gate = creatorStartDesignGate("");
+  assert.deepEqual(gate, {
+    allowed: false,
+    error: "Please select a printing method before you start.",
+    selectedProductionMethod: "",
+  });
+  const handler = script.slice(
+    script.indexOf("function bindCreatorDesignActions"),
+    script.indexOf("const editButton", script.indexOf("function bindCreatorDesignActions")),
+  );
+  assert.ok(handler.indexOf("if (!startDecision.allowed)") < handler.indexOf("createCreatorProductDraft"));
+  assert.ok(handler.indexOf("return;") < handler.indexOf("createCreatorProductDraft"));
+  assert.ok(handler.indexOf("createCreatorProductDraft") < handler.indexOf("__customHouseOpenPitchPrintDesigner"));
+});
+
+test("Start Design remains enabled after missing-method validation", () => {
+  assert.match(script, /if \(!startDecision\.allowed\)[\s\S]*startButton\.disabled = false;[\s\S]*return;/);
+  assert.doesNotMatch(script, /if \(!startDecision\.allowed\)[\s\S]*startButton\.disabled = true;/);
+});
+
+test("selecting a valid method clears the printing-method error", () => {
+  const gate = creatorStartDesignGate("dtf");
+  assert.deepEqual(gate, {
+    allowed: true,
+    error: "",
+    selectedProductionMethod: "dtf",
+  });
+  assert.match(script, /methodSelect\.addEventListener\("change"/);
+  assert.match(script, /clearCreatorPrintingMethodError\(root\)/);
+});
+
+test("valid method preserves the existing Creator design start flow", () => {
+  const gate = creatorStartDesignGate("embroidery");
+  assert.equal(gate.allowed, true);
+  assert.match(script, /createCreatorProductDraft\(\{/);
+  assert.match(script, /selectedProductionMethod,/);
+  assert.match(script, /fixedProductionMethod: selectedProductionMethod/);
+  assert.match(script, /__customHouseOpenPitchPrintDesigner\?\.\(created, startButton\)/);
+  assert.match(script, /setActionLoading\(startButton, "Preparing designer\.\.\.", \{ disable: false \}\)/);
+});
+
+test("rerendering base products never disables Start Design", () => {
+  const first = creatorStartDesignControlState();
+  const rerendered = creatorStartDesignControlState({
+    selectedProductionMethod: "",
+    methodsLoading: false,
+  });
+  assert.equal(first.disabled, false);
+  assert.equal(rerendered.disabled, false);
+  assert.doesNotMatch(script, /button\.disabled\s*=\s*![^;]*productionMethod/);
+});
+
+test("Start Design remains visibly clickable across mobile, tablet, and desktop", () => {
+  for (const viewportWidth of [375, 390, 430, 768, 1024, 1440]) {
+    assert.deepEqual(
+      creatorStartDesignControlState({ viewportWidth }),
+      { disabled: false, clickable: true },
+    );
+  }
+  assert.match(styles, /\[data-base-product-start\][\s\S]*opacity:\s*1\s*!important/);
+  assert.match(styles, /\[data-base-product-start\][\s\S]*pointer-events:\s*auto\s*!important/);
 });
 
 test("creator PitchPrint launch config separates template design ID from saved project ID", () => {
