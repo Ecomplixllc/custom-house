@@ -897,6 +897,63 @@ test("Creator Content keeps the desktop filter sidebar visible with collapsed op
   assert.match(markup, /drawer\.inert = false/);
 });
 
+test("Creator Content uses branded active filters and checkbox states", async () => {
+  const { db, shopify } = fakePublicDiscovery();
+  const data = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+  const response = creatorContentHtml({
+    ...data,
+    headerAccount: { loggedIn: false },
+  });
+  const markup = await response.text();
+
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__active-filters button\{[^}]*display:inline-flex[^}]*min-height:36px[^}]*max-width:100%[^}]*border-radius:999px[^}]*background:linear-gradient\([^}]*var\(--cc-purple\)[^}]*white-space:normal[^}]*overflow-wrap:anywhere/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__active-filters button::after\{[^}]*content:"×"[^}]*color:var\(--cc-lime\)/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__active-filters button:hover\{[^}]*border-color:var\(--cc-lime\)/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__active-filters button:focus-visible\{[^}]*outline:2px solid var\(--cc-lime\)/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__filter-options>label,\.customhouse-creator-content__filter-option-list>label\{[^}]*min-height:36px/,
+  );
+  assert.match(markup, /\.customhouse-creator-content__filter-group input\[type=checkbox\]\{[^}]*appearance:none/);
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__filter-group input\[type=checkbox\]:checked\{[^}]*border-color:var\(--cc-lime\)[^}]*background:var\(--cc-purple\)/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__filter-group input\[type=checkbox\]:checked::after\{[^}]*border-left:2px solid var\(--cc-lime\)/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__filter-options>label:hover,\.customhouse-creator-content__filter-option-list>label:hover\{[^}]*background:rgba\(135,44,255,\.1\)/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__filter-options>label:focus-within,\.customhouse-creator-content__filter-option-list>label:focus-within\{[^}]*outline:2px solid var\(--cc-lime\)/,
+  );
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__filter-group input\[type=checkbox\]:disabled\{[^}]*opacity:\.45/,
+  );
+  assert.match(markup, /@media\(prefers-reduced-motion:reduce\)\{[^}]*transition:none/);
+});
+
 test("Creator Content keeps growing filter groups searchable and paginated", async () => {
   const { db, shopify } = fakePublicDiscovery();
   const data = await loadPublicCreatorContent(
