@@ -2139,6 +2139,67 @@
   }
 }
 
+/* Creator discovery tags in Edit design details. */
+.ch-design-edit-modal .ch-design-edit-modal__tags-editor {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #ded7f6;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #fbfaff, #f6f3ff);
+}
+
+.ch-design-edit-modal .ch-design-edit-modal__tags-editor .ch-creator-content-editor__tag-label {
+  color: #344054;
+  font-size: .78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.ch-design-edit-modal .ch-design-edit-modal__tags-editor p {
+  margin: 0;
+  color: #667085;
+  font-size: .72rem;
+  font-weight: 650;
+}
+
+.ch-design-edit-modal .ch-design-edit-modal__tags-editor .ch-creator-content-editor__tag {
+  border-color: #c9b9ff;
+  color: #5925dc;
+  background: #eee9ff;
+  font-size: .68rem;
+}
+
+.ch-design-edit-modal .ch-design-edit-modal__tags-editor .ch-creator-content-editor__add input {
+  min-height: 42px;
+  border-color: #d7dce5;
+  color: #1d2939;
+  background: #fff;
+  -webkit-text-fill-color: #1d2939;
+}
+
+.ch-design-edit-modal .ch-design-edit-modal__tags-editor .ch-creator-content-editor__add button {
+  min-height: 42px;
+  border-color: transparent;
+  color: #fff;
+  background: linear-gradient(135deg, #7c3aed, #5b22e8);
+}
+
+.ch-design-edit-modal .ch-design-edit-modal__tags-editor .ch-creator-content-editor__meta {
+  color: #667085;
+}
+
+.ch-design-edit-modal [data-dashboard-details-tag-status][data-error="true"] {
+  color: #b42318;
+}
+
+@media (max-width: 560px) {
+  .ch-design-edit-modal .ch-design-edit-modal__tags-editor .ch-creator-content-editor__add {
+    grid-template-columns: minmax(0, 1fr) 82px;
+  }
+}
+
 @media (max-width: 360px) {
   [data-customhouse-dashboard] .customhouse-creator-products-panel .ch-design-card {
     grid-template-columns: 96px minmax(0, 1fr) !important;

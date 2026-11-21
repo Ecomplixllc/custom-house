@@ -1025,10 +1025,14 @@ test("creator dashboard renders professional My Designs management UI", () => {
   assert.match(block, /data-dashboard-details-modal/);
   assert.match(block, /Edit design details/);
   assert.match(block, /Design title/);
+  assert.match(block, /data-dashboard-details-tag-input/);
+  assert.match(block, /data-dashboard-details-tag-add/);
   assert.match(block, /data-dashboard-action-modal/);
   assert.match(block, /data-dashboard-action-confirm/);
 
   assert.match(script, /updateCreatorProductDetails/);
+  assert.match(script, /creatorContentTags: Array\.isArray\(root\.__customHouseDetailsTags\)/);
+  assert.match(script, /renderDesignDetailsTags/);
   assert.match(script, /performCreatorProductAction/);
   assert.match(script, /filterCreatorProducts/);
   assert.match(script, /renderDesignFilters/);
@@ -1612,7 +1616,7 @@ test("missing printing method blocks draft and PitchPrint launch on click", () =
 test("Creator Dashboard assets use a release key so browsers cannot reuse stale disabled-button files", () => {
   assert.match(
     block,
-    /assign creator_dashboard_asset_release = '2026-11-17-start-design-click-validation-v3'/,
+    /assign creator_dashboard_asset_release = '2026-11-21-edit-details-tags-v1'/,
   );
   assert.match(
     block,

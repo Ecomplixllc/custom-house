@@ -3013,7 +3013,7 @@ test("owner can edit and resubmit same rejected CreatorProduct", async () => {
   assert.equal(db.products.length, 1);
 });
 
-test("creator can update own draft details with trimmed title and description", async () => {
+test("creator can update own draft details and discovery tags", async () => {
   const db = fakeDb();
   const draft = await createCreatorProductDraft(
     shop,
@@ -3027,12 +3027,17 @@ test("creator can update own draft details with trimmed title and description", 
     shop,
     "gid://shopify/Customer/1",
     draft.id,
-    { title: "  Weekend Skiing  ", description: "  Premium hoodie design.  " },
+    {
+      title: "  Weekend Skiing  ",
+      description: "  Premium hoodie design.  ",
+      creatorContentTags: [" Winter ", "winter", "Outdoor"],
+    },
     db,
   );
 
   assert.equal(updated.title, "Weekend Skiing");
   assert.equal(updated.description, "Premium hoodie design.");
+  assert.deepEqual(updated.creatorContentTags, ["Winter", "Outdoor"]);
   assert.equal(updated.status, "DRAFT");
 });
 
@@ -3135,7 +3140,11 @@ test("published metadata edit preserves status artwork project and public detail
     shop,
     "gid://shopify/Customer/1",
     draft.id,
-    { title: "New Public Title", description: "New public description." },
+    {
+      title: "New Public Title",
+      description: "New public description.",
+      creatorContentTags: ["Streetwear", "Limited Edition"],
+    },
     db,
   );
   const publicProduct = await publicCreatorProductDetail(
@@ -3149,6 +3158,7 @@ test("published metadata edit preserves status artwork project and public detail
   assert.equal(updated.status, "PUBLISHED");
   assert.equal(updated.pitchprintProjectId, "pp_project_keep");
   assert.equal(updated.pitchprintDesignId, "pp_design_keep");
+  assert.deepEqual(updated.creatorContentTags, ["Streetwear", "Limited Edition"]);
   assert.equal(publicProduct.title, "New Public Title");
   assert.equal(publicProduct.description, "New public description.");
 });
