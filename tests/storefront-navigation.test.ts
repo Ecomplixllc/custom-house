@@ -49,7 +49,7 @@ test("desktop and mobile app headers render the same complete primary navigation
   );
 });
 
-test("theme desktop and mobile renderers share one primary navigation source", () => {
+test("theme desktop and mobile headers use the merchant-managed Shopify menu", () => {
   const header = readFileSync("theme-live-cart/sections/header.liquid", "utf8");
   const navigation = readFileSync(
     "theme-live-cart/snippets/customhouse-primary-navigation.liquid",
@@ -58,19 +58,22 @@ test("theme desktop and mobile renderers share one primary navigation source", (
 
   assert.match(
     header,
-    /render 'customhouse-primary-navigation', variant: 'desktop', request_path: request\.path/,
+    /render 'customhouse-primary-navigation', variant: 'desktop', request_path: request\.path, links: section\.settings\.customhouse_primary_menu\.links/,
   );
   assert.match(
     header,
-    /render 'customhouse-primary-navigation', variant: 'mobile', request_path: request\.path/,
+    /render 'customhouse-primary-navigation', variant: 'mobile', request_path: request\.path, links: section\.settings\.customhouse_primary_menu\.links/,
   );
+  assert.match(header, /"id": "customhouse_primary_menu"/);
+  assert.match(header, /"default": "main-menu"/);
+  assert.match(navigation, /for link in navigation_links/);
+  assert.match(navigation, /link\.title/);
+  assert.match(navigation, /link\.url/);
+  assert.match(navigation, /linklists\['main-menu'\]\.links/);
+  assert.doesNotMatch(navigation, /assign nav_labels/);
   assert.match(
     navigation,
-    /T-SHIRTS\|HOODIES\|DESIGN SELV\|INSPIRATION\|DESIGN YOUR OWN\|CREATOR CONTENT/,
-  );
-  assert.match(
-    navigation,
-    /\/pages\/collections\|\/apps\/customhouse\/creator-content/,
+    /request_path contains '\/apps\/customhouse\/creators\/'/,
   );
 });
 

@@ -1,18 +1,39 @@
+{%- doc -%}
+  Renders the merchant-managed Shopify navigation in the custom header.
+
+  @param {object} links - Links from the menu selected in the Header settings
+  @param {string} variant - desktop or mobile
+  @param {string} request_path - Current storefront path
+{%- enddoc -%}
+
 {% liquid
-  assign nav_labels = 'T-SHIRTS|HOODIES|DESIGN SELV|INSPIRATION|DESIGN YOUR OWN|CREATOR CONTENT' | split: '|'
-  assign nav_urls = '/collections/t-shirts|/collections/hoodies|/pages/design-selv|/blogs/news|/pages/collections|/apps/customhouse/creator-content' | split: '|'
-  assign nav_keys = 't-shirts|hoodies|design-selv|inspiration|design-your-own|creator-content' | split: '|'
+  assign navigation_links = links
+  if navigation_links == blank
+    assign navigation_links = linklists['main-menu'].links
+  endif
 %}
 
-{% for item_label in nav_labels %}
+{% for link in navigation_links %}
   {% liquid
-    assign item_url = nav_urls[forloop.index0]
-    assign item_key = nav_keys[forloop.index0]
-    assign is_current = false
-    if item_key == 'creator-content'
+    assign item_url = link.url
+    assign item_key = link.handle
+    assign is_current = link.current | default: link.active
+
+    if item_url contains '/apps/customhouse/creator-content' or item_url contains '/apps/customhouse/creators/'
+      assign item_key = 'creator-content'
       if request_path == '/apps/customhouse/creator-content' or request_path contains '/apps/customhouse/creators/'
         assign is_current = true
       endif
+    elsif item_url contains '/collections/t-shirts'
+      assign item_key = 't-shirts'
+    elsif item_url contains '/collections/hoodies'
+      assign item_key = 'hoodies'
+    elsif item_url contains '/pages/design-selv'
+      assign item_key = 'design-selv'
+    elsif item_url contains '/blogs/news'
+      assign item_key = 'inspiration'
+    elsif item_url contains '/pages/collections'
+      assign item_key = 'design-your-own'
     endif
   %}
   {% if variant == 'mobile' %}
@@ -37,11 +58,7 @@
               <path d="M18 30c-2.8-2.2-4.5-5.3-4.5-9 0-6.3 4.7-11 10.5-11s10.5 4.7 10.5 11c0 3.7-1.7 6.8-4.5 9"></path>
               <path d="M19 34h10"></path>
               <path d="M20.5 39h7"></path>
-              <path d="M24 3v4"></path>
-              <path d="M9 10l3 3"></path>
-              <path d="M39 10l-3 3"></path>
-              <path d="M7 22h4"></path>
-              <path d="M37 22h4"></path>
+              <path d="M24 3v4M9 10l3 3M39 10l-3 3M7 22h4M37 22h4"></path>
             {% when 'design-your-own' %}
               <path d="M8 36h32l-3-20-9 9-4-14-4 14-9-9-3 20Z"></path>
               <path d="M10 41h28"></path>
@@ -50,12 +67,14 @@
               <circle cx="33" cy="19" r="5"></circle>
               <path d="M5 40c1.6-8 5.6-12 12-12s10.4 4 12 12"></path>
               <path d="M27 30c6.8 0 11 3.3 12.5 10"></path>
+            {% else %}
+              <path d="M8 12h32M8 24h32M8 36h32"></path>
           {% endcase %}
         </svg>
       </span>
-      <span>{{ item_label }}</span>
+      <span>{{ link.title }}</span>
     </a>
   {% else %}
-    <a href="{{ item_url }}"{% if is_current %} aria-current="page"{% endif %}>{{ item_label }}</a>
+    <a href="{{ item_url }}"{% if is_current %} aria-current="page"{% endif %}>{{ link.title }}</a>
   {% endif %}
 {% endfor %}
