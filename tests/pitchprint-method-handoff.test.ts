@@ -30,7 +30,7 @@ function fixture(enabled: string[]): PublicProductProductionPricingRecord {
     dtfFeeVariantId: null, dtgFeeVariantId: null,
   };
 }
-for (const codes of [["STICKER_PRINTING"], ["DTF", "STICKER_PRINTING"], [], ["SUBLIMATION"], ["SCREEN_PRINTING"]]) {
+for (const codes of [["STICKER_PRINTING"], ["DTF", "STICKER_PRINTING"], [], ["SCREEN_PRINTING"]]) {
   test(`canonical handoff serializes exactly enabled product methods: ${codes.join(",") || "none"}`, () => {
     const config = canonicalProductionPricingBridgePayload(fixture(codes), definitions);
     assert.deepEqual(config.productionMethods.map(method => method.code), codes);
@@ -45,6 +45,11 @@ for (const codes of [["STICKER_PRINTING"], ["DTF", "STICKER_PRINTING"], [], ["SU
     }
   });
 }
+test("retired sublimation is never serialized into a new PitchPrint handoff", () => {
+  const config = canonicalProductionPricingBridgePayload(fixture(["SUBLIMATION"]), definitions);
+  assert.deepEqual(config.productionMethods, []);
+  assert.equal(config.productionMethodPricing.SUBLIMATION, undefined);
+});
 test("explicit empty version-two configuration never restores legacy methods", () => {
   const row = fixture([]);
   row.methodConfigurations = { version: 2, methods: {} };

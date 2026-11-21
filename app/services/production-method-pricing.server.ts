@@ -12,6 +12,7 @@ export const PRODUCTION_METHODS = [
   "SUBLIMATION",
   "STICKER_PRINTING",
 ] as const;
+const RETIRED_PRODUCTION_METHODS = new Set(["SUBLIMATION"]);
 export const CREATOR_PRODUCTION_PRICING_PRODUCT_ID = "customhouse:creator-products";
 
 export type ProductionMethodCode = string;
@@ -230,14 +231,22 @@ const DEFAULT_METHOD_DEFINITIONS: ProductionMethodDefinition[] = [
     maxWidthCm: 35,
     maxHeightCm: 40,
   })),
-  ...(["SUBLIMATION", "STICKER_PRINTING"] as const).map((id) => ({
-    id,
-    label: METHOD_LABELS[id],
+  {
+    id: "SUBLIMATION",
+    label: METHOD_LABELS.SUBLIMATION,
+    description: "",
+    enabled: false,
+    pricingBehavior: "SINGLE",
+    tiers: [],
+  },
+  {
+    id: "STICKER_PRINTING",
+    label: METHOD_LABELS.STICKER_PRINTING,
     description: "",
     enabled: true,
-    pricingBehavior: "SINGLE" as const,
+    pricingBehavior: "SINGLE",
     tiers: [],
-  })),
+  },
 ];
 
 type ProductionFeeVariantNode = {
@@ -259,6 +268,10 @@ type PublicationNode = {
 
 function methodKey(method: string) {
   return method.trim().toUpperCase();
+}
+
+function isOfferableProductionMethod(method: string) {
+  return !RETIRED_PRODUCTION_METHODS.has(methodKey(method));
 }
 
 function numericShopifyId(value: string | null | undefined) {
@@ -794,15 +807,21 @@ async function methodSettings(
       maxHeightCm: optionalDimension(configuration.maxHeightCm) ?? existing?.maxHeightCm,
     });
   }
-  return [...fallback.values()].sort((left, right) => {
-    const leftIndex = PRODUCTION_METHODS.indexOf(left.id as (typeof PRODUCTION_METHODS)[number]);
-    const rightIndex = PRODUCTION_METHODS.indexOf(right.id as (typeof PRODUCTION_METHODS)[number]);
-    if (leftIndex >= 0 || rightIndex >= 0) {
-      return (leftIndex >= 0 ? leftIndex : Number.MAX_SAFE_INTEGER) -
-        (rightIndex >= 0 ? rightIndex : Number.MAX_SAFE_INTEGER);
-    }
-    return left.id.localeCompare(right.id);
-  });
+  return [...fallback.values()]
+    .filter((definition) => isOfferableProductionMethod(definition.id))
+    .sort((left, right) => {
+      const leftIndex = PRODUCTION_METHODS.indexOf(
+        left.id as (typeof PRODUCTION_METHODS)[number],
+      );
+      const rightIndex = PRODUCTION_METHODS.indexOf(
+        right.id as (typeof PRODUCTION_METHODS)[number],
+      );
+      if (leftIndex >= 0 || rightIndex >= 0) {
+        return (leftIndex >= 0 ? leftIndex : Number.MAX_SAFE_INTEGER) -
+          (rightIndex >= 0 ? rightIndex : Number.MAX_SAFE_INTEGER);
+      }
+      return left.id.localeCompare(right.id);
+    });
 }
 
 export async function listEnabledProductionMethods(
@@ -993,6 +1012,7 @@ export function canonicalProductionPricingBridgePayload(
     };
   };
   for (const [method, configured] of Object.entries(configuration.methods)) {
+    if (!isOfferableProductionMethod(method)) continue;
     const definition = definitionById.get(method);
     if (!definition?.enabled || !configured.enabled) continue;
     if ("tiers" in configured) {
