@@ -882,7 +882,7 @@ test("Creator Content keeps the desktop filter sidebar visible with collapsed op
   );
   assert.match(
     markup,
-    /<details class="customhouse-creator-content__filter-group">\s*<summary><span data-creator-content-filter-title>Creator<\/span><\/summary>/,
+    /<details class="customhouse-creator-content__filter-group"[^>]*>\s*<summary><span data-creator-content-filter-title>Creator<\/span><\/summary>/,
   );
   assert.match(markup, /class="customhouse-creator-content__filter-options"/);
   assert.match(
@@ -895,6 +895,35 @@ test("Creator Content keeps the desktop filter sidebar visible with collapsed op
   );
   assert.match(markup, /drawer\.removeAttribute\("aria-hidden"\)/);
   assert.match(markup, /drawer\.inert = false/);
+});
+
+test("Creator Content keeps growing filter groups searchable and paginated", async () => {
+  const { db, shopify } = fakePublicDiscovery();
+  const data = await loadPublicCreatorContent(
+    "shop.myshopify.com",
+    shopify as unknown as PublicContentClient,
+    db as unknown as PublicContentDb,
+  );
+  const response = creatorContentHtml({
+    ...data,
+    headerAccount: { loggedIn: false },
+  });
+  const markup = await response.text();
+
+  assert.match(markup, /data-creator-content-filter-search/);
+  assert.match(markup, /aria-label="Search Creator options"/);
+  assert.match(markup, /aria-label="Search Tag options"/);
+  assert.match(markup, /data-creator-content-filter-option-list/);
+  assert.match(markup, /data-creator-content-filter-option/);
+  assert.match(markup, /data-creator-content-filter-page-prev/);
+  assert.match(markup, /data-creator-content-filter-page-next/);
+  assert.match(markup, /data-creator-content-filter-page-status[^>]*aria-live="polite"/);
+  assert.match(markup, /const filterOptionPageSize = 6/);
+  assert.match(markup, /const syncFilterOptionGroup = \(group, resetPage = false\)/);
+  assert.match(markup, /label\.dataset\.creatorContentFilterLabel/);
+  assert.match(markup, /filterOptionQuery/);
+  assert.match(markup, /data-creator-content-filter-no-results/);
+  assert.match(markup, /targetGroup\.querySelector\("\[data-creator-content-filter-option-list\]"\)/);
 });
 
 test("Creator Content uses arrow controls instead of visible creator and pagination scrollbars", async () => {
