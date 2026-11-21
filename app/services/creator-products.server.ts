@@ -43,6 +43,7 @@ import {
 } from "./production-method-pricing.server.ts";
 import { classifyPitchPrintProjectSource } from "./pitchprint-project-metadata.ts";
 import { fetchPitchPrintProjectSource } from "./pitchprint-project-fetch.server.ts";
+import { creatorProductSeo } from "./creator-product-seo.ts";
 import {
   canonicalVariantIdentity,
   creatorProductionPricingPreview,
@@ -2537,6 +2538,7 @@ export async function updateCreatorProductDetailsForCustomer(
   creatorProductId: string,
   input: UpdateCreatorProductDetailsInput,
   database: CreatorProductDb = db,
+  client?: ShopifyGraphqlClient,
 ) {
   const creator = await approvedCreatorForCustomer(shop, customerId, database);
   const existing = await database.creatorProduct.findFirst({
@@ -2565,6 +2567,55 @@ export async function updateCreatorProductDetailsForCustomer(
   const creatorContentTags = input.creatorContentTags === undefined
     ? existing.creatorContentTags ?? []
     : normalizeCreatorContentTags(input.creatorContentTags);
+  if (
+    existing.status === "PUBLISHED" &&
+    existing.publishedShopifyProductId &&
+    client
+  ) {
+    const collection = await getCreatorCollectionByCreatorId(
+      shop,
+      existing.creatorId,
+      database as unknown as Parameters<typeof getCreatorCollectionByCreatorId>[2],
+    );
+    const seo = creatorProductSeo({
+      title,
+      description,
+      creatorName: collection?.displayName,
+      baseProductTitle: existing.baseProductTitle,
+    });
+    try {
+      const result = await client.request<{
+        productUpdate: {
+          product: { id: string } | null;
+          userErrors: Array<{ message: string }>;
+        };
+      }>(
+        `#graphql mutation SyncPublishedCreatorProductSeo($product: ProductUpdateInput!) {
+          productUpdate(product: $product) {
+            product { id }
+            userErrors { message }
+          }
+        }`,
+        {
+          product: {
+            id: existing.publishedShopifyProductId,
+            title,
+            descriptionHtml: description || "",
+            seo,
+          },
+        },
+      );
+      if (result.productUpdate.userErrors.length || !result.productUpdate.product) {
+        throw new Error("Shopify product update failed.");
+      }
+    } catch {
+      throw new DomainError(
+        "CREATOR_PRODUCT_SEO_SYNC_FAILED",
+        "The product details could not be synchronized with Shopify. Please try again.",
+        502,
+      );
+    }
+  }
   const updated = await database.creatorProduct.update({
     where: { id: existing.id },
     data: {

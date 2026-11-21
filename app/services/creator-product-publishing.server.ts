@@ -27,6 +27,7 @@ import {
   ensureCreatorProductSharedInventoryRelationships,
   type CreatorProductRelationshipRecord,
 } from "./creator-shared-inventory.server.ts";
+import { creatorProductSeo } from "./creator-product-seo.ts";
 
 type Errors = Array<{ message: string }>;
 
@@ -493,6 +494,12 @@ async function configureProduct(
   },
 ) {
   const tags = ["creator-fixed", "customhouse-creator-product"];
+  const seo = creatorProductSeo({
+    title: input.product.title,
+    description: input.product.description,
+    creatorName: input.product.creator?.displayName || input.collection.displayName,
+    baseProductTitle: input.product.baseProductTitle,
+  });
   const updated = await client.request<{
     productUpdate: {
       product: { id: string; handle: string } | null;
@@ -510,6 +517,7 @@ async function configureProduct(
         id: input.productId,
         title: input.product.title,
         descriptionHtml: input.product.description || "",
+        seo,
         status: "DRAFT",
         tags,
       },

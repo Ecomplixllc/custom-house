@@ -175,6 +175,20 @@ test("public Creator product page is buy-only with fixed color and fixed printin
   assert.doesNotMatch(source, /pitchprint.*showApp\(/i);
 });
 
+test("public Creator product page emits generated SEO title and meta description", () => {
+  const source = readFileSync(
+    "app/services/storefront-proxy.server.ts",
+    "utf8",
+  );
+
+  assert.match(source, /const seo = creatorProductSeo\(\{/);
+  assert.match(source, /<title>\$\{escapeHtml\(seo\.title\)\}<\/title>/);
+  assert.match(
+    source,
+    /<meta name="description" content="\$\{escapeHtml\(seo\.description\)\}">/,
+  );
+});
+
 test("valid Shopify-style signature reaches a protected GET route", async () => {
   const response = await handleStorefrontProxy(
     new Request(signedUrl("/proxy")),

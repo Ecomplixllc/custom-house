@@ -21,6 +21,7 @@ import {
   PUBLIC_STOREFRONT_NAV_ITEMS,
   type PublicStorefrontNavKey,
 } from "./storefront-navigation.ts";
+import { creatorProductSeo } from "./creator-product-seo.ts";
 
 const SAFE_HEADERS = {
   "Cache-Control": "no-store",
@@ -1818,6 +1819,12 @@ function productHtml(input: {
     }>;
   } | null;
 }) {
+  const seo = creatorProductSeo({
+    title: input.title,
+    description: input.description,
+    creatorName: input.creator.displayName,
+    baseProductTitle: input.baseProductTitle,
+  });
   const setup =
     input.creatorSetup ||
     creatorProductSetupFromRecord(
@@ -2034,7 +2041,8 @@ function productHtml(input: {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>${escapeHtml(input.title)}</title>
+        <title>${escapeHtml(seo.title)}</title>
+        <meta name="description" content="${escapeHtml(seo.description)}">
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,600,0,0" rel="stylesheet">

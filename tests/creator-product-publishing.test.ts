@@ -245,6 +245,16 @@ test("publishing verifies shared inventory before database publication and store
   assert.match(publishFlow, /CREATOR_SHARED_INVENTORY_SETUP_FAILED/);
 });
 
+test("publishing explicitly replaces duplicated SEO with creator product metadata", () => {
+  const source = readFileSync(
+    new URL("../app/services/creator-product-publishing.server.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /const seo = creatorProductSeo\(\{/);
+  assert.match(source, /descriptionHtml: input\.product\.description \|\| "",\s+seo,/);
+});
+
 test("new Creator publish automatically creates and verifies native shared inventory", async () => {
   const qaBaseProductId = "gid://shopify/Product/9000";
   const qaBaseVariantId = "gid://shopify/ProductVariant/9001";

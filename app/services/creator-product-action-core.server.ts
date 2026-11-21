@@ -102,6 +102,8 @@ export async function creatorProductActionCore(
           context.customerId!,
           creatorProductId,
           body,
+          undefined,
+          context.client as never,
         ),
       });
     }

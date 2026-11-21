@@ -3135,6 +3135,20 @@ test("published metadata edit preserves status artwork project and public detail
   draft.status = "PUBLISHED";
   draft.pitchprintProjectId = "pp_project_keep";
   draft.pitchprintDesignId = "pp_design_keep";
+  draft.publishedShopifyProductId = "gid://shopify/Product/909";
+  const shopifyUpdates: Array<Record<string, unknown>> = [];
+  const shopifyClient = {
+    async request<T>(query: string, variables?: Record<string, unknown>) {
+      assert.match(query, /SyncPublishedCreatorProductSeo/);
+      shopifyUpdates.push(variables?.product as Record<string, unknown>);
+      return {
+        productUpdate: {
+          product: { id: draft.publishedShopifyProductId },
+          userErrors: [],
+        },
+      } as T;
+    },
+  };
 
   const updated = await updateCreatorProductDetailsForCustomer(
     shop,
@@ -3146,6 +3160,7 @@ test("published metadata edit preserves status artwork project and public detail
       creatorContentTags: ["Streetwear", "Limited Edition"],
     },
     db,
+    shopifyClient,
   );
   const publicProduct = await publicCreatorProductDetail(
     shop,
@@ -3161,6 +3176,18 @@ test("published metadata edit preserves status artwork project and public detail
   assert.deepEqual(updated.creatorContentTags, ["Streetwear", "Limited Edition"]);
   assert.equal(publicProduct.title, "New Public Title");
   assert.equal(publicProduct.description, "New public description.");
+  assert.deepEqual(shopifyUpdates, [
+    {
+      id: "gid://shopify/Product/909",
+      title: "New Public Title",
+      descriptionHtml: "New public description.",
+      seo: {
+        title: "New Public Title by Creator A Designs | Custom House",
+        description:
+          "New public description. Designed by Creator A Designs for Custom House.",
+      },
+    },
+  ]);
 });
 
 test("published material PitchPrint edit returns CreatorProduct to review before public exposure", async () => {
