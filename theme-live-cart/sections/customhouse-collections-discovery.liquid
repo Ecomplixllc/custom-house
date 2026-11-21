@@ -158,7 +158,17 @@
             {% if is_creator_product == false and is_global_product %}
               {% assign rendered_products = rendered_products | plus: 1 %}
               {% assign rendered_product_ids = rendered_product_ids | append: product_key %}
+              {% capture product_collection_keys %}{% for product_collection in product.collections %}|{{ product_collection.handle }}|{% endfor %}{% endcapture %}
               {% capture product_categories %}{% for product_collection in product.collections %}{{ product_collection.handle }}{% unless forloop.last %}||{% endunless %}{% endfor %}{% endcapture %}
+              {% capture configured_category_aliases %}
+                {% for category_block in section.blocks %}
+                  {% assign category_collection = category_block.settings.collection %}
+                  {% assign category_collection_key = category_collection.handle | prepend: '|' | append: '|' %}
+                  {% assign category_alias = default_category_handles[forloop.index0] %}
+                  {% if category_collection != blank and product_collection_keys contains category_collection_key and category_alias != blank %}||{{ category_alias }}{% endif %}
+                {% endfor %}
+              {% endcapture %}
+              {% assign product_categories = product_categories | append: configured_category_aliases %}
               {% capture product_colors %}{% for option in product.options_with_values %}{% assign normalized_option = option.name | downcase %}{% if normalized_option contains 'color' or normalized_option contains 'colour' %}{% for value in option.values %}{{ value }}{% unless forloop.last %}||{% endunless %}{% endfor %}{% endif %}{% endfor %}{% endcapture %}
               <article class="chd-product-card" data-chd-product data-index="{{ rendered_products }}" data-title="{{ product.title | escape }}" data-category="{{ product_categories | strip | escape }}" data-fit="{{ product.metafields.customhouse.fit.value | json | escape }}" data-brand="{{ product.vendor | escape }}" data-color="{{ product_colors | strip | escape }}" data-price="{{ product.price_min }}" data-published="{{ product.published_at | date: '%s' }}" data-production-pricing="{{ product.metafields.customhouse.production_method_pricing.value | json | escape }}">
                 <a class="chd-product-card__media" href="{{ product.url }}" aria-label="View {{ product.title | escape }}">
