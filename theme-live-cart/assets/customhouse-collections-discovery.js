@@ -3,6 +3,7 @@
 
   const clean = (value) => String(value ?? '').trim();
   const normalize = (value) => clean(value).toLocaleLowerCase();
+  const RETIRED_PRODUCTION_METHODS = new Set(['sublimation']);
   const unique = (values) => [...new Set(values.map(clean).filter(Boolean))];
   const split = (value) => unique(clean(value).split('||'));
   const titleCase = (value) => clean(value)
@@ -26,9 +27,17 @@
       : Array.isArray(parsed?.productionMethods)
         ? parsed.productionMethods
         : [];
-    return unique(source.map((method) => {
-      if (typeof method === 'string') return method;
-      return method?.label || method?.id || method?.code || method?.method || '';
+    return unique(source.flatMap((method) => {
+      const identifier = typeof method === 'string'
+        ? method
+        : method?.id || method?.code || method?.method || method?.label || '';
+      const label = typeof method === 'string'
+        ? method
+        : method?.label || identifier;
+      return RETIRED_PRODUCTION_METHODS.has(normalize(identifier)) ||
+        RETIRED_PRODUCTION_METHODS.has(normalize(label))
+        ? []
+        : [label];
     }));
   }
 

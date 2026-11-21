@@ -37,6 +37,8 @@ test("new Collections discovery page uses a dedicated page template and isolated
   assert.match(script, /data-chd-active-filters/);
   assert.match(script, /URLSearchParams/);
   assert.match(script, /textContent/);
+  assert.match(script, /RETIRED_PRODUCTION_METHODS/);
+  assert.match(script, /sublimation/);
   assert.doesNotMatch(script, /localStorage|sessionStorage/);
   assert.doesNotMatch(section, /rating|reviews?|followers?/i);
   assert.doesNotMatch(css, /^\s*\.(?:collection|product-grid|card)(?:\s|\{|\*)/m);

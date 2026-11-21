@@ -173,7 +173,6 @@ test("enabled production methods preserve explicit disabled settings and canonic
   assert.deepEqual(methods, [
     { id: "EMBROIDERY", label: "Embroidery" },
     { id: "DTG", label: "DTG printing" },
-    { id: "SUBLIMATION", label: "Sublimation" },
     { id: "STICKER_PRINTING", label: "Sticker Printing" },
   ]);
 });
@@ -330,7 +329,7 @@ test("canonical resolver supports product enablement, zero price, and dynamic me
 
   assert.deepEqual(
     (await getEnabledProductionMethodsForProduct("shop.test", "gid://shopify/Product/500", database as never)).map((method) => method.id),
-    ["SUBLIMATION", "STICKER_PRINTING", "LASER_ENGRAVING"],
+    ["STICKER_PRINTING", "LASER_ENGRAVING"],
   );
   const sticker = await resolveProductionPricing({
     shop: "shop.test",
@@ -340,14 +339,15 @@ test("canonical resolver supports product enablement, zero price, and dynamic me
   });
   assert.equal(sticker.surchargeMinor, 1500n);
   assert.equal(sticker.feeVariantId, "gid://shopify/ProductVariant/505");
-  const zeroCost = await resolveProductionPricing({
-    shop: "shop.test",
-    productId: "gid://shopify/Product/500",
-    method: "SUBLIMATION",
-    database: database as never,
-  });
-  assert.equal(zeroCost.surchargeMinor, 0n);
-  assert.equal(zeroCost.feeRequired, false);
+  await assert.rejects(
+    () => resolveProductionPricing({
+      shop: "shop.test",
+      productId: "gid://shopify/Product/500",
+      method: "SUBLIMATION",
+      database: database as never,
+    }),
+    (error) => error instanceof DomainError && error.code === "PRODUCTION_METHOD_DISABLED",
+  );
   const tieredFutureMethod = await resolveProductionPricing({
     shop: "shop.test",
     productId: "gid://shopify/Product/500",
@@ -364,8 +364,9 @@ test("canonical resolver supports product enablement, zero price, and dynamic me
   );
   assert.deepEqual(
     bridge?.productionMethods.map((method) => method.id),
-    ["SUBLIMATION", "STICKER_PRINTING", "LASER_ENGRAVING"],
+    ["STICKER_PRINTING", "LASER_ENGRAVING"],
   );
+  assert.equal(bridge?.productionMethodPricing.SUBLIMATION, undefined);
   assert.equal(bridge?.productionMethodPricing.STICKER_PRINTING.surchargeMinor, 1500);
   assert.equal(
     bridge?.productionMethodPricing.LASER_ENGRAVING.pricingTiers?.LARGE.surchargeMinor,
