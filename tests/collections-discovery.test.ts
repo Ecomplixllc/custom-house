@@ -57,6 +57,9 @@ test("Collections discovery renders eligible products from every configured cate
   assert.match(section, /assign category_collection = category_block\.settings\.collection/);
   assert.match(section, /for product in category_collection\.products/);
   assert.match(section, /rendered_product_ids contains product_key/);
+  assert.match(section, /assign category_alias = default_category_handles\[forloop\.index0\]/);
+  assert.match(section, /product_collection_keys contains category_collection_key/);
+  assert.match(section, /append: configured_category_aliases/);
 });
 
 test("global header adds one duplicate-safe Collections discovery link without replacing menu links", () => {
