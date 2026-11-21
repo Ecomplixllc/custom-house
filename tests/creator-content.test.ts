@@ -820,10 +820,10 @@ test("Creator Content is added to theme navigation without duplicating merchant 
   assert.match(desktopHeader, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'mobile_bar'/);
   assert.match(desktopHeader, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'desktop'/);
   assert.match(drawer, /customhouse-creator-content-menu-fallback[\s\S]*variant:\s*'drawer'/);
-  assert.match(customHeader, /customhouse-primary-navigation'[\s\S]*variant:\s*'desktop'/);
-  assert.match(customHeader, /customhouse-primary-navigation'[\s\S]*variant:\s*'mobile'/);
-  assert.match(primaryNavigation, /T-SHIRTS\|HOODIES\|DESIGN SELV\|INSPIRATION\|DESIGN YOUR OWN\|CREATOR CONTENT/);
-  assert.match(primaryNavigation, /\/pages\/collections\|\/apps\/customhouse\/creator-content/);
+  assert.match(customHeader, /customhouse-primary-navigation'[\s\S]*variant:\s*'desktop'[\s\S]*links:\s*section\.settings\.customhouse_primary_menu\.links/);
+  assert.match(customHeader, /customhouse-primary-navigation'[\s\S]*variant:\s*'mobile'[\s\S]*links:\s*section\.settings\.customhouse_primary_menu\.links/);
+  assert.match(primaryNavigation, /for link in navigation_links/);
+  assert.match(primaryNavigation, /linklists\['main-menu'\]\.links/);
   assert.match(primaryNavigation, /variant == 'mobile'/);
   assert.match(primaryNavigation, /request_path contains '\/apps\/customhouse\/creators\/'/);
   assert.match(customHeader, /gap:\s*clamp\(14px, 1\.8vw, 28px\)/);

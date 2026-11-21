@@ -424,7 +424,7 @@
     </a>
 
     <nav class="customhouse-header__nav" aria-label="Main navigation">
-      {% render 'customhouse-primary-navigation', variant: 'desktop', request_path: request.path %}
+      {% render 'customhouse-primary-navigation', variant: 'desktop', request_path: request.path, links: section.settings.customhouse_primary_menu.links %}
     </nav>
 
     <div class="customhouse-header__actions">
@@ -555,7 +555,7 @@
     </div>
 
     <nav class="customhouse-mobile-drawer__nav" aria-label="Mobile navigation">
-      {% render 'customhouse-primary-navigation', variant: 'mobile', request_path: request.path %}
+      {% render 'customhouse-primary-navigation', variant: 'mobile', request_path: request.path, links: section.settings.customhouse_primary_menu.links %}
     </nav>
 
     {% if shop.customer_accounts_enabled %}
@@ -2039,6 +2039,12 @@
     {
       "type": "header",
       "content": "t:content.menu"
+    },
+    {
+      "type": "link_list",
+      "id": "customhouse_primary_menu",
+      "label": "Main navigation menu",
+      "default": "main-menu"
     },
     {
       "type": "select",
