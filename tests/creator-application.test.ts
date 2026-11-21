@@ -81,6 +81,48 @@ test("storefront Creator Application marks social and category fields optional",
   assert.doesNotMatch(script, /!value\.categories\.length/);
   assert.doesNotMatch(script, /nextErrors\.categories/);
 });
+test("storefront Creator Application localizes every screen in English and Swedish", () => {
+  const extensionRoot = "extensions/customhouse-creator-storefront";
+  const english = JSON.parse(
+    readFileSync(`${extensionRoot}/locales/en.default.json`, "utf8"),
+  ).creator_application as Record<string, string>;
+  const swedish = JSON.parse(
+    readFileSync(`${extensionRoot}/locales/sv.json`, "utf8"),
+  ).creator_application as Record<string, string>;
+  const catalog = readFileSync(
+    `${extensionRoot}/snippets/creator-application-translations.liquid`,
+    "utf8",
+  );
+  const script = readFileSync(
+    `${extensionRoot}/assets/creator-application.js`,
+    "utf8",
+  );
+  const blocks = [
+    readFileSync(`${extensionRoot}/blocks/creator-application.liquid`, "utf8"),
+    readFileSync(`${extensionRoot}/blocks/creator-application-guard.liquid`, "utf8"),
+  ];
+
+  assert.deepEqual(Object.keys(swedish).sort(), Object.keys(english).sort());
+  assert.ok(Object.keys(english).length >= 140);
+  assert.equal(swedish.heading_initial, "Kreatörsansökan");
+  assert.equal(swedish.submit_application, "Skicka in ansökan");
+  assert.equal(swedish.under_review, "Ansökan granskas");
+  assert.match(catalog, /data-creator-application-translations/);
+  for (const key of Object.keys(english)) {
+    if (["application", "profile_summary"].includes(key)) continue;
+    assert.match(catalog, new RegExp(`creator_application\\.${key}`));
+  }
+  assert.match(script, /readApplicationTranslations/);
+  assert.match(script, /translatedApplicationText/);
+  assert.match(script, /MutationObserver/);
+  assert.match(script, /Step \{step\} of 3/);
+  for (const block of blocks) {
+    assert.match(block, /render 'creator-application-translations'/);
+    assert.match(block, /creator_application\.heading_initial' \| t/);
+    assert.match(block, /creator_application\.loading_status' \| t/);
+    assert.match(block, /2026-11-21-localization-v1/);
+  }
+});
 test("storefront Creator Application escapes narrow theme containers", () => {
   const styles = readFileSync("extensions/customhouse-creator-storefront/assets/creator-application.css", "utf8");
   assert.match(styles, /\.ch-application\s*\{[^}]*position:\s*relative;[^}]*left:\s*50%;[^}]*width:\s*min\(1520px, calc\(100vw - 2rem\)\);[^}]*max-width:\s*none;[^}]*transform:\s*translateX\(-50%\);/s);

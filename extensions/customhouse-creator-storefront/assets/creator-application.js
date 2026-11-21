@@ -1,5 +1,92 @@
 const STEPS = ["Profile", "Creator Presence", "Review"];
 
+function readApplicationTranslations(root) {
+  const source = root.querySelector("[data-creator-application-translations]");
+  if (!source) return new Map();
+  try {
+    const entries = JSON.parse(source.textContent || "[]");
+    return new Map(
+      Array.isArray(entries)
+        ? entries.filter((entry) => Array.isArray(entry) && entry.length === 2)
+        : [],
+    );
+  } catch (error) {
+    console.error("creator_application_translation_parse_failed", error);
+    return new Map();
+  }
+}
+
+function translatedApplicationText(value, translations) {
+  const source = String(value || "");
+  const trimmed = source.trim();
+  if (!trimmed) return source;
+  let translated = translations.get(trimmed);
+  if (!translated) {
+    const stepMatch = trimmed.match(/^Step (\d+) of 3$/);
+    if (stepMatch) {
+      translated = translations
+        .get("Step {step} of 3")
+        ?.replace("{step}", stepMatch[1]);
+    }
+  }
+  if (!translated) {
+    const referralMatch = trimmed.match(
+      /^Referred by (.+)\. This referral is linked to your account\.$/,
+    );
+    if (referralMatch) {
+      translated = translations
+        .get("Referred by {name}. This referral is linked to your account.")
+        ?.replace("{name}", referralMatch[1]);
+    }
+  }
+  if (!translated && trimmed.includes(", ")) {
+    const parts = trimmed.split(", ");
+    const localizedParts = parts.map((part) => translations.get(part) || part);
+    if (localizedParts.some((part, index) => part !== parts[index])) {
+      translated = localizedParts.join(", ");
+    }
+  }
+  if (!translated || translated === trimmed) return source;
+  const leading = source.match(/^\s*/)?.[0] || "";
+  const trailing = source.match(/\s*$/)?.[0] || "";
+  return `${leading}${translated}${trailing}`;
+}
+
+function applyApplicationTranslations(root) {
+  const translations = root.__customHouseCreatorApplicationTranslations;
+  if (!(translations instanceof Map) || translations.size === 0) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    if (!node.parentElement?.closest("script, style, .material-symbols-outlined")) {
+      const translated = translatedApplicationText(node.nodeValue, translations);
+      if (translated !== node.nodeValue) node.nodeValue = translated;
+    }
+    node = walker.nextNode();
+  }
+  root.querySelectorAll("[aria-label], [title], [placeholder]").forEach((element) => {
+    ["aria-label", "title", "placeholder"].forEach((attribute) => {
+      const value = element.getAttribute(attribute);
+      if (!value) return;
+      const translated = translatedApplicationText(value, translations);
+      if (translated !== value) element.setAttribute(attribute, translated);
+    });
+  });
+}
+
+function initializeApplicationTranslations(root) {
+  root.__customHouseCreatorApplicationTranslations = readApplicationTranslations(root);
+  applyApplicationTranslations(root);
+  if (typeof MutationObserver === "undefined") return;
+  const observer = new MutationObserver(() => applyApplicationTranslations(root));
+  observer.observe(root, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+  root.__customHouseCreatorApplicationTranslationObserver = observer;
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -12,12 +99,25 @@ function icon(name) {
   return `<span class="material-symbols-outlined notranslate" translate="no" aria-hidden="true">${name}</span>`;
 }
 
+function creatorApplicationHeading(root, rejected) {
+  const translations = root.__customHouseCreatorApplicationTranslations;
+  const source = rejected
+    ? "Update Your {creator} Application"
+    : "Become a {creator}";
+  const template = translations?.get(source) || source;
+  const creator = translations?.get("Creator") || "Creator";
+  return escapeHtml(template).replace(
+    "{creator}",
+    `<span>${escapeHtml(creator)}</span>`,
+  );
+}
+
 function renderHeader(root, state = {}, step = 0) {
   const header = root.querySelector("[data-application-header]");
   if (!header) return;
   const rejected = state.state === "REJECTED";
   header.innerHTML = `
-    <h1>${rejected ? "Update Your " : "Become a "}<span>Creator</span>${rejected ? " Application" : ""}</h1>
+    <h1>${creatorApplicationHeading(root, rejected)}</h1>
     <p>${rejected ? "Your application was reviewed and needs a few changes before we can approve it." : "Share your creativity with the world. Build your collection. Earn with every sale."}</p>
     <div class="ch-application__rail" aria-label="Application progress">
       ${STEPS.map((label, index) => `
@@ -28,6 +128,7 @@ function renderHeader(root, state = {}, step = 0) {
       `).join("")}
     </div>
   `;
+  applyApplicationTranslations(root);
 }
 
 function hideLegacyPageContent(root) {
@@ -74,6 +175,7 @@ function renderSidebar(root, state = {}) {
         <a href="/pages/contact">Contact Support ${icon("arrow_forward")}</a>
       </section>
     `;
+    applyApplicationTranslations(root);
     return;
   }
   side.innerHTML = `
@@ -98,6 +200,7 @@ function renderSidebar(root, state = {}) {
     </section>
     <section class="ch-application__note">${icon("lightbulb")} Our team typically reviews applications within 2-3 business days.</section>
   `;
+  applyApplicationTranslations(root);
 }
 
 function renderStatus(root, title, text, actionLabel, actionHref, reason = "") {
@@ -113,6 +216,7 @@ function renderStatus(root, title, text, actionLabel, actionHref, reason = "") {
       ${actionHref ? `<a class="ch-application__button" href="${escapeHtml(actionHref)}">${escapeHtml(actionLabel)} ${icon("arrow_forward")}</a>` : ""}
     </div>
   `;
+  applyApplicationTranslations(root);
 }
 
 function fieldError(name, errors) {
@@ -368,6 +472,7 @@ function renderForm(root, state, step = 0, errors = {}) {
       <p class="ch-application__message" data-message></p>
     </form>
   `;
+  applyApplicationTranslations(root);
   const form = screen.querySelector("form");
   root.querySelectorAll("[data-step-jump]").forEach((button) => {
     button.addEventListener("click", () => renderForm(root, { ...state, application: { ...application, ...formValues(form) } }, Number(button.dataset.stepJump), errors));
@@ -484,5 +589,6 @@ async function boot(root) {
 document.querySelectorAll("[data-customhouse-creator-application]").forEach((root) => {
   if (root.dataset.customhouseInitialized === "true") return;
   root.dataset.customhouseInitialized = "true";
+  initializeApplicationTranslations(root);
   boot(root);
 });

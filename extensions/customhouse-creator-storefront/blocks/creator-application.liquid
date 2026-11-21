@@ -1,6 +1,7 @@
 {% assign dashboard_url = block.settings.dashboard_url | default: '/pages/creator-dashboard' %}
 {% assign account_return = request.path | url_encode %}
 {% assign login_url = '/customer_authentication/login?return_to=' | append: account_return %}
+{% assign creator_application_asset_release = '2026-11-21-localization-v1' %}
 
 {{ 'creator-application.css' | asset_url | stylesheet_tag }}
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,500,0,0">
@@ -15,34 +16,36 @@
 >
   <div class="ch-application__shell">
     <header class="ch-application__header" data-application-header>
-      <h1><span>Creator</span> Application</h1>
-      <p>Loading your creator workspace...</p>
+      <h1>{{ 'creator_application.heading_initial' | t }}</h1>
+      <p>{{ 'creator_application.loading_workspace' | t }}</p>
     </header>
 
     <div class="ch-application__grid">
       <div class="ch-application__card" data-application-screen>
         <div class="ch-application__loading">
           <span></span>
-          <strong>Loading application status...</strong>
-          <p>Preparing your Custom House creator application.</p>
+          <strong>{{ 'creator_application.loading_status' | t }}</strong>
+          <p>{{ 'creator_application.preparing_application' | t }}</p>
         </div>
       </div>
 
-      <aside class="ch-application__side" data-application-side aria-label="Creator benefits">
+      <aside class="ch-application__side" data-application-side aria-label="{{ 'creator_application.creator_benefits' | t | escape }}">
         <section class="ch-application__side-card">
-          <h2>Creator workspace</h2>
+          <h2>{{ 'creator_application.creator_workspace' | t }}</h2>
           <ul>
-            <li>Approved creators receive a private dashboard.</li>
-            <li>Your designs stay connected to your own creator collection.</li>
-            <li>Sales, commission, orders, and payouts remain tracked in Custom House.</li>
+            <li>{{ 'creator_application.benefit_private_dashboard' | t }}</li>
+            <li>{{ 'creator_application.benefit_collection' | t }}</li>
+            <li>{{ 'creator_application.benefit_tracking' | t }}</li>
           </ul>
         </section>
       </aside>
     </div>
   </div>
+  {% render 'creator-application-translations' %}
 </section>
 
-<script type="module" src="{{ 'creator-application.js' | asset_url }}"></script>
+{% assign creator_application_script_url = 'creator-application.js' | asset_url | append: '?v=' | append: creator_application_asset_release %}
+<script type="module" src="{{ creator_application_script_url }}"></script>
 
 {% schema %}
 {
