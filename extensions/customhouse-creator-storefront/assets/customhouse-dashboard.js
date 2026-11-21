@@ -3315,24 +3315,28 @@ async function flushCreatorContentReview(root) {
 }
 
 async function loadCreatorContentTagSuggestions(root) {
-  if (root.__customHouseCreatorContentSuggestionsLoaded) return;
-  root.__customHouseCreatorContentSuggestionsLoaded = true;
-  try {
-    const response = await fetch("/apps/customhouse/creator-content?format=json", {
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-    });
-    const body = await response.json().catch(() => null);
-    const suggestions = Array.isArray(body?.data?.categories) ? body.data.categories : [];
-    const datalist = dashboardModalQuery(root, "[data-dashboard-creator-content-tag-suggestions]");
-    suggestions.slice(0, 50).forEach((tag) => {
+  if (!Array.isArray(root.__customHouseCreatorContentSuggestions)) {
+    try {
+      const response = await fetch("/apps/customhouse/creator-content?format=json", {
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+      const body = await response.json().catch(() => null);
+      root.__customHouseCreatorContentSuggestions = Array.isArray(body?.data?.categories)
+        ? body.data.categories.slice(0, 50)
+        : [];
+    } catch {
+      root.__customHouseCreatorContentSuggestions = [];
+    }
+  }
+  dashboardModalQueryAll(root, "[data-dashboard-creator-content-tag-suggestions]").forEach((datalist) => {
+    datalist.replaceChildren();
+    root.__customHouseCreatorContentSuggestions.forEach((tag) => {
       const option = document.createElement("option");
       option.value = String(tag);
-      datalist?.append(option);
+      datalist.append(option);
     });
-  } catch {
-    // Suggestions are optional; creators may always enter a new valid tag.
-  }
+  });
 }
 
 function closeDesignReviewModal(root) {
@@ -3456,7 +3460,87 @@ function creatorProductDetailsPayload(root) {
   return {
     title: modal?.querySelector("[data-dashboard-details-title]")?.value || "",
     description: modal?.querySelector("[data-dashboard-details-description]")?.value || "",
+    creatorContentTags: Array.isArray(root.__customHouseDetailsTags)
+      ? [...root.__customHouseDetailsTags]
+      : [],
   };
+}
+
+function creatorContentTagsMatch(left, right) {
+  const normalize = (values) => (Array.isArray(values) ? values : [])
+    .map((value) => normalizeCreatorContentTagInput(value).toLocaleLowerCase());
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+}
+
+function setDesignDetailsTagStatus(root, message, isError = false) {
+  const status = dashboardModalQuery(root, "[data-dashboard-details-tag-status]");
+  if (!status) return;
+  status.textContent = message || "";
+  status.dataset.error = isError ? "true" : "false";
+}
+
+function renderDesignDetailsTags(root) {
+  const modal = dashboardModalQuery(root, "[data-dashboard-details-modal]");
+  const product = root.__customHouseDetailsProduct;
+  if (!modal || !product) return;
+  const tags = Array.isArray(root.__customHouseDetailsTags) ? root.__customHouseDetailsTags : [];
+  const list = modal.querySelector("[data-dashboard-details-tags]");
+  const input = modal.querySelector("[data-dashboard-details-tag-input]");
+  const add = modal.querySelector("[data-dashboard-details-tag-add]");
+  const counter = modal.querySelector("[data-dashboard-details-tag-count]");
+  const locked = String(product.status || "").toUpperCase() === "PENDING";
+  if (list) {
+    list.replaceChildren();
+    tags.forEach((tag, index) => {
+      const chip = document.createElement("span");
+      chip.className = "ch-creator-content-editor__tag";
+      chip.append(document.createTextNode(tag));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.disabled = locked;
+      remove.setAttribute("aria-label", `Remove ${tag}`);
+      remove.textContent = "×";
+      remove.addEventListener("click", () => {
+        root.__customHouseDetailsTags.splice(index, 1);
+        setDesignDetailsTagStatus(root, "");
+        renderDesignDetailsTags(root);
+        setDetailsSaveState(root);
+      });
+      chip.append(remove);
+      list.append(chip);
+    });
+  }
+  if (counter) counter.textContent = `${tags.length} / 5 tags`;
+  if (input) input.disabled = locked || tags.length >= 5;
+  if (add) add.disabled = locked || tags.length >= 5;
+}
+
+function addDesignDetailsTag(root) {
+  const input = dashboardModalQuery(root, "[data-dashboard-details-tag-input]");
+  const tag = normalizeCreatorContentTagInput(input?.value);
+  if (!tag) {
+    setDesignDetailsTagStatus(root, "Enter a tag first.", true);
+    return;
+  }
+  if ([...tag].length > 30 || /[<>]/u.test(tag)) {
+    setDesignDetailsTagStatus(root, "Use a safe tag with 30 characters or fewer.", true);
+    return;
+  }
+  const tags = Array.isArray(root.__customHouseDetailsTags) ? root.__customHouseDetailsTags : [];
+  if (tags.length >= 5) {
+    setDesignDetailsTagStatus(root, "You can add up to 5 tags.", true);
+    return;
+  }
+  if (tags.some((value) => value.toLocaleLowerCase() === tag.toLocaleLowerCase())) {
+    setDesignDetailsTagStatus(root, "That tag is already added.", true);
+    return;
+  }
+  tags.push(tag);
+  root.__customHouseDetailsTags = tags;
+  if (input) input.value = "";
+  setDesignDetailsTagStatus(root, "");
+  renderDesignDetailsTags(root);
+  setDetailsSaveState(root);
 }
 
 function setDetailsSaveState(root) {
@@ -3471,7 +3555,8 @@ function setDetailsSaveState(root) {
   const description = payload.description.trim();
   const changed =
     title !== String(product.title || "").trim() ||
-    description !== String(product.description || "").trim();
+    description !== String(product.description || "").trim() ||
+    !creatorContentTagsMatch(payload.creatorContentTags, product.creatorContentTags);
   const valid = title.length >= 2 && title.length <= 120 && description.length <= 1000;
   if (count) count.textContent = String(description.length);
   if (titleError) {
@@ -3489,7 +3574,8 @@ function closeDesignDetailsModal(root, force = false) {
     const payload = creatorProductDetailsPayload(root);
     const changed =
       payload.title.trim() !== String(product.title || "").trim() ||
-      payload.description.trim() !== String(product.description || "").trim();
+      payload.description.trim() !== String(product.description || "").trim() ||
+      !creatorContentTagsMatch(payload.creatorContentTags, product.creatorContentTags);
     if (changed) {
       const discard = modal.querySelector("[data-dashboard-details-discard]");
       if (discard) {
@@ -3503,6 +3589,7 @@ function closeDesignDetailsModal(root, force = false) {
   modal.hidden = true;
   unlockReviewModalScroll(root);
   root.__customHouseDetailsProduct = null;
+  root.__customHouseDetailsTags = null;
   root.__customHouseDetailsReturnFocus?.focus?.();
   root.__customHouseDetailsReturnFocus = null;
 }
@@ -3519,6 +3606,9 @@ function openDesignDetailsModal(root, product, sourceButton = null) {
   const lock = modal.querySelector("[data-dashboard-details-lock]");
   const error = modal.querySelector("[data-dashboard-details-error]");
   const pending = product.status === "PENDING";
+  root.__customHouseDetailsTags = Array.isArray(product.creatorContentTags)
+    ? [...product.creatorContentTags].slice(0, 5)
+    : [];
   if (title) {
     title.value = product.title || product.baseProductTitle || "";
     title.disabled = pending;
@@ -3536,6 +3626,9 @@ function openDesignDetailsModal(root, product, sourceButton = null) {
   }
   const discard = modal.querySelector("[data-dashboard-details-discard]");
   if (discard) discard.hidden = true;
+  setDesignDetailsTagStatus(root, "");
+  renderDesignDetailsTags(root);
+  void loadCreatorContentTagSuggestions(root);
   modal.hidden = false;
   lockReviewModalScroll(root);
   setDetailsSaveState(root);
@@ -3772,6 +3865,14 @@ function bindMyDesignsUx(root) {
   });
   dashboardModalQuery(root, "[data-dashboard-details-title]")?.addEventListener("input", () => setDetailsSaveState(root));
   dashboardModalQuery(root, "[data-dashboard-details-description]")?.addEventListener("input", () => setDetailsSaveState(root));
+  dashboardModalQuery(root, "[data-dashboard-details-tag-add]")?.addEventListener("click", () => {
+    addDesignDetailsTag(root);
+  });
+  dashboardModalQuery(root, "[data-dashboard-details-tag-input]")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    addDesignDetailsTag(root);
+  });
   dashboardModalQueryAll(root, "[data-dashboard-details-close]").forEach((button) => {
     button.addEventListener("click", () => closeDesignDetailsModal(root));
   });

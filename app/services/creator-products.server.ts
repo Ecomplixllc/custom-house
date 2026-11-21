@@ -203,6 +203,7 @@ export type PitchPrintProjectFetcher = (
 export type UpdateCreatorProductDetailsInput = {
   title?: unknown;
   description?: unknown;
+  creatorContentTags?: unknown;
 };
 
 export type CreatorContentMetadataInput = {
@@ -2561,11 +2562,15 @@ export async function updateCreatorProductDetailsForCustomer(
   }
   const title = cleanCreatorProductTitle(input.title);
   const description = cleanCreatorProductDescription(input.description);
+  const creatorContentTags = input.creatorContentTags === undefined
+    ? existing.creatorContentTags ?? []
+    : normalizeCreatorContentTags(input.creatorContentTags);
   const updated = await database.creatorProduct.update({
     where: { id: existing.id },
     data: {
       title,
       description,
+      creatorContentTags,
       status: existing.status,
       pitchprintProjectId: existing.pitchprintProjectId,
       pitchprintDesignId: existing.pitchprintDesignId,
@@ -2584,11 +2589,13 @@ export async function updateCreatorProductDetailsForCustomer(
       beforeJson: safeJson({
         title: existing.title,
         description: existing.description,
+        creatorContentTags: existing.creatorContentTags ?? [],
         status: existing.status,
       }),
       afterJson: safeJson({
         title: updated.title,
         description: updated.description,
+        creatorContentTags: updated.creatorContentTags ?? [],
         status: updated.status,
       }),
     },
