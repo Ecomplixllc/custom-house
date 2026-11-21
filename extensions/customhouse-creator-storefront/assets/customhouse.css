@@ -1810,12 +1810,14 @@
   }
 
   [data-customhouse-dashboard]:has([data-dashboard-tab-panel="my-products"].is-active) .customhouse-dashboard-topbar-brand,
-  [data-customhouse-dashboard]:has([data-dashboard-tab-panel="my-products"].is-active) .customhouse-dashboard-topbar-brand > span,
-  [data-customhouse-dashboard]:has([data-dashboard-tab-panel="my-products"].is-active) .customhouse-dashboard-topbar-brand strong,
   [data-customhouse-dashboard]:has([data-dashboard-tab-panel="my-products"].is-active) .customhouse-dashboard-topbar-profile strong,
   [data-customhouse-dashboard]:has([data-dashboard-tab-panel="my-products"].is-active) .customhouse-notification-dot,
   [data-customhouse-dashboard]:has([data-dashboard-tab-panel="my-products"].is-active) .customhouse-dashboard-menu {
     color: #fff !important;
+  }
+
+  [data-customhouse-dashboard]:has([data-dashboard-tab-panel="my-products"].is-active) .customhouse-dashboard-topbar-brand-image {
+    filter: none !important;
   }
 
   [data-customhouse-dashboard]:has([data-dashboard-tab-panel="my-products"].is-active) .customhouse-dashboard-menu {
@@ -3307,7 +3309,6 @@
 .customhouse-dashboard-brand {
   display: flex;
   align-items: center;
-  gap: .5rem;
   min-height: 44px;
   padding: 0 .45rem 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, .08);
@@ -3315,26 +3316,12 @@
   text-decoration: none;
 }
 
-.customhouse-dashboard-brand > .customhouse-dashboard-brand-mark {
+.customhouse-dashboard-brand-image {
   display: block;
-  width: 44px;
-  height: 17px;
-  flex: 0 0 44px;
-  color: #fff;
-}
-
-.customhouse-dashboard-brand-mark svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  fill: currentColor;
-}
-
-.customhouse-dashboard-brand strong {
-  font-family: Impact, Haettenschweiler, "Arial Narrow Bold", "Arial Narrow", sans-serif;
-  font-size: 1rem;
-  font-weight: 950;
-  letter-spacing: 0;
+  width: min(100%, 190px);
+  height: auto;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .customhouse-sidebar-profile {
@@ -4317,10 +4304,6 @@
 @media (max-width: 560px) {
   .customhouse-dashboard-sidebar {
     padding: .85rem;
-  }
-
-  .customhouse-dashboard-brand strong {
-    font-size: .92rem;
   }
 
   .customhouse-sidebar-profile {
@@ -8979,25 +8962,15 @@ body:has([data-customhouse-dashboard]) {
     display: inline-flex;
     min-width: 0;
     align-items: center;
-    gap: 7px;
     color: #07122c;
     text-decoration: none;
   }
 
-  .customhouse-dashboard-topbar-brand > .customhouse-dashboard-brand-mark {
+  .customhouse-dashboard-topbar-brand-image {
     display: block;
-    width: 34px;
-    height: 13px;
-    flex: 0 0 34px;
-    color: #07122c;
-  }
-
-  .customhouse-dashboard-topbar-brand strong {
-    color: #07122c;
-    font-family: Impact, Haettenschweiler, "Arial Narrow Bold", "Arial Narrow", sans-serif;
-    font-size: .75rem;
-    font-weight: 950;
-    white-space: nowrap;
+    width: clamp(132px, 20vw, 166px);
+    height: auto;
+    filter: brightness(0) saturate(100%) invert(8%) sepia(28%) saturate(1620%) hue-rotate(185deg) brightness(91%) contrast(102%);
   }
 
   [data-customhouse-dashboard] .customhouse-dashboard-hero {

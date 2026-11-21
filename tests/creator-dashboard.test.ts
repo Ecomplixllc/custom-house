@@ -235,19 +235,18 @@ test("creator dashboard matches the mobile and iPad responsive shell", () => {
   );
 });
 
-test("creator dashboard uses the canonical Custom House logo mark", () => {
+test("creator dashboard uses the merchant-provided Custom House logo", () => {
+  const logoUrl = "https://cdn.shopify.com/s/files/1/1058/3438/1657/files/Screenshot_43-removebg-preview.png?v=1783406189";
   assert.equal(
-    (block.match(/M0 0h43l25 27-25 27H0l24-27L0 0Z/g) || []).length,
+    block.split(logoUrl).length - 1,
     2,
   );
-  assert.equal(
-    (block.match(/M140 0H97L72 27l25 27h43l-24-27 24-27Z/g) || []).length,
-    2,
-  );
-  assert.doesNotMatch(block, /<span aria-hidden="true">X<\/span>/);
-  assert.match(styles, /\.customhouse-dashboard-brand-mark svg\s*\{[^}]*fill: currentColor;/s);
-  assert.match(styles, /\.customhouse-dashboard-brand > \.customhouse-dashboard-brand-mark/);
-  assert.match(styles, /\.customhouse-dashboard-topbar-brand > \.customhouse-dashboard-brand-mark/);
+  assert.match(block, /class="customhouse-dashboard-brand-image"[\s\S]*alt="Custom House"[\s\S]*width="522"[\s\S]*height="99"/);
+  assert.match(block, /class="customhouse-dashboard-brand-image customhouse-dashboard-topbar-brand-image"/);
+  assert.doesNotMatch(block, /<span aria-hidden="true">X<\/span>|<svg viewBox="0 0 140 54"/);
+  assert.match(styles, /\.customhouse-dashboard-brand-image\s*\{[^}]*width: min\(100%, 190px\);[^}]*height: auto;/s);
+  assert.match(styles, /\.customhouse-dashboard-topbar-brand-image\s*\{[^}]*width: clamp\(132px, 20vw, 166px\);[^}]*filter:/s);
+  assert.match(styles, /my-products[\s\S]*\.customhouse-dashboard-topbar-brand-image\s*\{[^}]*filter: none !important;/s);
 });
 
 test("missing creator becomes not-applied state", () => {
@@ -1631,7 +1630,7 @@ test("missing printing method blocks draft and PitchPrint launch on click", () =
 test("Creator Dashboard assets use a release key so browsers cannot reuse stale disabled-button files", () => {
   assert.match(
     block,
-    /assign creator_dashboard_asset_release = '2026-11-21-dashboard-logo-v1'/,
+    /assign creator_dashboard_asset_release = '2026-11-21-provided-logo-v2'/,
   );
   assert.match(
     block,
