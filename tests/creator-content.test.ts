@@ -912,6 +912,10 @@ test("Creator Content uses branded active filters and checkbox states", async ()
 
   assert.match(
     markup,
+    /\.customhouse-creator-content__active-filters\{[^}]*display:flex[^}]*flex-wrap:wrap/,
+  );
+  assert.match(
+    markup,
     /\.customhouse-creator-content__active-filters button\{[^}]*display:inline-flex[^}]*min-height:36px[^}]*max-width:100%[^}]*border-radius:999px[^}]*background:linear-gradient\([^}]*var\(--cc-purple\)[^}]*white-space:normal[^}]*overflow-wrap:anywhere/,
   );
   assert.match(
@@ -930,7 +934,10 @@ test("Creator Content uses branded active filters and checkbox states", async ()
     markup,
     /\.customhouse-creator-content__filter-options>label,\.customhouse-creator-content__filter-option-list>label\{[^}]*min-height:36px/,
   );
-  assert.match(markup, /\.customhouse-creator-content__filter-group input\[type=checkbox\]\{[^}]*appearance:none/);
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__filter-group input\[type=checkbox\]\{[^}]*appearance:none[^}]*border:1px solid #747682/,
+  );
   assert.match(
     markup,
     /\.customhouse-creator-content__filter-group input\[type=checkbox\]:checked\{[^}]*border-color:var\(--cc-lime\)[^}]*background:var\(--cc-purple\)/,
@@ -951,7 +958,10 @@ test("Creator Content uses branded active filters and checkbox states", async ()
     markup,
     /\.customhouse-creator-content__filter-group input\[type=checkbox\]:disabled\{[^}]*opacity:\.45/,
   );
-  assert.match(markup, /@media\(prefers-reduced-motion:reduce\)\{[^}]*transition:none/);
+  assert.match(
+    markup,
+    /@media\(prefers-reduced-motion:reduce\)\{\.customhouse-creator-content__active-filters button,\.customhouse-creator-content__filter-options>label,\.customhouse-creator-content__filter-option-list>label,\.customhouse-creator-content__filter-group input\[type=checkbox\]\{transition:none\}\}/,
+  );
 });
 
 test("Creator Content keeps growing filter groups searchable and paginated", async () => {
