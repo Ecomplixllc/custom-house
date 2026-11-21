@@ -9508,6 +9508,7 @@
 #container #ch-order-footer .ch-continue-cart:disabled { opacity: .48; cursor: not-allowed; }
 #container #ch-order-footer .ch-order-hint { margin: 10px 0 0 !important; color: #606573 !important; font-size: 11px !important; line-height: 1.5; }
 #container #ch-order-footer .ch-order-error.ch-show, #container #ch-order-footer #ch-example-text-error.ch-show { margin: 0 0 8px; }
+#container #ch-required-action { display: none; }
 #container[data-ch-flow-mode="CREATOR_DESIGN"] #ch-review-color::before { display: none; }
 #container[data-ch-flow-mode="CREATOR_DESIGN"] #ch-review-color.ch-known-color::before { display: block; flex-shrink: 0; background: var(--ch-fixed-color) !important; width: 20px; height: 20px; }
 #container[data-ch-flow-mode="CREATOR_DESIGN"] #ch-production-section,
@@ -9618,6 +9619,54 @@
   #container #ch-order-footer { padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); }
   #container #ch-order-footer .ch-order-hint { font-size: 10px !important; }
   #container.ch-flow-public #ch-order-footer .ch-order-hint { display: none; }
+  #container.ch-flow-public #ch-legal-section.ch-required-incomplete {
+    border-color: #8A2CFF !important;
+    background: #F7F0FF;
+    box-shadow: 0 0 0 2px rgba(138, 44, 255, .16), 0 8px 22px rgba(80, 29, 140, .10);
+  }
+  #container.ch-flow-public #ch-legal-section.ch-required-incomplete .ch-order-label,
+  #container.ch-flow-public #ch-legal-section.ch-required-incomplete .ch-accordion-summary {
+    color: #6F22D8 !important;
+    font-weight: 900 !important;
+  }
+  #container.ch-flow-public #ch-legal-section.ch-required-complete {
+    border-color: #5B8F00 !important;
+    background: #F7FCEB;
+  }
+  #container.ch-flow-public #ch-required-action.ch-show {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin: 0 0 10px;
+    padding: 11px 12px;
+    border: 1px solid #8A2CFF;
+    border-radius: 8px;
+    background: #F7F0FF;
+    color: #29143F;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 5px 16px rgba(80, 29, 140, .12);
+  }
+  #container.ch-flow-public #ch-required-action .ch-required-action-icon {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    border-radius: 50%;
+    background: #8A2CFF;
+    color: #FFFFFF;
+    font-size: 16px;
+    font-weight: 900;
+  }
+  #container.ch-flow-public #ch-required-action .ch-required-action-copy { min-width: 0; }
+  #container.ch-flow-public #ch-required-action strong,
+  #container.ch-flow-public #ch-required-action span { display: block; }
+  #container.ch-flow-public #ch-required-action strong { color: #4C1680; font-size: 11px; line-height: 1.3; }
+  #container.ch-flow-public #ch-required-action .ch-required-action-detail { margin-top: 2px; color: #5F4C70; font-size: 10px; line-height: 1.35; }
+  #container.ch-flow-public #ch-required-action .ch-required-action-arrow { color: #6F22D8; font-size: 18px; font-weight: 900; }
+  #container.ch-flow-public #ch-required-action:focus-visible { outline: 3px solid #A6FF00; outline-offset: 2px; }
   #container.ch-flow-public [data-module="preview"] .ch-order-section { padding: 0 !important; margin: 0 0 8px !important; border: 1px solid #e0e3eb !important; border-radius: 6px; }
   #container.ch-flow-public .ch-accordion-trigger { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .8fr) 14px; gap: 8px; min-height: 54px; margin: 0; padding: 11px 12px; cursor: pointer; }
   #container.ch-flow-public .ch-accordion-trigger .ch-order-label { font-size: 11px !important; text-transform: none; }
@@ -9937,6 +9986,42 @@
       var node = document.getElementById(id);
       if (node) footer.appendChild(node);
     });
+    var continueButton = document.getElementById('ch-continue-cart');
+    var action = document.createElement('button');
+    action.type = 'button';
+    action.id = 'ch-required-action';
+    action.className = 'ch-required-action';
+    var actionIcon = document.createElement('span');
+    actionIcon.className = 'ch-required-action-icon';
+    actionIcon.setAttribute('aria-hidden', 'true');
+    actionIcon.textContent = '!';
+    var actionCopyWrap = document.createElement('span');
+    actionCopyWrap.className = 'ch-required-action-copy';
+    var actionTitle = document.createElement('strong');
+    actionTitle.textContent = 'Required before purchase';
+    var actionCopy = document.createElement('span');
+    actionCopy.className = 'ch-required-action-detail';
+    actionCopy.textContent = 'Complete both confirmations to continue';
+    var actionArrow = document.createElement('span');
+    actionArrow.className = 'ch-required-action-arrow';
+    actionArrow.setAttribute('aria-hidden', 'true');
+    actionArrow.textContent = '›';
+    actionCopyWrap.appendChild(actionTitle);
+    actionCopyWrap.appendChild(actionCopy);
+    action.appendChild(actionIcon);
+    action.appendChild(actionCopyWrap);
+    action.appendChild(actionArrow);
+    footer.insertBefore(action, continueButton);
+    action.addEventListener('click', function () {
+      var legalSection = document.getElementById('ch-legal-section');
+      if (!legalSection) return;
+      legalSection.__chExpanded = true;
+      syncAccordions();
+      var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      legalSection.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' });
+      var firstConfirmation = legalSection.querySelector('input[type="checkbox"]:not(:checked)');
+      if (firstConfirmation) setTimeout(function () { firstConfirmation.focus(); }, reducedMotion ? 0 : 220);
+    });
     scroll.querySelectorAll('#ch-order-content > .ch-order-section').forEach(function (section, index) {
       var label = section.querySelector('.ch-order-label');
       if (!label) return;
@@ -9980,6 +10065,8 @@
       'ch-size-section': 'ch-review-sizes',
       'ch-review-section': 'ch-order-total-price'
     };
+    var requiredAction = document.getElementById('ch-required-action');
+    var requiredRemaining = 0;
     container.querySelectorAll('#ch-order-content > .ch-order-section').forEach(function (section) {
       var trigger = section.querySelector('.ch-accordion-trigger');
       var body = section.querySelector('.ch-accordion-body');
@@ -9989,7 +10076,18 @@
       if (section.id === 'ch-legal-section') {
         var copyright = document.getElementById('ch-copyright-confirm');
         var nonReturn = document.getElementById('ch-nonreturn-confirm');
-        summary = (Number(!!(copyright && copyright.checked)) + Number(!!(nonReturn && nonReturn.checked))) + ' of 2 complete';
+        var completeCount = Number(!!(copyright && copyright.checked)) + Number(!!(nonReturn && nonReturn.checked));
+        var remaining = Math.max(0, 2 - completeCount);
+        requiredRemaining = remaining;
+        summary = remaining
+          ? 'Action required · ' + remaining + ' remaining'
+          : 'Complete';
+        section.classList.toggle('ch-required-incomplete', mobilePublic && remaining > 0);
+        section.classList.toggle('ch-required-complete', mobilePublic && remaining === 0);
+        if (mobilePublic && remaining > 0 && !section.__chRequiredAutoOpened) {
+          section.__chExpanded = true;
+          section.__chRequiredAutoOpened = true;
+        }
       }
       if (!summary || summary === '\u2014') summary = 'Choose';
       text(trigger.querySelector('.ch-accordion-summary'), summary);
@@ -9999,6 +10097,12 @@
       if (trigger.disabled === mobilePublic) trigger.disabled = !mobilePublic;
       if (trigger.getAttribute('aria-expanded') !== String(expanded)) trigger.setAttribute('aria-expanded', String(expanded));
     });
+    if (requiredAction) {
+      requiredAction.classList.toggle('ch-show', mobilePublic && requiredRemaining > 0);
+      requiredAction.setAttribute('aria-label', requiredRemaining
+        ? 'Required before purchase. ' + requiredRemaining + ' confirmations remaining. Open required confirmations.'
+        : 'Required confirmations complete.');
+    }
   }
 
   function stopMobileUpload() {
