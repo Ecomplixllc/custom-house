@@ -116,8 +116,31 @@
         <div class="chd-active-filters" data-chd-active-filters aria-live="polite"></div>
 
         <div id="chd-product-grid-{{ section.id }}" class="chd-product-grid" role="tabpanel" aria-labelledby="chd-category-tab-{{ section.id }}-t-shirts" data-chd-product-grid>
-          {% assign rendered_products = 0 %}
-          {% for product in source_collection.products limit: product_limit %}
+          {% liquid
+            assign rendered_products = 0
+            assign rendered_product_ids = '|'
+            assign has_category_collections = false
+            capture category_collection_handles
+              for category_block in section.blocks
+                assign category_collection = category_block.settings.collection
+                if category_collection != blank
+                  assign has_category_collections = true
+                  echo category_collection.handle
+                  echo '||'
+                endif
+              endfor
+            endcapture
+            unless has_category_collections
+              assign category_collection_handles = source_collection.handle
+            endunless
+            assign category_collection_handles = category_collection_handles | strip | split: '||'
+          %}
+          {% for category_collection_handle in category_collection_handles %}
+            {% assign category_collection = collections[category_collection_handle] %}
+            {% for product in category_collection.products limit: product_limit %}
+              {% assign product_key = product.id | prepend: '|' | append: '|' %}
+              {% unless rendered_product_ids contains product_key %}
+                {% if rendered_products < product_limit %}
             {% liquid
               assign product_origin = product.metafields.customhouse.product_origin.value | downcase
               assign design_mode = product.metafields.customhouse.design_mode.value | downcase
@@ -134,6 +157,7 @@
             %}
             {% if is_creator_product == false and is_global_product %}
               {% assign rendered_products = rendered_products | plus: 1 %}
+              {% assign rendered_product_ids = rendered_product_ids | append: product_key %}
               {% capture product_categories %}{% for product_collection in product.collections %}{{ product_collection.handle }}{% unless forloop.last %}||{% endunless %}{% endfor %}{% endcapture %}
               {% capture product_colors %}{% for option in product.options_with_values %}{% assign normalized_option = option.name | downcase %}{% if normalized_option contains 'color' or normalized_option contains 'colour' %}{% for value in option.values %}{{ value }}{% unless forloop.last %}||{% endunless %}{% endfor %}{% endif %}{% endfor %}{% endcapture %}
               <article class="chd-product-card" data-chd-product data-index="{{ rendered_products }}" data-title="{{ product.title | escape }}" data-category="{{ product_categories | strip | escape }}" data-fit="{{ product.metafields.customhouse.fit.value | json | escape }}" data-brand="{{ product.vendor | escape }}" data-color="{{ product_colors | strip | escape }}" data-price="{{ product.price_min }}" data-published="{{ product.published_at | date: '%s' }}" data-production-pricing="{{ product.metafields.customhouse.production_method_pricing.value | json | escape }}">
@@ -155,6 +179,9 @@
                 </div>
               </article>
             {% endif %}
+                {% endif %}
+              {% endunless %}
+            {% endfor %}
           {% endfor %}
         </div>
         <div class="chd-empty" data-chd-product-empty hidden>No base products match these filters.</div>

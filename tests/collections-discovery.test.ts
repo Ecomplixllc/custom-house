@@ -50,6 +50,15 @@ test("new Collections discovery page uses a dedicated page template and isolated
   );
 });
 
+test("Collections discovery renders eligible products from every configured category collection", () => {
+  const section = readFileSync("theme-live-cart/sections/customhouse-collections-discovery.liquid", "utf8");
+
+  assert.match(section, /for category_block in section\.blocks/);
+  assert.match(section, /assign category_collection = category_block\.settings\.collection/);
+  assert.match(section, /for product in category_collection\.products/);
+  assert.match(section, /rendered_product_ids contains product_key/);
+});
+
 test("global header adds one duplicate-safe Collections discovery link without replacing menu links", () => {
   const desktop = readFileSync("theme-live-cart/blocks/_header-menu.liquid", "utf8");
   const drawer = readFileSync("theme-live-cart/snippets/header-drawer.liquid", "utf8");
