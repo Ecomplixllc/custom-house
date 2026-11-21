@@ -3315,23 +3315,26 @@
   text-decoration: none;
 }
 
-.customhouse-dashboard-brand span {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  color: #020916;
-  background: #fff;
-  font-size: 1.35rem;
-  font-weight: 950;
-  line-height: 1;
-  clip-path: polygon(0 0, 36% 0, 50% 28%, 65% 0, 100% 0, 70% 50%, 100% 100%, 64% 100%, 50% 72%, 36% 100%, 0 100%, 30% 50%);
+.customhouse-dashboard-brand > .customhouse-dashboard-brand-mark {
+  display: block;
+  width: 44px;
+  height: 17px;
+  flex: 0 0 44px;
+  color: #fff;
+}
+
+.customhouse-dashboard-brand-mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
 }
 
 .customhouse-dashboard-brand strong {
+  font-family: Impact, Haettenschweiler, "Arial Narrow Bold", "Arial Narrow", sans-serif;
   font-size: 1rem;
   font-weight: 950;
-  letter-spacing: -.01em;
+  letter-spacing: 0;
 }
 
 .customhouse-sidebar-profile {
@@ -8981,20 +8984,17 @@ body:has([data-customhouse-dashboard]) {
     text-decoration: none;
   }
 
-  .customhouse-dashboard-topbar-brand > span {
-    display: grid;
-    width: 26px;
-    height: 26px;
-    place-items: center;
+  .customhouse-dashboard-topbar-brand > .customhouse-dashboard-brand-mark {
+    display: block;
+    width: 34px;
+    height: 13px;
+    flex: 0 0 34px;
     color: #07122c;
-    font-size: 1.35rem;
-    font-weight: 950;
-    line-height: 1;
-    clip-path: polygon(0 0, 36% 0, 50% 28%, 65% 0, 100% 0, 70% 50%, 100% 100%, 64% 100%, 50% 72%, 36% 100%, 0 100%, 30% 50%);
   }
 
   .customhouse-dashboard-topbar-brand strong {
     color: #07122c;
+    font-family: Impact, Haettenschweiler, "Arial Narrow Bold", "Arial Narrow", sans-serif;
     font-size: .75rem;
     font-weight: 950;
     white-space: nowrap;

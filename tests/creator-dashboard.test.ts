@@ -235,6 +235,21 @@ test("creator dashboard matches the mobile and iPad responsive shell", () => {
   );
 });
 
+test("creator dashboard uses the canonical Custom House logo mark", () => {
+  assert.equal(
+    (block.match(/M0 0h43l25 27-25 27H0l24-27L0 0Z/g) || []).length,
+    2,
+  );
+  assert.equal(
+    (block.match(/M140 0H97L72 27l25 27h43l-24-27 24-27Z/g) || []).length,
+    2,
+  );
+  assert.doesNotMatch(block, /<span aria-hidden="true">X<\/span>/);
+  assert.match(styles, /\.customhouse-dashboard-brand-mark svg\s*\{[^}]*fill: currentColor;/s);
+  assert.match(styles, /\.customhouse-dashboard-brand > \.customhouse-dashboard-brand-mark/);
+  assert.match(styles, /\.customhouse-dashboard-topbar-brand > \.customhouse-dashboard-brand-mark/);
+});
+
 test("missing creator becomes not-applied state", () => {
   assert.deepEqual(resolveDashboardState({ state: "NOT_APPLIED", creatorFound: false }), {
     state: "NOT_APPLIED",
@@ -1616,7 +1631,7 @@ test("missing printing method blocks draft and PitchPrint launch on click", () =
 test("Creator Dashboard assets use a release key so browsers cannot reuse stale disabled-button files", () => {
   assert.match(
     block,
-    /assign creator_dashboard_asset_release = '2026-11-21-edit-details-tags-v1'/,
+    /assign creator_dashboard_asset_release = '2026-11-21-dashboard-logo-v1'/,
   );
   assert.match(
     block,

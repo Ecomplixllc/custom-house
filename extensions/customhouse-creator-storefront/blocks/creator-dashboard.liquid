@@ -1,4 +1,4 @@
-{% assign creator_dashboard_asset_release = '2026-11-21-edit-details-tags-v1' %}
+{% assign creator_dashboard_asset_release = '2026-11-21-dashboard-logo-v1' %}
 {% assign creator_dashboard_stylesheet_url = 'customhouse.css' | asset_url | append: '?v=' | append: creator_dashboard_asset_release %}
 <link rel="stylesheet" href="{{ creator_dashboard_stylesheet_url }}">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,500,0,0">
@@ -32,7 +32,12 @@
   <div class="customhouse-dashboard-shell" data-dashboard-profile hidden>
     <aside class="customhouse-dashboard-sidebar" aria-label="Creator dashboard navigation">
       <a class="customhouse-dashboard-brand" href="{{ routes.root_url }}">
-        <span aria-hidden="true">X</span>
+        <span class="customhouse-dashboard-brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 140 54" focusable="false">
+            <path d="M0 0h43l25 27-25 27H0l24-27L0 0Z"></path>
+            <path d="M140 0H97L72 27l25 27h43l-24-27 24-27Z"></path>
+          </svg>
+        </span>
         <strong>CUSTOMHOUSE</strong>
       </a>
       <div class="customhouse-sidebar-profile">
@@ -67,7 +72,12 @@
       <header class="customhouse-dashboard-topbar">
         <button class="customhouse-dashboard-menu" type="button" aria-label="Dashboard menu"><span class="material-symbols-outlined notranslate" translate="no" aria-hidden="true">menu</span></button>
         <a class="customhouse-dashboard-topbar-brand" href="{{ routes.root_url }}" aria-label="Custom House home">
-          <span aria-hidden="true">X</span>
+          <span class="customhouse-dashboard-brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 140 54" focusable="false">
+              <path d="M0 0h43l25 27-25 27H0l24-27L0 0Z"></path>
+              <path d="M140 0H97L72 27l25 27h43l-24-27 24-27Z"></path>
+            </svg>
+          </span>
           <strong>CUSTOMHOUSE</strong>
         </a>
         <div class="customhouse-dashboard-topbar-profile">
