@@ -119,6 +119,9 @@ test("Shopify theme content removes only the duplicated standalone shell", () =>
   const content = storefrontThemeContent(document);
 
   assert.match(content, /<style>[\s\S]*\[data-customhouse\]/);
+  assert.match(content, /data-customhouse-theme-bridge/);
+  assert.match(content, /body:has\(\[data-customhouse\]\) #MainContent/);
+  assert.match(content, /background: #030303/);
   assert.match(content, /<div class="customhouse-terms-page" data-customhouse>/);
   assert.match(content, /Read these terms\./);
   assert.doesNotMatch(content, /<!doctype|<html|<head|<body/i);

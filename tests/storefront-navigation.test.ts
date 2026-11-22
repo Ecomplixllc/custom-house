@@ -16,6 +16,14 @@ test("published theme owns storefront header navigation and footer", () => {
   assert.match(layout, /{% sections 'footer-group' %}/);
   assert.match(header, /"id": "customhouse_primary_menu"/);
   assert.match(header, /"default": "main-menu"/);
+  assert.match(
+    header,
+    /\.customhouse-header__nav a \{[\s\S]*font-family: Inter,[\s\S]*font-weight: 800;[\s\S]*letter-spacing: 0\.015em;[\s\S]*text-shadow: none;/,
+  );
+  assert.match(
+    header,
+    /\.customhouse-mobile-drawer__nav a \{[\s\S]*font-family: Inter,[\s\S]*font-weight: 800;[\s\S]*letter-spacing: 0\.015em;/,
+  );
   assert.match(navigation, /for link in navigation_links/);
   assert.match(navigation, /link\.title/);
   assert.match(navigation, /link\.url/);

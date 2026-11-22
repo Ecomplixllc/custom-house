@@ -89,6 +89,14 @@ const THEME_SAFE_HEAD_ASSET_PATTERN =
   /<style\b[^>]*>[\s\S]*?<\/style>|<link\b(?=[^>]*\brel=["']stylesheet["'])[^>]*>/gi;
 const LEGACY_SHELL_STYLE_RULE_PATTERN =
   /[^{}]*(?:\.customhouse-header|\.customhouse-mobile-drawer|\.customhouse-global-footer|#FooterStrip-customhouse-app|\.footer-strip__)[^{}]*\{[^{}]*\}/gi;
+const STOREFRONT_THEME_BRIDGE_STYLE = `<style data-customhouse-theme-bridge>
+  html:has([data-customhouse]),
+  body:has([data-customhouse]),
+  body:has([data-customhouse]) .page-wrapper,
+  body:has([data-customhouse]) #MainContent {
+    background: #030303;
+  }
+</style>`;
 
 export function storefrontThemeContent(document: string) {
   const head = document.match(DOCUMENT_HEAD_PATTERN)?.[1] || "";
@@ -99,7 +107,7 @@ export function storefrontThemeContent(document: string) {
     .replace(/<main\b/i, "<div")
     .replace(/<\/main>/i, "</div>")
     .trim();
-  return `${headAssets}\n${content}`.trim();
+  return `${STOREFRONT_THEME_BRIDGE_STYLE}\n${headAssets}\n${content}`.trim();
 }
 
 export async function storefrontThemeResponse(
