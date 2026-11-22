@@ -26,6 +26,7 @@ export async function proxyContext(request: Request, requireCustomer = true) {
     shop: context.session.shop,
     customerId,
     client: new AdminGraphqlClient(context.admin),
+    liquid: context.liquid,
   };
 }
 

@@ -13,14 +13,9 @@ import {
   getCreatorCollectionStorefrontUrl,
   getCreatorProductStorefrontUrl,
 } from "./creator-storefront-urls.ts";
-import { normalizeCustomerGid } from "./helium-sync.ts";
 import { formatMinorMoney } from "./money.ts";
 import { listPublicCreatorDirectory } from "./creator-discovery.server.ts";
 import { loadPublicCreatorContent } from "./creator-content.server.ts";
-import {
-  PUBLIC_STOREFRONT_NAV_ITEMS,
-  type PublicStorefrontNavKey,
-} from "./storefront-navigation.ts";
 import { creatorProductSeo } from "./creator-product-seo.ts";
 import {
   DEFAULT_CREATOR_TERMS_BODY,
@@ -34,16 +29,17 @@ const SAFE_HEADERS = {
   "X-Content-Type-Options": "nosniff",
 } as const;
 
-const DEFAULT_HEADER_LOGO_URL =
-  "https://customhouse.se/cdn/shop/files/Screenshot_43-removebg-preview.png?width=900";
-const DEFAULT_FOOTER_BACKGROUND_URL =
-  "https://customhouse.se/cdn/shop/files/ChatGPT_Image_Jun_27_2026_06_10_23_PM.png?width=2400";
-
 export type VerifiedProxyContext = {
   shop: string;
   customerId: string | null;
   client?: ShopifyGraphqlClient;
+  liquid?: LiquidResponseFunction;
 };
+
+type LiquidResponseFunction = (
+  body: string,
+  initAndOptions?: number | (ResponseInit & { layout?: boolean }),
+) => Response;
 
 export type ProxyAuthenticator = (
   request: Request,
@@ -60,14 +56,6 @@ type ProxyRoute =
   | { kind: "design"; designSlug: string }
   | { kind: "designCart"; designId: string }
   | { kind: "notFound" };
-
-type SiteHeaderAccount =
-  | { loggedIn: false }
-  | {
-      loggedIn: true;
-      displayName: string | null;
-      hasCreatorDashboard: boolean;
-    };
 
 function success(data: Record<string, unknown>, status = 200): Response {
   return Response.json(
@@ -92,6 +80,42 @@ function html(body: string, status = 200): Response {
       "Referrer-Policy": "same-origin",
       "X-Content-Type-Options": "nosniff",
     },
+  });
+}
+
+const DOCUMENT_BODY_PATTERN = /<body\b[^>]*>([\s\S]*?)<\/body>/i;
+const DOCUMENT_HEAD_PATTERN = /<head\b[^>]*>([\s\S]*?)<\/head>/i;
+const THEME_SAFE_HEAD_ASSET_PATTERN =
+  /<style\b[^>]*>[\s\S]*?<\/style>|<link\b(?=[^>]*\brel=["']stylesheet["'])[^>]*>/gi;
+const LEGACY_SHELL_STYLE_RULE_PATTERN =
+  /[^{}]*(?:\.customhouse-header|\.customhouse-mobile-drawer|\.customhouse-global-footer|#FooterStrip-customhouse-app|\.footer-strip__)[^{}]*\{[^{}]*\}/gi;
+
+export function storefrontThemeContent(document: string) {
+  const head = document.match(DOCUMENT_HEAD_PATTERN)?.[1] || "";
+  const body = document.match(DOCUMENT_BODY_PATTERN)?.[1] || document;
+  const headAssets = (head.match(THEME_SAFE_HEAD_ASSET_PATTERN)?.join("\n") || "")
+    .replace(LEGACY_SHELL_STYLE_RULE_PATTERN, "");
+  const content = body
+    .replace(/<main\b/i, "<div")
+    .replace(/<\/main>/i, "</div>")
+    .trim();
+  return `${headAssets}\n${content}`.trim();
+}
+
+export async function storefrontThemeResponse(
+  response: Response,
+  context: VerifiedProxyContext,
+) {
+  if (!context.liquid) return response;
+  const content = storefrontThemeContent(await response.text());
+  return context.liquid(content, {
+    status: response.status,
+    headers: {
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "same-origin",
+      "X-Content-Type-Options": "nosniff",
+    },
+    layout: true,
   });
 }
 
@@ -336,9 +360,8 @@ function publicSocialLinksRecord(
 
 function publicCss() {
   return `<style>
-    [data-customhouse]{--ch-primary:#8a2cff;--ch-primary-2:#5b22e8;--ch-service:#c8ff00;--ch-text:#f8fafc;--ch-muted:#b8bfd0;--ch-border:rgba(255,255,255,.13);--ch-soft:#151515;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ch-text);letter-spacing:0}
+    [data-customhouse]{--ch-primary:#8a2cff;--ch-primary-2:#5b22e8;--ch-service:#c8ff00;--ch-text:#f8fafc;--ch-muted:#b8bfd0;--ch-border:rgba(255,255,255,.13);--ch-soft:#151515;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ch-text);letter-spacing:0;background:radial-gradient(circle at 78% 4%,#16081f 0,#080808 34%,#030303 100%)}
     .material-symbols-outlined{font-family:"Material Symbols Outlined";font-weight:400;font-style:normal;font-size:1.25rem;line-height:1;letter-spacing:normal;text-transform:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-feature-settings:"liga";-webkit-font-smoothing:antialiased;font-variation-settings:"FILL" 0,"wght" 600,"GRAD" 0,"opsz" 24}
-    body:has([data-customhouse]){margin:0;background:radial-gradient(circle at 78% 4%,#16081f 0,#080808 34%,#030303 100%);color:var(--ch-text)}
     .customhouse-header{--customhouse-header-height:86px;--customhouse-header-pad-x:clamp(24px,4.4vw,58px);--customhouse-header-text:#fff;position:relative;z-index:50;background:#101010;color:var(--customhouse-header-text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     .customhouse-header__inner{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;width:min(100%,1440px);min-height:var(--customhouse-header-height);margin:0 auto;padding:20px var(--customhouse-header-pad-x) 12px;box-sizing:border-box}
     .customhouse-header__logo,.customhouse-header__nav a,.customhouse-header__icon,.customhouse-mobile-drawer__link,.customhouse-mobile-drawer__action{color:inherit;text-decoration:none}
@@ -568,241 +591,9 @@ function publicCss() {
   </style>`;
 }
 
-async function siteHeaderAccount(context: VerifiedProxyContext): Promise<SiteHeaderAccount> {
-  if (!context.customerId) return { loggedIn: false };
-  const customerId = normalizeCustomerGid(context.customerId);
-  const creator = await db.creator.findUnique({
-    where: {
-      shop_customerId: {
-        shop: context.shop,
-        customerId,
-      },
-    },
-    select: {
-      displayName: true,
-    },
-  });
-  return {
-    loggedIn: true,
-    displayName: creator?.displayName?.trim() || null,
-    hasCreatorDashboard: Boolean(creator),
-  };
-}
-
-function mobileNavigationIcon(key: PublicStorefrontNavKey) {
-  if (key === "t-shirts") {
-    return `<path d="M17 8h14l10 8-5 8-5-3v19H17V21l-5 3-5-8 10-8Z"></path><path d="M20 8c1.1 3 2.4 4.5 4 4.5S26.9 11 28 8"></path><path d="M18 35h12"></path>`;
-  }
-  if (key === "hoodies") {
-    return `<path d="M15 20c0-7.6 3.8-13 9-13s9 5.4 9 13"></path><path d="M13 18 7 32l8 4 3-8v13h12V28l3 8 8-4-6-14"></path><path d="M18 20h12"></path><path d="M21 41v-8h6v8"></path>`;
-  }
-  if (key === "design-selv") {
-    return `<path d="M10 37 36 11l6 6-26 26-8 2 2-8Z"></path><path d="m31 16 6 6"></path><path d="M8 43h26"></path>`;
-  }
-  if (key === "inspiration") {
-    return `<path d="M18 30c-2.8-2.2-4.5-5.3-4.5-9 0-6.3 4.7-11 10.5-11s10.5 4.7 10.5 11c0 3.7-1.7 6.8-4.5 9"></path><path d="M19 34h10"></path><path d="M20.5 39h7"></path><path d="M24 3v4"></path><path d="M9 10l3 3"></path><path d="M39 10l-3 3"></path><path d="M7 22h4"></path><path d="M37 22h4"></path>`;
-  }
-  if (key === "design-your-own") {
-    return `<path d="M8 36h32l-3-20-9 9-4-14-4 14-9-9-3 20Z"></path><path d="M10 41h28"></path>`;
-  }
-  return `<circle cx="17" cy="17" r="7"></circle><circle cx="33" cy="19" r="5"></circle><path d="M5 40c1.6-8 5.6-12 12-12s10.4 4 12 12"></path><path d="M27 30c6.8 0 11 3.3 12.5 10"></path>`;
-}
-
-export function publicStorefrontNavigationHtml(
-  variant: "desktop" | "mobile",
-  activePage?: PublicStorefrontNavKey,
-) {
-  return PUBLIC_STOREFRONT_NAV_ITEMS.map((item) => {
-    const current = item.key === activePage ? ' aria-current="page"' : "";
-    if (variant === "desktop") {
-      return `<a href="${item.href}"${current}>${item.label}</a>`;
-    }
-    return `<a href="${item.href}"${current}>
-          <span class="customhouse-mobile-drawer__line-icon" aria-hidden="true"><svg viewBox="0 0 48 48" focusable="false">${mobileNavigationIcon(item.key)}</svg></span>
-          <span>${item.label}</span>
-        </a>`;
-  }).join("\n        ");
-}
-
-function siteHeader(
-  account: SiteHeaderAccount = { loggedIn: false },
-  activePage?: PublicStorefrontNavKey,
-) {
-  const logoUrl =
-    publicImageUrl(process.env.CUSTOMHOUSE_HEADER_LOGO_URL) ||
-    DEFAULT_HEADER_LOGO_URL;
-  const logoMarkup = logoUrl
-    ? `<img class="customhouse-header__logo-image" src="${escapeHtml(logoUrl)}" alt="CustomHouse" loading="eager">`
-    : `<span class="customhouse-header__mark" aria-hidden="true">
-        <svg viewBox="0 0 140 54" focusable="false">
-          <path d="M0 0h43l25 27-25 27H0l24-27L0 0Z"></path>
-          <path d="M140 0H97L72 27l25 27h43l-24-27 24-27Z"></path>
-        </svg>
-      </span>
-      <span class="customhouse-header__wordmark">CUSTOMHOUSE</span>`;
-  const loginUrl = "/customer_authentication/login?return_to=%2Fpages%2Fcreator-dashboard";
-  const becomeCreatorLoginUrl = "/customer_authentication/login?return_to=%2Fpages%2Fbecome-a-creator";
-  const creatorDashboardUrl = "/pages/creator-dashboard";
-  const logoutUrl = "/account/logout";
-  const profileMenu = account.loggedIn
-    ? `<p class="customhouse-header__profile-name">${escapeHtml(account.displayName || "Customer account")}</p>
-            ${
-              account.hasCreatorDashboard
-                ? `<a href="${creatorDashboardUrl}">Creator dashboard</a>`
-                : `<a href="/pages/become-a-creator">Become a creator</a>`
-            }
-            <a href="${logoutUrl}">Log out</a>`
-    : `<p class="customhouse-header__profile-name">Customer account</p>
-            <a href="${loginUrl}">Log in</a>
-            <a class="customhouse-header__profile-choice" href="${loginUrl}">
-              <strong>Create account</strong>
-              <small>Create a customer account to manage your orders and purchases.</small>
-            </a>
-            <a class="customhouse-header__profile-choice" href="${becomeCreatorLoginUrl}">
-              <strong>Become a creator</strong>
-              <small>Apply to become a Creator and publish your designs on CustomHouse.</small>
-            </a>`;
-  const mobileAccountLinks = account.loggedIn
-    ? `<a href="${account.hasCreatorDashboard ? creatorDashboardUrl : "/pages/become-a-creator"}">
-          <span class="customhouse-mobile-drawer__account-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><circle cx="16" cy="10" r="5.5"></circle><path d="M5 28c1.5-6.2 5.2-9.5 11-9.5s9.5 3.3 11 9.5"></path></svg></span>
-          <span>${account.hasCreatorDashboard ? "CREATOR DASHBOARD" : "BECOME A CREATOR"}</span>
-        </a>
-        <a href="${logoutUrl}">
-          <span class="customhouse-mobile-drawer__account-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M18 6h7v20h-7"></path><path d="M16 16H5"></path><path d="m10 11-5 5 5 5"></path></svg></span>
-          <span>LOG OUT</span>
-        </a>`
-    : `<a href="${becomeCreatorLoginUrl}">
-          <span class="customhouse-mobile-drawer__account-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M16 4v24"></path><path d="M4 16h24"></path></svg></span>
-          <span>BECOME A CREATOR</span>
-        </a>
-        <a href="${loginUrl}">
-          <span class="customhouse-mobile-drawer__account-icon" aria-hidden="true"><svg viewBox="0 0 32 32" focusable="false"><path d="M14 6H7v20h7"></path><path d="M16 16h11"></path><path d="m22 11 5 5-5 5"></path></svg></span>
-          <span>LOG IN</span>
-        </a>`;
-  return `<header class="customhouse-header" data-customhouse-shell>
-    <div class="customhouse-header__inner">
-      <a class="customhouse-header__logo" href="/" aria-label="CustomHouse home">
-        ${logoMarkup}
-      </a>
-      <nav class="customhouse-header__nav" aria-label="Main navigation">
-        ${publicStorefrontNavigationHtml("desktop", activePage)}
-      </nav>
-      <div class="customhouse-header__actions">
-        <a class="customhouse-header__icon" href="/search" aria-label="Search">
-          <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="14" cy="14" r="9.5"></circle><path d="m21 21 7 7"></path></svg>
-        </a>
-        <a class="customhouse-header__icon" href="/cart" aria-label="Cart">
-          <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M3 5h4l3 17h15l4-12H9"></path><circle cx="13" cy="27" r="1.8"></circle><circle cx="24" cy="27" r="1.8"></circle></svg>
-          <span class="customhouse-header__cart-count" data-customhouse-cart-count hidden></span>
-        </a>
-        <details class="customhouse-header__profile">
-          <summary class="customhouse-header__icon" aria-label="Open profile menu">
-            <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="10" r="5.5"></circle><path d="M5 28c1.5-6.2 5.2-9.5 11-9.5s9.5 3.3 11 9.5"></path></svg>
-          </summary>
-          <div class="customhouse-header__profile-menu">
-            ${profileMenu}
-          </div>
-        </details>
-        <button class="customhouse-header__icon customhouse-header__menu-button" type="button" data-customhouse-menu-open aria-label="Open menu" aria-expanded="false">
-          <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M6 9h20M6 16h20M6 23h20"></path></svg>
-        </button>
-      </div>
-    </div>
-    <button class="customhouse-mobile-drawer__overlay" type="button" aria-label="Close menu" hidden data-customhouse-menu-close></button>
-    <aside id="CustomhouseMobileDrawer-app" class="customhouse-mobile-drawer" aria-label="Mobile menu" aria-hidden="true" tabindex="-1" hidden data-customhouse-mobile-drawer>
-      <div class="customhouse-mobile-drawer__header">
-        <a class="customhouse-header__logo customhouse-mobile-drawer__logo" href="/" aria-label="CustomHouse home">${logoMarkup}</a>
-        <button class="customhouse-mobile-drawer__close" type="button" aria-label="Close menu" data-customhouse-menu-close>
-          <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path d="M7 7 25 25"></path><path d="M25 7 7 25"></path></svg>
-        </button>
-      </div>
-      <nav class="customhouse-mobile-drawer__nav" aria-label="Mobile navigation">
-        ${publicStorefrontNavigationHtml("mobile", activePage)}
-      </nav>
-      <div class="customhouse-mobile-drawer__account">
-        ${mobileAccountLinks}
-      </div>
-    </aside>
-  </header>`;
-}
-
-function siteFooter() {
-  const backgroundUrl =
-    publicImageUrl(process.env.CUSTOMHOUSE_FOOTER_BACKGROUND_URL) ||
-    DEFAULT_FOOTER_BACKGROUND_URL;
-  return `<footer
-    id="FooterStrip-customhouse-app"
-    class="footer-strip"
-    data-customhouse-shell
-    style="--footer-bg:#050506;--footer-text:#f4f4f2;--footer-accent:#7d3cc7;--footer-icon-cutout:#050506;--footer-max-width:1200px;--footer-min-height:128px;--footer-padding-top:32px;--footer-padding-bottom:22px;--footer-padding-x:42px;--footer-mobile-padding-x:22px;--footer-label-size:16px;--footer-link-size:17px;--footer-mobile-label-size:15px;--footer-mobile-link-size:15px;--footer-icon-size:28px;--footer-mobile-icon-size:26px;--footer-icon-gap:13px;--footer-link-gap:22px;--footer-group-gap:36px;--footer-text-weight:800;--footer-line-height:3px;--footer-line-offset:20px;--footer-line-inset:0px;--footer-line-opacity:.85;--footer-texture-opacity:.65;--footer-image-opacity:.7;"
-  >
-    ${backgroundUrl ? `<div class="footer-strip__image footer-strip__image--desktop" style="background-image:url(${escapeHtml(backgroundUrl)});background-position:center center;" aria-hidden="true"></div>` : ""}
-    <div class="footer-strip__texture" aria-hidden="true"></div>
-    <div class="footer-strip__inner">
-      <div class="footer-strip__social">
-        <div class="footer-strip__heading">FÖLJ OSS</div>
-        <div class="footer-strip__icons" aria-label="FÖLJ OSS">
-          <a class="footer-strip__icon" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" aria-label="YouTube"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21.35 7.4a3 3 0 0 0-2.11-2.12C17.38 4.78 12 4.78 12 4.78s-5.38 0-7.24.5A3 3 0 0 0 2.65 7.4 31.42 31.42 0 0 0 2.15 12c0 1.55.17 3.1.5 4.6a3 3 0 0 0 2.11 2.12c1.86.5 7.24.5 7.24.5s5.38 0 7.24-.5a3 3 0 0 0 2.11-2.12c.33-1.5.5-3.05.5-4.6s-.17-3.1-.5-4.6ZM10.05 15.45v-6.9L15.68 12l-5.63 3.45Z"></path></svg></a>
-          <a class="footer-strip__icon" href="https://www.facebook.com/" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle class="footer-strip__facebook-circle" cx="12" cy="12" r="10"></circle><path class="footer-strip__facebook-f" d="M13.12 18.15v-5.57h1.86l.28-2.17h-2.14V9.03c0-.63.17-1.06 1.08-1.06h1.15V6.03c-.2-.03-.88-.09-1.68-.09-1.66 0-2.8 1.01-2.8 2.87v1.6H8.99v2.17h1.88v5.57h2.25Z"></path></svg></a>
-          <a class="footer-strip__icon" href="https://www.instagram.com/" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.1" y="3.1" width="17.8" height="17.8" rx="5.1"></rect><circle cx="12" cy="12" r="4.15"></circle><circle class="footer-strip__icon-dot" cx="17.25" cy="6.85" r="1.15"></circle></svg></a>
-        </div>
-      </div>
-      <nav class="footer-strip__links" aria-label="Footer quick links">
-        <a class="footer-strip__link" href="/pages/faq">FAQ</a>
-        <a class="footer-strip__link" href="/pages/contact">KONTAKT</a>
-        <a class="footer-strip__link" href="/policies/privacy-policy">VILLKOR</a>
-        <a class="footer-strip__link" href="/pages/become-a-creator">BECOME A CREATOR</a>
-      </nav>
-    </div>
-  </footer>`;
-}
-
-function siteShellScript() {
-  return `<script>
-    (() => {
-      const drawer = document.querySelector("[data-customhouse-mobile-drawer]");
-      const openButton = document.querySelector("[data-customhouse-menu-open]");
-      const overlay = document.querySelector(".customhouse-mobile-drawer__overlay");
-      const cartCount = document.querySelector("[data-customhouse-cart-count]");
-      if (cartCount) {
-        fetch("/cart.js", {
-          credentials: "same-origin",
-          headers: { Accept: "application/json" },
-        })
-          .then((response) => response.ok ? response.json() : null)
-          .then((cart) => {
-            const count = Number(cart?.item_count || 0);
-            cartCount.textContent = count > 99 ? "99+" : String(count);
-            cartCount.hidden = count < 1;
-          })
-          .catch(() => {});
-      }
-      if (!drawer || !openButton || !overlay) return;
-      const setOpen = (open) => {
-        drawer.classList.toggle("is-open", open);
-        drawer.setAttribute("aria-hidden", open ? "false" : "true");
-        drawer.hidden = !open;
-        overlay.classList.toggle("is-open", open);
-        overlay.hidden = !open;
-        openButton.setAttribute("aria-expanded", open ? "true" : "false");
-        document.documentElement.classList.toggle("customhouse-mobile-drawer-open", open);
-        if (open) drawer.focus({ preventScroll: true });
-      };
-      openButton.addEventListener("click", () => setOpen(true));
-      document.querySelectorAll("[data-customhouse-menu-close], .customhouse-mobile-drawer a").forEach((item) => {
-        item.addEventListener("click", () => setOpen(false));
-      });
-      document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape") setOpen(false);
-      });
-    })();
-  </script>`;
-}
-
 export function creatorTermsHtml(input: {
   title: string;
   body: string;
-  account?: SiteHeaderAccount;
 }) {
   const paragraphs = String(input.body || "")
     .split(/\n{2,}/)
@@ -832,16 +623,13 @@ export function creatorTermsHtml(input: {
         </style>
       </head>
       <body data-customhouse>
-        ${siteHeader(input.account)}
-        <main class="customhouse-terms-page">
+        <main class="customhouse-terms-page" data-customhouse>
           <article class="customhouse-terms-card">
             <small>Creator application</small>
             <h1>${escapeHtml(input.title)}</h1>
             <div class="customhouse-terms-content">${paragraphs}</div>
           </article>
         </main>
-        ${siteFooter()}
-        ${siteShellScript()}
       </body>
     </html>`;
 }
@@ -872,9 +660,7 @@ export function creatorContentPaginationModel(
 }
 
 export function creatorContentHtml(
-  input: Awaited<ReturnType<typeof loadPublicCreatorContent>> & {
-    headerAccount?: SiteHeaderAccount;
-  },
+  input: Awaited<ReturnType<typeof loadPublicCreatorContent>>,
 ) {
   const heroImages = input.products
     .map((product) => product.imageUrl)
@@ -1072,7 +858,6 @@ export function creatorContentHtml(
         <title>Creator Content | CustomHouse</title>
         ${publicCss()}
         <style>
-          html,body{min-height:100%;margin:0;background:#060708}
           .customhouse-creator-content-page{--cc-bg:#060708;--cc-panel:#111216;--cc-panel-2:#17181d;--cc-line:#303139;--cc-text:#f7f7f4;--cc-muted:#a1a3ad;--cc-lime:#b7ff00;--cc-purple:#872cff;min-height:100vh;background:var(--cc-bg);color:var(--cc-text);font-family:Arial,Helvetica,sans-serif}.customhouse-creator-content-page *{box-sizing:border-box}.customhouse-creator-content-page a{color:inherit}.customhouse-creator-content__container{width:min(1440px,calc(100% - 48px));margin:0 auto}.customhouse-creator-content__breadcrumb{display:flex;gap:9px;align-items:center;padding:20px 0 14px;color:#7f818c;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.customhouse-creator-content__breadcrumb span:last-child{color:var(--cc-purple)}.customhouse-creator-content__hero{position:relative;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr);min-height:420px;overflow:hidden;border:1px solid var(--cc-line);background:linear-gradient(115deg,#07080a 0 48%,#181922 48% 100%)}.customhouse-creator-content__hero::after{position:absolute;right:-70px;bottom:-130px;width:340px;height:340px;border:60px solid rgba(135,44,255,.26);border-radius:50%;content:""}.customhouse-creator-content__hero-copy{position:relative;z-index:2;display:flex;flex-direction:column;justify-content:center;padding:52px}.customhouse-creator-content__eyebrow{margin:0 0 12px;color:var(--cc-lime);font-size:12px;font-weight:900;letter-spacing:.16em}.customhouse-creator-content__hero h1{max-width:700px;margin:0;font-size:clamp(54px,6vw,94px);font-style:italic;font-weight:950;letter-spacing:-.07em;line-height:.82}.customhouse-creator-content__hero h1 span{display:block;color:var(--cc-lime)}.customhouse-creator-content__hero-copy>p:last-child{max-width:600px;margin:26px 0 0;color:#d2d3d8;font-size:16px;line-height:1.55}.customhouse-creator-content__hero-art{position:relative;min-height:420px;overflow:hidden}.customhouse-creator-content__hero-shot{position:absolute;display:block;overflow:hidden;border:1px solid rgba(255,255,255,.2);background:#0d0e12;box-shadow:0 24px 60px rgba(0,0,0,.5)}.customhouse-creator-content__hero-shot img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__hero-shot--1{right:6%;top:7%;width:55%;height:82%;transform:rotate(3deg)}.customhouse-creator-content__hero-shot--2{left:2%;bottom:5%;width:38%;height:56%;transform:rotate(-7deg)}.customhouse-creator-content__hero-shot--3{right:1%;bottom:-7%;width:31%;height:45%;transform:rotate(8deg)}.customhouse-creator-content__hero-monogram{position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.08);font-size:180px;font-weight:950}.customhouse-creator-content__benefits{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--cc-line);border-top:0;background:#0d0e11}.customhouse-creator-content__benefit{display:grid;grid-template-columns:38px 1fr;gap:10px;align-items:center;min-height:82px;padding:14px 22px;border-right:1px solid var(--cc-line)}.customhouse-creator-content__benefit:last-child{border-right:0}.customhouse-creator-content__benefit b{color:var(--cc-lime);font-size:22px}.customhouse-creator-content__benefit strong,.customhouse-creator-content__benefit small{display:block}.customhouse-creator-content__benefit strong{font-size:12px}.customhouse-creator-content__benefit small{margin-top:4px;color:var(--cc-muted);font-size:10px}.customhouse-creator-content__discovery{padding:42px 0 82px}.customhouse-creator-content__search{position:relative}.customhouse-creator-content__search input{width:100%;height:58px;border:1px solid var(--cc-line);border-radius:6px;outline:0;background:var(--cc-panel);color:var(--cc-text);padding:0 58px 0 20px;font:700 14px/1 Arial}.customhouse-creator-content__search input:focus{border-color:var(--cc-purple);box-shadow:0 0 0 3px rgba(135,44,255,.18)}.customhouse-creator-content__search span{position:absolute;right:20px;top:50%;transform:translateY(-50%);color:var(--cc-lime);font-size:24px}.customhouse-creator-content__chips{display:flex;gap:9px;overflow:auto;padding:16px 0 4px;scrollbar-width:none}.customhouse-creator-content__chips::-webkit-scrollbar{display:none}.customhouse-creator-content__chip{flex:0 0 auto;min-height:37px;border:1px solid var(--cc-line);border-radius:999px;background:var(--cc-panel);color:var(--cc-text);padding:0 17px;font-size:11px;font-weight:800;cursor:pointer}.customhouse-creator-content__chip.is-active{border-color:var(--cc-lime);background:rgba(183,255,0,.09);color:var(--cc-lime)}.customhouse-creator-content__section-heading{display:flex;align-items:end;justify-content:space-between;gap:20px;margin:42px 0 18px}.customhouse-creator-content__section-heading p{margin:0 0 7px;color:var(--cc-lime);font-size:11px;font-weight:900;letter-spacing:.14em}.customhouse-creator-content__section-heading h2{margin:0;font-size:clamp(28px,3vw,44px);letter-spacing:-.05em}.customhouse-creator-content__featured{display:flex;gap:12px;overflow:auto;padding:0 0 10px;scroll-snap-type:x proximity}.customhouse-creator-content__creator{display:grid;grid-template-columns:68px minmax(120px,1fr);grid-template-rows:auto auto;gap:10px 13px;min-width:285px;max-width:330px;flex:1 0 285px;border:1px solid var(--cc-line);border-radius:10px;background:linear-gradient(145deg,var(--cc-panel-2),#0b0c0f);padding:14px;scroll-snap-align:start}.customhouse-creator-content__creator-media{grid-row:1/3;width:68px;height:68px;overflow:hidden;border:2px solid var(--cc-purple);border-radius:50%;background:#20152d;text-decoration:none}.customhouse-creator-content__creator-media img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__creator-media span{display:grid;width:100%;height:100%;place-items:center;color:var(--cc-lime);font-size:20px;font-weight:900}.customhouse-creator-content__creator-copy{min-width:0}.customhouse-creator-content__creator-copy strong,.customhouse-creator-content__creator-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.customhouse-creator-content__creator-copy small,.customhouse-creator-content__creator-copy p{color:var(--cc-muted);font-size:10px}.customhouse-creator-content__creator-copy p{margin:5px 0 0}.customhouse-creator-content__creator-action{justify-self:start;color:var(--cc-lime);font-size:10px;font-weight:900;text-decoration:none}.customhouse-creator-content__empty-inline{color:var(--cc-muted)}.customhouse-creator-content__toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:38px 0 14px}.customhouse-creator-content__toolbar-left{display:flex;align-items:center;gap:12px}.customhouse-creator-content__toolbar button,.customhouse-creator-content__toolbar select{height:42px;border:1px solid var(--cc-line);border-radius:6px;background:var(--cc-panel);color:var(--cc-text);padding:0 14px;font-size:11px;font-weight:800}.customhouse-creator-content__filter-open{display:block;cursor:pointer}.customhouse-creator-content__active-filters{display:flex;gap:7px;flex-wrap:wrap}.customhouse-creator-content__active-filters button{height:30px;border-color:rgba(135,44,255,.7);color:#d8c2ff}.customhouse-creator-content__results{display:block}.customhouse-creator-content__results.is-filter-open{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px}.customhouse-creator-content__filters{position:sticky;top:18px;align-self:start;border:1px solid var(--cc-line);border-radius:8px;background:var(--cc-panel);padding:18px}.customhouse-creator-content__filter-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--cc-line);padding:0 0 14px}.customhouse-creator-content__filter-head h3{margin:0;font-size:15px}.customhouse-creator-content__filter-head button{border:0;background:none;color:var(--cc-lime);font-size:10px;font-weight:800;cursor:pointer}.customhouse-creator-content__filter-close{display:none}.customhouse-creator-content__filter-group{display:grid;gap:9px;margin:0;padding:17px 0;border:0;border-bottom:1px solid var(--cc-line)}.customhouse-creator-content__filter-group legend{padding:0 0 4px;font-size:11px;font-weight:900;text-transform:uppercase}.customhouse-creator-content__filter-group>label{display:flex;align-items:center;gap:8px;color:#d3d4da;font-size:11px}.customhouse-creator-content__filter-group input[type=checkbox]{width:16px;height:16px;accent-color:var(--cc-purple)}.customhouse-creator-content__filter-group--price>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}.customhouse-creator-content__filter-group--price label{display:grid;gap:5px;color:var(--cc-muted);font-size:9px}.customhouse-creator-content__filter-group--price input{min-width:0;width:100%;height:36px;border:1px solid var(--cc-line);border-radius:4px;background:#08090b;color:var(--cc-text);padding:0 8px}.customhouse-creator-content__filter-group--price small{color:var(--cc-muted)}.customhouse-creator-content__grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}.customhouse-creator-content__product{min-width:0;overflow:hidden;border:1px solid var(--cc-line);border-radius:8px;background:var(--cc-panel)}.customhouse-creator-content__product[hidden]{display:none}.customhouse-creator-content__product-media{position:relative;display:block;aspect-ratio:1/1;overflow:hidden;background:radial-gradient(circle at 50% 40%,#292b32,#0c0d10 72%)}.customhouse-creator-content__product-media img{width:100%;height:100%;object-fit:contain;transition:transform .25s ease}.customhouse-creator-content__product:hover .customhouse-creator-content__product-media img{transform:scale(1.025)}.customhouse-creator-content__product-media>span{display:grid;width:100%;height:100%;place-items:center;color:#2c2e36;font-size:70px;font-weight:950}.customhouse-creator-content__product-media em{position:absolute;left:10px;top:10px;border-radius:4px;background:#07080a;color:#fff;padding:6px 8px;font-size:9px;font-style:normal;font-weight:900}.customhouse-creator-content__product-body{display:grid;gap:9px;padding:12px}.customhouse-creator-content__product-creator{display:flex;align-items:center;gap:8px;text-decoration:none}.customhouse-creator-content__mini-avatar{display:grid;width:28px;height:28px;flex:0 0 28px;place-items:center;overflow:hidden;border:1px solid var(--cc-purple);border-radius:50%;background:#211431;color:var(--cc-lime);font-size:10px;font-weight:900}.customhouse-creator-content__mini-avatar img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__product-creator small,.customhouse-creator-content__product-creator strong{display:block}.customhouse-creator-content__product-creator small{color:var(--cc-muted);font-size:8px}.customhouse-creator-content__product-creator strong{font-size:10px}.customhouse-creator-content__product h3{min-height:34px;margin:0;font-size:13px;line-height:1.3}.customhouse-creator-content__product h3 a{text-decoration:none}.customhouse-creator-content__product-type{margin:0;color:var(--cc-muted);font-size:9px}.customhouse-creator-content__price{color:var(--cc-lime);font-size:13px}.customhouse-creator-content__buy{display:grid;min-height:37px;place-items:center;border:1px solid var(--cc-purple);border-radius:4px;color:#fff;font-size:10px;font-weight:900;text-decoration:none}.customhouse-creator-content__buy:hover{background:var(--cc-purple)}.customhouse-creator-content__empty{display:none;min-height:280px;place-items:center;border:1px dashed var(--cc-line);color:var(--cc-muted);text-align:center}.customhouse-creator-content__empty.is-visible{display:grid}.customhouse-creator-content__pagination{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;margin:28px 0 0;padding:13px;border:1px solid var(--cc-line);border-radius:10px;background:linear-gradient(135deg,#101116,#0b0c0f);box-shadow:0 14px 36px rgba(0,0,0,.2)}.customhouse-creator-content__pagination button{display:grid;min-width:42px;height:42px;place-items:center;border:1px solid var(--cc-line);border-radius:7px;background:#17181d;color:var(--cc-text);padding:0 14px;font-size:10px;font-weight:900;letter-spacing:.04em;cursor:pointer}.customhouse-creator-content__pagination button:hover:not(:disabled){border-color:var(--cc-purple);background:#211431}.customhouse-creator-content__pagination button:focus-visible{outline:2px solid var(--cc-lime);outline-offset:2px}.customhouse-creator-content__pagination button:disabled{cursor:not-allowed;opacity:.38}.customhouse-creator-content__pagination-pages{display:flex;justify-content:center;gap:7px;min-width:0}.customhouse-creator-content__pagination-pages button{padding:0}.customhouse-creator-content__pagination-pages button[aria-current=page]{border-color:var(--cc-purple);background:var(--cc-purple);box-shadow:0 0 0 2px rgba(135,44,255,.18);color:#fff}.customhouse-creator-content__pagination-ellipsis{display:grid;width:24px;height:42px;place-items:center;color:var(--cc-muted);font-weight:900}.customhouse-creator-content__pagination-status{color:var(--cc-muted);font-size:9px;font-weight:900;letter-spacing:.08em;white-space:nowrap}.customhouse-creator-content__pagination[aria-busy=true]{opacity:.68}.customhouse-creator-content__drawer-overlay{display:none}
           .customhouse-creator-content__filter-open{display:none}.customhouse-creator-content__results,.customhouse-creator-content__results.is-filter-open{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px}.customhouse-creator-content__filter-group{display:block}.customhouse-creator-content__filter-group summary{position:relative;display:flex;align-items:center;justify-content:space-between;min-height:42px;padding:0 24px 0 0;list-style:none;cursor:pointer;font-size:11px;font-weight:900;text-transform:uppercase}.customhouse-creator-content__filter-group summary::-webkit-details-marker{display:none}.customhouse-creator-content__filter-group summary::after{position:absolute;right:3px;top:50%;width:7px;height:7px;border-right:2px solid var(--cc-muted);border-bottom:2px solid var(--cc-muted);content:"";transform:translateY(-65%) rotate(45deg);transition:transform .18s ease,border-color .18s ease}.customhouse-creator-content__filter-group[open] summary::after{border-color:var(--cc-lime);transform:translateY(-35%) rotate(225deg)}.customhouse-creator-content__filter-group summary:focus-visible{outline:2px solid var(--cc-lime);outline-offset:3px}.customhouse-creator-content__filter-options{display:grid;gap:9px;padding:4px 0 8px}.customhouse-creator-content__filter-options>label{display:flex;align-items:center;gap:8px;color:#d3d4da;font-size:11px}.customhouse-creator-content__filter-group--price>.customhouse-creator-content__filter-options{grid-template-columns:1fr}.customhouse-creator-content__filter-group--price>.customhouse-creator-content__filter-options>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}
           .customhouse-creator-content__filter-group:not([open])>.customhouse-creator-content__filter-options{display:none}
@@ -1091,8 +876,7 @@ export function creatorContentHtml(
         </style>
       </head>
       <body>
-        ${siteHeader(input.headerAccount, "creator-content")}
-        <main class="customhouse-creator-content-page" data-creator-content-root data-next-offset="${escapeHtml(String(input.nextOffset ?? ""))}">
+        <main class="customhouse-creator-content-page" data-customhouse data-creator-content-root data-next-offset="${escapeHtml(String(input.nextOffset ?? ""))}">
           <div class="customhouse-creator-content__container">
             <nav class="customhouse-creator-content__breadcrumb" aria-label="Breadcrumb"><a href="/">HOME</a><span>›</span><a href="/pages/collections">COLLECTIONS</a><span>›</span><span>CREATOR CONTENT</span></nav>
             <section class="customhouse-creator-content__hero">
@@ -1146,7 +930,6 @@ export function creatorContentHtml(
           </div>
           <button class="customhouse-creator-content__drawer-overlay" type="button" data-creator-content-filter-close aria-label="Close filters"></button>
         </main>
-        ${siteFooter()}
         <script>
           (() => {
             const root = document.querySelector("[data-creator-content-root]");
@@ -1595,7 +1378,6 @@ export function creatorContentHtml(
             void restoreCompleteUrlState();
           })();
         </script>
-        ${siteShellScript()}
       </body>
     </html>`);
 }
@@ -1631,7 +1413,6 @@ export function collectionHtml(input: {
       };
     };
   }>;
-  headerAccount?: SiteHeaderAccount;
 }) {
   const collectionName =
     input.collection.displayName?.trim() ||
@@ -1688,7 +1469,6 @@ export function collectionHtml(input: {
         ${publicCss()}
       </head>
       <body>
-        ${siteHeader(input.headerAccount, "creator-content")}
         <main class="customhouse-public-page" data-customhouse>
           <header class="customhouse-public-hero${heroImageUrl ? " customhouse-public-hero--with-banner" : ""}"${heroBackgroundAttr(heroImageUrl)}>
             <div class="customhouse-public-hero-copy">
@@ -1812,8 +1592,6 @@ export function collectionHtml(input: {
             });
           })();
         </script>
-        ${siteFooter()}
-        ${siteShellScript()}
       </body>
     </html>`);
 }
@@ -1828,7 +1606,6 @@ function productHtml(input: {
   previewUrls?: string | null;
   creator: { displayName: string; handle: string };
   collection: { publicHandle: string; displayName?: string };
-  headerAccount?: SiteHeaderAccount;
   relatedProducts?: Array<{
     id: string;
     title: string;
@@ -2101,7 +1878,6 @@ function productHtml(input: {
         ${publicCss()}
       </head>
       <body>
-        ${siteHeader(input.headerAccount, "creator-content")}
         <main class="customhouse-product-page" data-customhouse>
           <section class="customhouse-product-layout">
             <div>
@@ -2595,8 +2371,6 @@ function productHtml(input: {
             });
           })();
         </script>
-        ${siteFooter()}
-        ${siteShellScript()}
       </body>
     </html>`);
 }
@@ -2780,19 +2554,18 @@ export async function handleStorefrontProxy(
           );
         }
         {
-          const [config, account] = await Promise.all([
-            db.shopConfig.findUnique({
-              where: { shop: context.shop },
-              select: { creatorTermsTitle: true, creatorTermsBody: true },
-            }),
-            siteHeaderAccount(context),
-          ]);
-          return html(
-            creatorTermsHtml({
-              title: config?.creatorTermsTitle || DEFAULT_CREATOR_TERMS_TITLE,
-              body: config?.creatorTermsBody || DEFAULT_CREATOR_TERMS_BODY,
-              account,
-            }),
+          const config = await db.shopConfig.findUnique({
+            where: { shop: context.shop },
+            select: { creatorTermsTitle: true, creatorTermsBody: true },
+          });
+          return storefrontThemeResponse(
+            html(
+              creatorTermsHtml({
+                title: config?.creatorTermsTitle || DEFAULT_CREATOR_TERMS_TITLE,
+                body: config?.creatorTermsBody || DEFAULT_CREATOR_TERMS_BODY,
+              }),
+            ),
+            context,
           );
         }
       case "creatorContent":
@@ -2822,12 +2595,15 @@ export async function handleStorefrontProxy(
             undefined,
             { offset, includeFeatured: offset === 0 },
           );
-          return wantsJson(request)
-            ? success({ route: "creatorContent", ...content })
-            : creatorContentHtml({
-                ...content,
-                headerAccount: await siteHeaderAccount(context),
-              });
+          if (wantsJson(request)) {
+            return success({ route: "creatorContent", ...content });
+          }
+          return storefrontThemeResponse(
+            creatorContentHtml({
+              ...content,
+            }),
+            context,
+          );
         }
       case "creators":
         if (request.method !== "GET") {
@@ -2902,14 +2678,15 @@ export async function handleStorefrontProxy(
             customer,
           };
           const jsonResponse = wantsJson(request);
-          return jsonResponse
-            ? success(data)
-            : collectionHtml({
-                collection,
-                creator,
-                products,
-                headerAccount: await siteHeaderAccount(context),
-              });
+          if (jsonResponse) return success(data);
+          return storefrontThemeResponse(
+            collectionHtml({
+              collection,
+              creator,
+              products,
+            }),
+            context,
+          );
         }
       case "creatorProduct":
         if (request.method !== "GET") {
@@ -2985,15 +2762,16 @@ export async function handleStorefrontProxy(
             customer,
           };
           const jsonResponse = wantsJson(request);
-          return jsonResponse
-            ? success(data)
-            : productHtml({
-                ...product,
-                headerAccount: await siteHeaderAccount(context),
-                relatedProducts: related.products
-                  .filter((item) => item.id !== product.id)
-                  .slice(0, 12),
-              });
+          if (jsonResponse) return success(data);
+          return storefrontThemeResponse(
+            productHtml({
+              ...product,
+              relatedProducts: related.products
+                .filter((item) => item.id !== product.id)
+                .slice(0, 12),
+            }),
+            context,
+          );
         }
       case "creatorProductCart":
         if (request.method !== "POST") {

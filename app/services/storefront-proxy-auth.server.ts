@@ -9,5 +9,6 @@ export async function authenticateStorefrontProxy(
     shop: context.shop,
     customerId: context.customerId,
     client: context.client,
+    liquid: context.liquid,
   };
 }

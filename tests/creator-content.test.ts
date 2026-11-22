@@ -860,7 +860,6 @@ test("Creator Content keeps the desktop filter sidebar visible with collapsed op
   );
   const response = creatorContentHtml({
     ...data,
-    headerAccount: { loggedIn: false },
   });
   const markup = await response.text();
 
@@ -906,7 +905,6 @@ test("Creator Content uses branded active filters and checkbox states", async ()
   );
   const response = creatorContentHtml({
     ...data,
-    headerAccount: { loggedIn: false },
   });
   const markup = await response.text();
 
@@ -973,7 +971,6 @@ test("Creator Content keeps growing filter groups searchable and paginated", asy
   );
   const response = creatorContentHtml({
     ...data,
-    headerAccount: { loggedIn: false },
   });
   const markup = await response.text();
 
@@ -1002,7 +999,6 @@ test("Creator Content uses arrow controls instead of visible creator and paginat
   );
   const response = creatorContentHtml({
     ...data,
-    headerAccount: { loggedIn: false },
   });
   const markup = await response.text();
 
@@ -1033,14 +1029,13 @@ test("Creator Content renderer provides responsive real-data discovery without c
   );
   const response = creatorContentHtml({
     ...data,
-    headerAccount: { loggedIn: false },
   });
   const markup = await response.text();
   const pageMarkup = markup.match(/<main class="customhouse-creator-content-page"[\s\S]*?<\/main>/)?.[0] || "";
 
   assert.equal(response.status, 200);
   assert.match(markup, /class="customhouse-creator-content-page"/);
-  assert.match(markup, /html,body\{min-height:100%;margin:0;background:#060708\}/);
+  assert.doesNotMatch(markup, /html,body\{/);
   assert.match(markup, /HOME[\s\S]*CREATOR CONTENT/);
   assert.match(markup, /Discover unique designs from CustomHouse creators/);
   assert.match(markup, /data-creator-content-search/);
@@ -1082,16 +1077,9 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /window\.history\.replaceState/);
   assert.match(markup, /window\.history\.pushState/);
   assert.match(markup, /window\.addEventListener\("popstate", \(\) => \{ void restoreCompleteUrlState\(\); \}\)/);
-  assert.match(markup, /class="customhouse-header__nav"[\s\S]*CREATOR CONTENT/);
-  assert.match(markup, /class="customhouse-mobile-drawer__nav"[\s\S]*CREATOR CONTENT/);
-  assert.match(markup, /href="\/pages\/collections">DESIGN YOUR OWN<\/a>/);
-  assert.match(markup, /href="\/pages\/collections"[\s\S]*<span>DESIGN YOUR OWN<\/span>/);
-  assert.match(markup, /href="\/apps\/customhouse\/creator-content"[^>]*aria-current="page"/);
-  assert.match(markup, /data-customhouse-cart-count hidden/);
-  assert.match(markup, /fetch\("\/cart\.js"/);
-  assert.match(markup, /@media screen and \(min-width:901px\) and \(max-width:1500px\)/);
-  assert.match(markup, /customhouse-header__nav\{[^}]*gap:clamp\(14px,1\.8vw,28px\)/);
-  assert.match(markup, /customhouse-header__nav a\{[^}]*font-size:clamp\(11px,\.72vw,13px\)/);
+  assert.match(markup, /class="customhouse-creator-content-page" data-customhouse/);
+  assert.doesNotMatch(markup, /<header\b[^>]*data-customhouse-shell/);
+  assert.doesNotMatch(markup, /<footer\b[^>]*data-customhouse-shell/);
   for (const [, source] of markup.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
     assert.doesNotThrow(() => new Function(source));
   }

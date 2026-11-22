@@ -162,7 +162,7 @@ test("final marketplace approval and links are app managed", () => {
 
 test("app managed creator cart uses base variants and signed attribution", () => {
   const proxy = readFileSync("app/services/storefront-proxy.server.ts", "utf8");
-  const navigation = readFileSync("app/services/storefront-navigation.ts", "utf8");
+  const themeLayout = readFileSync("theme-live-cart/layout/theme.liquid", "utf8");
   const products = readFileSync("app/services/creator-products.server.ts", "utf8");
   const sales = readFileSync("app/services/creator-sales.server.ts", "utf8");
   const attribution = readFileSync("app/services/creator-attribution.server.ts", "utf8");
@@ -214,45 +214,14 @@ test("app managed creator cart uses base variants and signed attribution", () =>
   assert.doesNotMatch(proxy, /product\.publishedShopifyProductUrl \|\|\s*getCreatorProductStorefrontUrl\(input\.collection, product\)/);
   assert.doesNotMatch(proxy, /customhouse-proxy-header/);
   assert.doesNotMatch(proxy, /customhouse-proxy-footer/);
-  assert.match(proxy, /async function siteHeaderAccount\(context: VerifiedProxyContext\)/);
-  assert.match(
-    proxy,
-    /function siteHeader\(\s*account: SiteHeaderAccount = \{ loggedIn: false \},\s*activePage\?: PublicStorefrontNavKey,\s*\)/,
-  );
-  assert.match(proxy, /function siteFooter\(\)/);
-  assert.match(proxy, /\$\{siteHeader\(input\.headerAccount, "creator-content"\)\}/);
-  assert.match(proxy, /headerAccount: await siteHeaderAccount\(context\)/);
-  assert.match(proxy, /Creator dashboard/);
-  assert.match(proxy, /Log out/);
-  assert.match(proxy, /\$\{siteFooter\(\)\}/);
-  assert.match(proxy, /customhouse-header__nav/);
-  assert.match(proxy, /CUSTOMHOUSE_HEADER_LOGO_URL/);
-  assert.match(proxy, /CUSTOMHOUSE_FOOTER_BACKGROUND_URL/);
-  assert.match(proxy, /Screenshot_43-removebg-preview\.png\?width=900/);
-  assert.match(proxy, /ChatGPT_Image_Jun_27_2026_06_10_23_PM\.png\?width=2400/);
-  assert.match(proxy, /background:#050505/);
-  assert.doesNotMatch(proxy, /body:has\(\.customhouse-public-page\) \.customhouse-public-hero\{padding-top/);
-  assert.match(proxy, /customhouse-header__nav a\{font-family:Inter/);
-  assert.match(proxy, /customhouse-mobile-drawer__nav a,.customhouse-mobile-drawer__account a\{display:grid[^}]*font-weight:800/);
-  assert.match(proxy, /@media screen and \(min-width:901px\)\{\.customhouse-header__menu-button\{display:none!important\}/);
-  assert.match(proxy, /FooterStrip-customhouse-app/);
-  assert.match(proxy, /footer-strip__texture/);
-  assert.match(proxy, /#FooterStrip-customhouse-app \.footer-strip__heading,#FooterStrip-customhouse-app \.footer-strip__link\{[^}]*font-family:Inter/);
-  assert.match(proxy, /--footer-link-size:17px/);
-  assert.match(proxy, /customhouse-mobile-drawer__line-icon/);
-  assert.match(proxy, /customhouse-header__profile-menu/);
-  assert.match(proxy, /customhouse-header__profile-menu\{[^}]*gap:4px/);
-  assert.match(proxy, /customhouse-header__profile-choice\{[^}]*display:grid;gap:6px;[^}]*border-top:1px solid rgb\(255 255 255 \/ \.1\)/);
-  assert.match(proxy, /customhouse-header__profile-choice strong\{display:block/);
-  assert.match(proxy, /customhouse-header__profile-choice small\{display:block;[^}]*line-height:1\.45/);
-  assert.match(navigation, /T-SHIRTS/);
-  assert.match(navigation, /HOODIES/);
-  assert.match(navigation, /DESIGN SELV/);
-  assert.match(navigation, /INSPIRATION/);
-  assert.match(navigation, /DESIGN YOUR OWN/);
-  assert.match(navigation, /CREATOR CONTENT/);
-  assert.match(proxy, /FÖLJ OSS/);
-  assert.match(proxy, /BECOME A CREATOR/);
+  assert.match(proxy, /return context\.liquid\(content, \{/);
+  assert.match(proxy, /layout: true/);
+  assert.doesNotMatch(proxy, /headerAccount: await siteHeaderAccount/);
+  assert.doesNotMatch(proxy, /\$\{siteHeader\(input\./);
+  assert.doesNotMatch(proxy, /\$\{siteFooter\(\)\}/);
+  assert.match(themeLayout, /{% sections 'header-group' %}/);
+  assert.match(themeLayout, /{{ content_for_layout }}/);
+  assert.match(themeLayout, /{% sections 'footer-group' %}/);
   assert.match(proxy, /Material\+Symbols\+Outlined/);
   assert.match(proxy, /material-symbols-outlined/);
   assert.match(proxy, /shopping_bag/);

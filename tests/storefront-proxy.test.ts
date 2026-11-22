@@ -7,6 +7,8 @@ import {
   creatorTermsHtml,
   handleStorefrontProxy,
   parseProxyRoute,
+  storefrontThemeContent,
+  storefrontThemeResponse,
   type ProxyAuthenticator,
 } from "../app/services/storefront-proxy.server.ts";
 
@@ -107,6 +109,53 @@ test("Creator Terms page preserves paragraphs and escapes merchant content", () 
   assert.match(markup, /<p>First paragraph\.<\/p>/);
   assert.match(markup, /Second &lt;script&gt;alert\(1\)&lt;\/script&gt; line\./);
   assert.doesNotMatch(markup, /<script>alert\(1\)<\/script>/);
+});
+
+test("Shopify theme content removes only the duplicated standalone shell", () => {
+  const document = creatorTermsHtml({
+    title: "Creator Terms",
+    body: "Read these terms.",
+  });
+  const content = storefrontThemeContent(document);
+
+  assert.match(content, /<style>[\s\S]*\[data-customhouse\]/);
+  assert.match(content, /<div class="customhouse-terms-page" data-customhouse>/);
+  assert.match(content, /Read these terms\./);
+  assert.doesNotMatch(content, /<!doctype|<html|<head|<body/i);
+  assert.doesNotMatch(content, /data-customhouse-shell/);
+  assert.doesNotMatch(content, /<header\b|<footer\b|<aside id="CustomhouseMobileDrawer-app"/i);
+  assert.doesNotMatch(content, /<footer[^>]+FooterStrip-customhouse-app/i);
+  assert.doesNotMatch(content, /\.customhouse-header|\.customhouse-mobile-drawer/);
+  assert.doesNotMatch(content, /FooterStrip-customhouse-app|\.footer-strip__/);
+  assert.doesNotMatch(content, /<main\b/i);
+});
+
+test("Shopify Liquid response keeps the published theme layout enabled", async () => {
+  let options: (ResponseInit & { layout?: boolean }) | undefined;
+  let liquidBody = "";
+  const response = await storefrontThemeResponse(
+    new Response(
+      "<!doctype html><html><head><style>[data-customhouse]{color:white}</style></head><body><main data-customhouse>App content</main></body></html>",
+      { status: 200 },
+    ),
+    {
+      shop: "example.myshopify.com",
+      customerId: null,
+      liquid(body, initAndOptions) {
+        liquidBody = body;
+        options = typeof initAndOptions === "object" ? initAndOptions : undefined;
+        return new Response(body, {
+          status: options?.status || 200,
+          headers: { "Content-Type": "application/liquid" },
+        });
+      },
+    },
+  );
+
+  assert.equal(response.headers.get("content-type"), "application/liquid");
+  assert.equal(options?.layout, true);
+  assert.match(liquidBody, /<div data-customhouse>App content<\/div>/);
+  assert.doesNotMatch(liquidBody, /<!doctype|<html|<body|<main/i);
 });
 
 test("public collection share targets encode the canonical collection URL", () => {
