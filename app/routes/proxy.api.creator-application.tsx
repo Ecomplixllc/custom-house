@@ -143,6 +143,7 @@ export async function action({ request }: ActionFunctionArgs) {
         aboutWork: typeof body.aboutWork === "string" ? body.aboutWork : undefined,
         referralCode:
           typeof body.referralCode === "string" ? body.referralCode : undefined,
+        termsReadConfirmed: body.termsReadConfirmed === true,
         termsAccepted: body.termsAccepted === true,
         accuracyConfirmed: body.accuracyConfirmed === true,
       },

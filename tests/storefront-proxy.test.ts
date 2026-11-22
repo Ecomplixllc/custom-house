@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   collectionShareTargets,
+  creatorTermsHtml,
   handleStorefrontProxy,
   parseProxyRoute,
   type ProxyAuthenticator,
@@ -71,6 +72,7 @@ test("base proxy route provides an unsigned production-safe health response", as
 });
 
 test("catch-all child routes are parsed deterministically", () => {
+  assert.deepEqual(parseProxyRoute("creator-terms"), { kind: "creatorTerms" });
   assert.deepEqual(parseProxyRoute("creators"), { kind: "creators" });
   assert.deepEqual(parseProxyRoute("creator/john-doe"), {
     kind: "creator",
@@ -94,6 +96,17 @@ test("catch-all child routes are parsed deterministically", () => {
     kind: "designCart",
     designId: "abc123",
   });
+});
+
+test("Creator Terms page preserves paragraphs and escapes merchant content", () => {
+  const markup = creatorTermsHtml({
+    title: "Creator Terms <Draft>",
+    body: "First paragraph.\n\nSecond <script>alert(1)</script> line.",
+  });
+  assert.match(markup, /Creator Terms &lt;Draft&gt;/);
+  assert.match(markup, /<p>First paragraph\.<\/p>/);
+  assert.match(markup, /Second &lt;script&gt;alert\(1\)&lt;\/script&gt; line\./);
+  assert.doesNotMatch(markup, /<script>alert\(1\)<\/script>/);
 });
 
 test("public collection share targets encode the canonical collection URL", () => {

@@ -710,6 +710,19 @@
   line-height: 1.35;
 }
 
+.ch-application__check a {
+  color: var(--ch-app-primary);
+  font-weight: 900;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.ch-application__check a:hover,
+.ch-application__check a:focus-visible {
+  color: #3f17a8;
+}
+
 .ch-application__actions {
   display: flex;
   justify-content: flex-end;

@@ -294,7 +294,8 @@ function validateClient(value) {
   if (value.portfolioUrl && !/^https:\/\/[^ ]+\.[^ ]+/i.test(value.portfolioUrl.trim())) errors.portfolioUrl = "Portfolio URL must use HTTPS.";
   if (value.aboutWork.length > 1000) errors.aboutWork = "Keep this under 1000 characters.";
   if (!value.accuracyConfirmed) errors.accuracyConfirmed = "Confirm the details are accurate.";
-  if (!value.termsAccepted) errors.termsAccepted = "Accept the creator terms.";
+  if (!value.termsReadConfirmed) errors.termsAccepted = "Please open and read the T&C.";
+  else if (!value.termsAccepted) errors.termsAccepted = "Accept the creator terms.";
   return errors;
 }
 
@@ -400,6 +401,7 @@ function renderForm(root, state, step = 0, errors = {}) {
   const customer = state.customer || {};
   const options = state.options || { platforms: [], audienceRanges: [], categories: [] };
   const values = applicationValues(application, customer, state.referral);
+  const termsUrl = root.dataset.termsUrl || "/apps/customhouse/creator-terms";
   const title = step === 0 ? "Tell us about you" : step === 1 ? "Creator Presence" : "Review Application";
   const subtitle = step === 0 ? "Update your basic information." : step === 1 ? "Your platforms, audience, and content." : "Review your details before submitting.";
   const stepMarkup = [
@@ -451,7 +453,7 @@ function renderForm(root, state, step = 0, errors = {}) {
         <span><strong>Bio</strong>${escapeHtml(values.bio || "Not entered")}</span>
       </div>
       <label class="ch-application__check"><input type="checkbox" name="accuracyConfirmed" ${values.accuracyConfirmed ? "checked" : ""}> <span>I confirm that the information provided is accurate.</span></label>${fieldError("accuracyConfirmed", errors)}
-      <label class="ch-application__check"><input type="checkbox" name="termsAccepted" ${values.termsAccepted ? "checked" : ""}> <span>I agree to the Creator Terms.</span></label>${fieldError("termsAccepted", errors)}
+      <label class="ch-application__check"><input type="checkbox" name="termsAccepted" ${values.termsAccepted ? "checked" : ""}> <span>I agree to the <a href="${escapeHtml(termsUrl)}" target="_blank" rel="noopener noreferrer" data-creator-terms-link>Creator Terms &amp; Conditions</a>.</span></label>${fieldError("termsAccepted", errors)}
     </div>`,
   ];
   screen.innerHTML = `
@@ -474,12 +476,17 @@ function renderForm(root, state, step = 0, errors = {}) {
   `;
   applyApplicationTranslations(root);
   const form = screen.querySelector("form");
+  screen.querySelector("[data-creator-terms-link]")?.addEventListener("click", (event) => {
+    root.__customHouseCreatorTermsOpened = true;
+    event.currentTarget.dataset.termsOpened = "true";
+  });
   root.querySelectorAll("[data-step-jump]").forEach((button) => {
     button.addEventListener("click", () => renderForm(root, { ...state, application: { ...application, ...formValues(form) } }, Number(button.dataset.stepJump), errors));
   });
   screen.querySelector("[data-back]").addEventListener("click", () => renderForm(root, { ...state, application: { ...application, ...formValues(form) } }, Math.max(0, step - 1), errors));
   const goNext = () => {
     const value = { ...applicationValues(application, customer, state.referral), ...formValues(form) };
+    value.termsReadConfirmed = root.__customHouseCreatorTermsOpened === true;
     const nextErrors = validateClient(value);
     const stepHasError = step === 0 ? nextErrors.displayName || nextErrors.legalName || nextErrors.bio : nextErrors.primaryProfileUrl || nextErrors.portfolioUrl || nextErrors.aboutWork;
     if (stepHasError) {
@@ -501,6 +508,7 @@ function renderForm(root, state, step = 0, errors = {}) {
     const current = screen.querySelector("[data-submit]");
     if (!current || current.disabled) return;
     const value = { ...applicationValues(application, customer, state.referral), ...formValues(form) };
+    value.termsReadConfirmed = root.__customHouseCreatorTermsOpened === true;
     const nextErrors = validateClient(value);
     if (Object.keys(nextErrors).length) {
       renderForm(root, { ...state, application: { ...application, ...value } }, step, nextErrors);

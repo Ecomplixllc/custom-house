@@ -333,6 +333,9 @@ export async function getCreatorApplicationState(
 }
 
 function requireNativeFields(input: CreatorApplicationInput) {
+  if (input.termsAccepted && !input.termsReadConfirmed) {
+    throw new DomainError("TERMS_NOT_OPENED", "Please open and read the T&C.");
+  }
   if (!input.accuracyConfirmed) {
     throw new DomainError("ACCURACY_REQUIRED", "Confirm the application details are accurate.");
   }
@@ -520,6 +523,7 @@ export async function submitCreatorApplication(
     hasPlatform: Boolean(input.primaryPlatform),
     hasProfileUrl: Boolean(input.primaryProfileUrl),
     categoryCount: input.categories?.length || 0,
+    termsReadConfirmed: input.termsReadConfirmed === true,
     termsAccepted: input.termsAccepted === true,
     accuracyConfirmed: input.accuracyConfirmed === true,
   });

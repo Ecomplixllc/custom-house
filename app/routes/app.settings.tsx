@@ -19,6 +19,11 @@ import {
   DEFAULT_CREATOR_WELCOME_BODY,
   DEFAULT_CREATOR_WELCOME_SUBJECT,
 } from "../services/creator-welcome-email.server";
+import {
+  cleanCreatorTermsContent,
+  DEFAULT_CREATOR_TERMS_BODY,
+  DEFAULT_CREATOR_TERMS_TITLE,
+} from "../services/creator-terms";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -30,6 +35,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const welcomeEmailTransport = creatorWelcomeEmailTransportStatus();
   return {
     config,
+    creatorTermsUrl: `https://${session.shop}/apps/customhouse/creator-terms`,
     welcomeEmailTransportConfigured: welcomeEmailTransport.configured,
     welcomeEmailTransportMissing: welcomeEmailTransport.missing,
   };
@@ -73,6 +79,8 @@ export async function action({ request }: ActionFunctionArgs) {
         inkybayBuyOnlyHiddenSelectorsJson: "[]",
         creatorWelcomeEmailSubject: DEFAULT_CREATOR_WELCOME_SUBJECT,
         creatorWelcomeEmailBody: DEFAULT_CREATOR_WELCOME_BODY,
+        creatorTermsTitle: DEFAULT_CREATOR_TERMS_TITLE,
+        creatorTermsBody: DEFAULT_CREATOR_TERMS_BODY,
       },
     });
   }
@@ -88,6 +96,10 @@ export async function action({ request }: ActionFunctionArgs) {
   const welcomeEmail = cleanWelcomeEmailContent(
     form.get("creatorWelcomeEmailSubject"),
     form.get("creatorWelcomeEmailBody"),
+  );
+  const creatorTerms = cleanCreatorTermsContent(
+    form.get("creatorTermsTitle"),
+    form.get("creatorTermsBody"),
   );
 
   const settings = {
@@ -110,6 +122,8 @@ export async function action({ request }: ActionFunctionArgs) {
     inkybayBuyOnlyHiddenSelectorsJson: JSON.stringify(selectors),
     creatorWelcomeEmailSubject: welcomeEmail.subject,
     creatorWelcomeEmailBody: welcomeEmail.body,
+    creatorTermsTitle: creatorTerms.title,
+    creatorTermsBody: creatorTerms.body,
   };
 
   return db.shopConfig.upsert({
@@ -122,6 +136,7 @@ export async function action({ request }: ActionFunctionArgs) {
 export default function Settings() {
   const {
     config,
+    creatorTermsUrl,
     welcomeEmailTransportConfigured,
     welcomeEmailTransportMissing,
   } = useLoaderData<typeof loader>();
@@ -222,6 +237,53 @@ export default function Settings() {
                 <SubmitButton name="intent" value="reset-welcome-email" confirmMessage="Reset the Creator welcome email to the CustomHouse default?">
                   Reset welcome email to default
                 </SubmitButton>
+              </div>
+            </section>
+
+            <section className="settings-card settings-card--wide">
+              <div className="settings-card-heading">
+                <span className="settings-icon settings-icon--general" />
+                <div>
+                  <h2>Creator Terms &amp; Conditions</h2>
+                  <p>
+                    Paste the legal text shown to applicants. The application
+                    requires applicants to open this public page before they
+                    can accept the terms and submit.
+                  </p>
+                </div>
+                <a
+                  className="settings-learn-link"
+                  href={creatorTermsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open public page
+                </a>
+              </div>
+              <div className="settings-field-stack">
+                <label>
+                  <span>Page title</span>
+                  <input
+                    name="creatorTermsTitle"
+                    maxLength={200}
+                    defaultValue={config.creatorTermsTitle}
+                    required
+                  />
+                </label>
+                <label>
+                  <span>Legal text</span>
+                  <textarea
+                    name="creatorTermsBody"
+                    rows={18}
+                    maxLength={50000}
+                    defaultValue={config.creatorTermsBody}
+                    required
+                  />
+                  <small>
+                    Paragraphs and line breaks are preserved. Plain text is
+                    displayed safely on the public page.
+                  </small>
+                </label>
               </div>
             </section>
 

@@ -251,6 +251,8 @@ model ShopConfig {
   inkybayBuyOnlyHiddenSelectorsJson  String    @default("[]")
   creatorWelcomeEmailSubject         String    @default("Welcome to CustomHouse Creator")
   creatorWelcomeEmailBody            String    @default("Welcome to CustomHouse Creator, {{creator_name}}!\n\nNext steps:\n1. Open your Creator Dashboard: {{dashboard_url}}\n2. Complete your profile and collection banner.\n3. Create your first product by choosing one color and one printing method.\n\nTips & tricks: use a clear product title, preview every placement, and submit only artwork you have the rights to use.")
+  creatorTermsTitle                  String    @default("Creator Terms & Conditions")
+  creatorTermsBody                   String    @default("Please replace this placeholder with the approved Creator Terms & Conditions in Creator Marketplace Settings before accepting applications.")
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }

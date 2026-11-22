@@ -22,6 +22,10 @@ import {
   type PublicStorefrontNavKey,
 } from "./storefront-navigation.ts";
 import { creatorProductSeo } from "./creator-product-seo.ts";
+import {
+  DEFAULT_CREATOR_TERMS_BODY,
+  DEFAULT_CREATOR_TERMS_TITLE,
+} from "./creator-terms.ts";
 
 const SAFE_HEADERS = {
   "Cache-Control": "no-store",
@@ -47,6 +51,7 @@ export type ProxyAuthenticator = (
 
 type ProxyRoute =
   | { kind: "base" }
+  | { kind: "creatorTerms" }
   | { kind: "creatorContent" }
   | { kind: "creators" }
   | { kind: "creator"; creatorHandle: string }
@@ -792,6 +797,53 @@ function siteShellScript() {
       });
     })();
   </script>`;
+}
+
+export function creatorTermsHtml(input: {
+  title: string;
+  body: string;
+  account?: SiteHeaderAccount;
+}) {
+  const paragraphs = String(input.body || "")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replaceAll("\n", "<br>")}</p>`)
+    .join("");
+  return `<!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>${escapeHtml(input.title)} | Custom House</title>
+        <meta name="description" content="Creator Terms &amp; Conditions for Custom House applicants.">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&amp;display=swap" rel="stylesheet">
+        ${publicCss()}
+        <style>
+          .customhouse-terms-page{width:min(920px,calc(100vw - 2rem));margin:0 auto;padding:clamp(2rem,6vw,5rem) 0}
+          .customhouse-terms-card{padding:clamp(1.25rem,5vw,3.5rem);border:1px solid rgba(255,255,255,.13);border-radius:14px;background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(0,0,0,.94));box-shadow:0 24px 70px rgba(0,0,0,.28)}
+          .customhouse-terms-card small{display:block;margin-bottom:.65rem;color:#c8ff00;font-size:.78rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+          .customhouse-terms-card h1{margin:0 0 2rem;color:#fff;font-family:Impact,Haettenschweiler,"Arial Narrow Bold",sans-serif;font-size:clamp(2.35rem,7vw,4.8rem);font-style:italic;line-height:.95;text-transform:uppercase}
+          .customhouse-terms-content{color:#d8dbe4;font-size:1rem;line-height:1.75}
+          .customhouse-terms-content p{margin:0 0 1.35rem;white-space:normal}
+          .customhouse-terms-content p:last-child{margin-bottom:0}
+        </style>
+      </head>
+      <body data-customhouse>
+        ${siteHeader(input.account)}
+        <main class="customhouse-terms-page">
+          <article class="customhouse-terms-card">
+            <small>Creator application</small>
+            <h1>${escapeHtml(input.title)}</h1>
+            <div class="customhouse-terms-content">${paragraphs}</div>
+          </article>
+        </main>
+        ${siteFooter()}
+        ${siteShellScript()}
+      </body>
+    </html>`;
 }
 
 export function creatorContentPaginationModel(
@@ -2577,6 +2629,9 @@ function safeSegment(value: string, label: string): string {
 export function parseProxyRoute(splat = ""): ProxyRoute {
   const parts = splat.split("/").filter(Boolean);
   if (parts.length === 0) return { kind: "base" };
+  if (parts.length === 1 && parts[0] === "creator-terms") {
+    return { kind: "creatorTerms" };
+  }
   if (parts.length === 1 && parts[0] === "creator-content") {
     return { kind: "creatorContent" };
   }
@@ -2716,6 +2771,30 @@ export async function handleStorefrontProxy(
           message: "Custom House Shopify App Proxy is working",
           customer,
         });
+      case "creatorTerms":
+        if (request.method !== "GET") {
+          return failure(
+            "METHOD_NOT_ALLOWED",
+            "Creator Terms only supports GET requests.",
+            405,
+          );
+        }
+        {
+          const [config, account] = await Promise.all([
+            db.shopConfig.findUnique({
+              where: { shop: context.shop },
+              select: { creatorTermsTitle: true, creatorTermsBody: true },
+            }),
+            siteHeaderAccount(context),
+          ]);
+          return html(
+            creatorTermsHtml({
+              title: config?.creatorTermsTitle || DEFAULT_CREATOR_TERMS_TITLE,
+              body: config?.creatorTermsBody || DEFAULT_CREATOR_TERMS_BODY,
+              account,
+            }),
+          );
+        }
       case "creatorContent":
         if (request.method !== "GET") {
           return failure(

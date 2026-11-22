@@ -2,7 +2,7 @@
 {% assign creator_dashboard_url = block.settings.dashboard_url | default: '/pages/creator-dashboard' %}
 {% assign application_return_to = request.path | default: '/pages/become-a-creator' | url_encode %}
 {% assign creator_application_login_url = '/customer_authentication/login?return_to=' | append: application_return_to %}
-{% assign creator_application_asset_release = '2026-11-21-localization-v1' %}
+{% assign creator_application_asset_release = '2026-11-22-creator-terms-v1' %}
 
 {% if request.page_type == 'page' and page.handle == protected_handle %}
   {{ 'creator-application.css' | asset_url | stylesheet_tag }}
@@ -22,6 +22,7 @@
     data-submit-endpoint="/apps/customhouse/api/applications"
     data-dashboard-url="{{ creator_dashboard_url | escape }}"
     data-login-url="{{ creator_application_login_url | escape }}"
+    data-terms-url="/apps/customhouse/creator-terms"
   >
     <div class="ch-application__shell">
       <header class="ch-application__header" data-application-header>

@@ -46,6 +46,7 @@ export interface CreatorApplicationInput {
   profileImageUrl?: string;
   message?: string;
   referralCode?: string;
+  termsReadConfirmed?: boolean;
   termsAccepted: boolean;
   accuracyConfirmed?: boolean;
 }
@@ -58,6 +59,7 @@ function cleanText(value: string, name: string, min: number, max: number): strin
 
 export function validateCreatorApplication(input: CreatorApplicationInput) {
   if (!input.termsAccepted) throw new DomainError("TERMS_REQUIRED", "You must accept the creator terms.");
+  if (!input.termsReadConfirmed) throw new DomainError("TERMS_NOT_OPENED", "Please open and read the T&C.");
   if (!input.accuracyConfirmed) throw new DomainError("ACCURACY_REQUIRED", "Confirm the application details are accurate.");
   const primaryPlatformValue = input.primaryPlatform?.trim();
   const primaryProfileUrlValue = input.primaryProfileUrl?.trim();

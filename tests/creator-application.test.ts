@@ -11,8 +11,13 @@ import {
   DEFAULT_CREATOR_WELCOME_SUBJECT,
   sendCreatorWelcomeEmail,
 } from "../app/services/creator-welcome-email.server.ts";
+import {
+  cleanCreatorTermsContent,
+  DEFAULT_CREATOR_TERMS_BODY,
+  DEFAULT_CREATOR_TERMS_TITLE,
+} from "../app/services/creator-terms.ts";
 
-const valid = { legalName: "Ada Lovelace", displayName: "Ada Creates", country: "Sweden", city: "Stockholm", bio: "A sufficiently long creator biography.", primaryPlatform: "Instagram", primaryProfileUrl: "https://instagram.com/adacreates", audienceRange: "1K-10K", categories: ["Art", "Lifestyle"], portfolioUrl: "https://example.org/portfolio", socialLinks: ["https://example.org/social"], termsAccepted: true, accuracyConfirmed: true };
+const valid = { legalName: "Ada Lovelace", displayName: "Ada Creates", country: "Sweden", city: "Stockholm", bio: "A sufficiently long creator biography.", primaryPlatform: "Instagram", primaryProfileUrl: "https://instagram.com/adacreates", audienceRange: "1K-10K", categories: ["Art", "Lifestyle"], portfolioUrl: "https://example.org/portfolio", socialLinks: ["https://example.org/social"], termsReadConfirmed: true, termsAccepted: true, accuracyConfirmed: true };
 
 test("valid creator application is normalized", () => { const value = validateCreatorApplication(valid); assert.equal(value.displayName, "Ada Creates"); assert.equal(value.primaryPlatform, "Instagram"); assert.deepEqual(value.categories, ["Art", "Lifestyle"]); assert.equal(value.socialLinks.length, 2); assert.ok(value.termsAcceptedAt instanceof Date); });
 test("creator application accepts no social presence or bio", () => {
@@ -33,6 +38,7 @@ test("creator application accepts no social presence or bio", () => {
 test("creator application accepts only a display name and legal confirmations", () => {
   const value = validateCreatorApplication({
     displayName: "Minimal Creator",
+    termsReadConfirmed: true,
     termsAccepted: true,
     accuracyConfirmed: true,
   });
@@ -61,8 +67,9 @@ test("empty optional URLs are ignored", () => {
 test("a populated invalid optional URL is rejected", () => assert.throws(() => validateCreatorApplication({ ...valid, primaryProfileUrl: "not-a-url" }), /HTTPS/));
 test("a populated invalid additional social URL is rejected", () => assert.throws(() => validateCreatorApplication({ ...valid, socialLinks: ["not-a-url"] }), /HTTPS/));
 test("creator display name is required", () => assert.throws(() => validateCreatorApplication({ ...valid, displayName: "" }), /Display name/));
-test("accuracy confirmation is required", () => assert.throws(() => validateCreatorApplication({ displayName: "Ada Creates", termsAccepted: true }), /details are accurate/i));
+test("accuracy confirmation is required", () => assert.throws(() => validateCreatorApplication({ displayName: "Ada Creates", termsReadConfirmed: true, termsAccepted: true }), /details are accurate/i));
 test("creator terms are required", () => assert.throws(() => validateCreatorApplication({ displayName: "Ada Creates", accuracyConfirmed: true } as Parameters<typeof validateCreatorApplication>[0]), /accept the creator terms/i));
+test("creator terms must be opened before acceptance", () => assert.throws(() => validateCreatorApplication({ ...valid, termsReadConfirmed: false }), /open and read the T&C/i));
 test("invalid creator application input is rejected", () => assert.throws(() => validateCreatorApplication({ ...valid, legalName: "A" }), /Legal name/));
 test("invalid creator platform is rejected", () => assert.throws(() => validateCreatorApplication({ ...valid, primaryPlatform: "MySpace" }), /Primary platform/));
 test("invalid creator category is rejected", () => assert.throws(() => validateCreatorApplication({ ...valid, categories: ["Bad category"] }), /Creator category/));
@@ -120,7 +127,7 @@ test("storefront Creator Application localizes every screen in English and Swedi
     assert.match(block, /render 'creator-application-translations'/);
     assert.match(block, /creator_application\.heading_initial' \| t/);
     assert.match(block, /creator_application\.loading_status' \| t/);
-    assert.match(block, /2026-11-21-localization-v1/);
+    assert.match(block, /2026-11-22-creator-terms-v1/);
   }
 });
 test("storefront Creator Application escapes narrow theme containers", () => {
@@ -131,6 +138,59 @@ test("storefront Creator Application escapes narrow theme containers", () => {
 test("native Creator Application server does not require categories", () => {
   const service = readFileSync("app/services/creator-application.server.ts", "utf8");
   assert.doesNotMatch(service, /CATEGORIES_REQUIRED|Choose at least one creator category/);
+});
+
+test("Creator Terms content is editable, sanitized, and has safe defaults", () => {
+  const schema = readFileSync("prisma/schema.prisma", "utf8");
+  const migration = readFileSync(
+    "prisma/migrations/20261122000000_creator_terms_content/migration.sql",
+    "utf8",
+  );
+  assert.equal(DEFAULT_CREATOR_TERMS_TITLE, "Creator Terms & Conditions");
+  assert.match(DEFAULT_CREATOR_TERMS_BODY, /replace this placeholder/i);
+  assert.deepEqual(
+    cleanCreatorTermsContent(" Creator Terms\u0000 ", " First paragraph.\r\n\r\nSecond paragraph.\u0007 "),
+    {
+      title: "Creator Terms",
+      body: "First paragraph.\n\nSecond paragraph.",
+    },
+  );
+  assert.throws(() => cleanCreatorTermsContent("", "Body"), /title and legal text are required/i);
+  assert.throws(() => cleanCreatorTermsContent("Title", "x".repeat(50_001)), /too long/i);
+  assert.match(schema, /creatorTermsTitle\s+String/);
+  assert.match(schema, /creatorTermsBody\s+String/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS "creatorTermsTitle"/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS "creatorTermsBody"/);
+});
+
+test("Creator Application links to the managed terms page and blocks unread acceptance", () => {
+  const block = readFileSync(
+    "extensions/customhouse-creator-storefront/blocks/creator-application.liquid",
+    "utf8",
+  );
+  const script = readFileSync(
+    "extensions/customhouse-creator-storefront/assets/creator-application.js",
+    "utf8",
+  );
+  const settings = readFileSync("app/routes/app.settings.tsx", "utf8");
+  const proxy = readFileSync("app/services/storefront-proxy.server.ts", "utf8");
+  const submitRoutes = [
+    readFileSync("app/routes/proxy.api.creator-application.tsx", "utf8"),
+    readFileSync("app/routes/proxy.api.applications.tsx", "utf8"),
+  ];
+
+  assert.match(block, /data-terms-url="\/apps\/customhouse\/creator-terms"/);
+  assert.match(script, /data-creator-terms-link/);
+  assert.match(script, /target="_blank"/);
+  assert.match(script, /Please open and read the T&C\./);
+  assert.match(script, /termsReadConfirmed/);
+  assert.match(settings, /Creator Terms &amp; Conditions/);
+  assert.match(settings, /name="creatorTermsBody"/);
+  assert.match(proxy, /kind: "creatorTerms"/);
+  assert.match(proxy, /creatorTermsHtml/);
+  for (const route of submitRoutes) {
+    assert.match(route, /termsReadConfirmed: body\.termsReadConfirmed === true/);
+  }
 });
 
 test("Admin Creator directory exposes guarded permanent deletion with explicit confirmation", () => {
