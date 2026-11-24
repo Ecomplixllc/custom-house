@@ -64,6 +64,17 @@ test("Collections discovery renders eligible products from every configured cate
   assert.match(section, /append: configured_category_aliases/);
 });
 
+test("Collections discovery renders Swedish category copy while preserving custom block overrides", () => {
+  const section = readFileSync("theme-live-cart/sections/customhouse-collections-discovery.liquid", "utf8");
+
+  assert.match(section, /request\.locale\.iso_code == 'sv'/);
+  assert.match(section, /T-SHIRTAR,HUVTRÖJOR,BYXOR,KEPSAR,ACCESSOARER/);
+  assert.match(section, /Designa din t-shirt\|\|Designa din huvtröja/);
+  assert.match(section, /Joggingbyxor, mjukisbyxor och mer/);
+  assert.match(section, /category_block\.settings\.label/);
+  assert.match(section, /category_block\.settings\.description/);
+});
+
 test("global header adds one duplicate-safe Collections discovery link without replacing menu links", () => {
   const desktop = readFileSync("theme-live-cart/blocks/_header-menu.liquid", "utf8");
   const drawer = readFileSync("theme-live-cart/snippets/header-drawer.liquid", "utf8");

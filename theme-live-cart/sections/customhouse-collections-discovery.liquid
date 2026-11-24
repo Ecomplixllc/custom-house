@@ -57,10 +57,27 @@
       <div class="chd-categories__track">
         {% liquid
           assign default_category_handles = 't-shirts,hoodies,pants,caps,accessories' | split: ','
-          assign default_category_labels = 'T-SHIRTS,HOODIES,PANTS,CAPS,ACCESSORIES' | split: ','
-          assign default_category_descriptions = 'Design your t-shirt||Design your hoodie||Joggers, sweats & more||Design your cap||Bags, beanies, patches & more' | split: '||'
+          assign default_category_labels_english = 'T-SHIRTS,HOODIES,PANTS,CAPS,ACCESSORIES' | split: ','
+          assign default_category_descriptions_english = 'Everyday premium tees||Heavyweight layers||Built for movement||Finish the look||Details that stand out' | split: '||'
+          assign category_labels = default_category_labels_english
+          assign category_descriptions = 'Design your t-shirt||Design your hoodie||Joggers, sweatpants & more||Design your cap||Stickers, bags & more' | split: '||'
+          if request.locale.iso_code == 'sv'
+            assign category_labels = 'T-SHIRTAR,HUVTRÖJOR,BYXOR,KEPSAR,ACCESSOARER' | split: ','
+            assign category_descriptions = 'Designa din t-shirt||Designa din huvtröja||Joggingbyxor, mjukisbyxor och mer||Designa din keps||Klistermärken, väskor och mer' | split: '||'
+          endif
         %}
         {% for category_handle in default_category_handles %}
+          {% liquid
+            assign category_block = section.blocks[forloop.index0]
+            assign category_label = category_labels[forloop.index0]
+            assign category_description = category_descriptions[forloop.index0]
+            if category_block.settings.label != blank and category_block.settings.label != default_category_labels_english[forloop.index0]
+              assign category_label = category_block.settings.label
+            endif
+            if category_block.settings.description != blank and category_block.settings.description != default_category_descriptions_english[forloop.index0]
+              assign category_description = category_block.settings.description
+            endif
+          %}
           <button
             id="chd-category-tab-{{ section.id }}-{{ category_handle }}"
             class="chd-category{% if forloop.first %} is-active{% endif %}"
@@ -81,7 +98,7 @@
                 {% else %}<svg viewBox="0 0 36 36"><path d="M8 12h20l3 19H5l3-19Zm6 2V9a4 4 0 0 1 8 0v5"/></svg>
               {% endcase %}
             </span>
-            <span><strong>{{ default_category_labels[forloop.index0] }}</strong><small>{{ default_category_descriptions[forloop.index0] }}</small></span>
+            <span><strong>{{ category_label | escape }}</strong><small>{{ category_description | escape }}</small></span>
           </button>
         {% endfor %}
       </div>
