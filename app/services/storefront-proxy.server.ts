@@ -669,23 +669,17 @@ export function creatorContentPaginationModel(
 
 export function creatorContentHtml(
   input: Awaited<ReturnType<typeof loadPublicCreatorContent>>,
+  options: { assetOrigin?: string } = {},
 ) {
-  const heroImages = input.products
-    .map((product) => product.imageUrl)
-    .filter((url): url is string => Boolean(url))
-    .slice(0, 3);
-  const heroArt = heroImages.length
-    ? heroImages
-        .map(
-          (url, index) =>
-            `<span class="customhouse-creator-content__hero-shot customhouse-creator-content__hero-shot--${index + 1}"><img src="${escapeHtml(url)}" alt="" loading="${index ? "lazy" : "eager"}"></span>`,
-        )
-        .join("")
-    : `<span class="customhouse-creator-content__hero-monogram" aria-hidden="true">CH</span>`;
-  const categoryChips = ["All", ...input.categories]
+  const assetOrigin = String(options.assetOrigin || "").replace(/\/+$/, "");
+  const heroImageUrl = `${assetOrigin}/images/customhouse-creator-community-hero.png`;
+  const categoryChips = [
+    { value: "All", label: "Alla" },
+    ...input.categories.map((category) => ({ value: category, label: category })),
+  ]
     .map(
       (category, index) =>
-        `<button class="customhouse-creator-content__chip${index === 0 ? " is-active" : ""}" type="button" data-creator-content-category="${escapeHtml(category)}" aria-pressed="${index === 0 ? "true" : "false"}">${escapeHtml(category)}</button>`,
+        `<button class="customhouse-creator-content__chip${index === 0 ? " is-active" : ""}" type="button" data-creator-content-category="${escapeHtml(category.value)}" aria-pressed="${index === 0 ? "true" : "false"}">${escapeHtml(category.label)}</button>`,
     )
     .join("");
   const featuredCreators = input.featuredCreators.length
@@ -698,7 +692,7 @@ export function creatorContentHtml(
             .join("")
             .toUpperCase();
           return `<article class="customhouse-creator-content__creator">
-            <a class="customhouse-creator-content__creator-media" href="${escapeHtml(creator.viewUrl)}" aria-label="View ${escapeHtml(creator.displayName)}">
+            <a class="customhouse-creator-content__creator-media" href="${escapeHtml(creator.viewUrl)}" aria-label="Visa ${escapeHtml(creator.displayName)}">
               ${
                 creator.profileImageUrl
                   ? `<img src="${escapeHtml(creator.profileImageUrl)}" alt="${escapeHtml(creator.displayName)}" loading="lazy">`
@@ -710,11 +704,11 @@ export function creatorContentHtml(
               <small>@${escapeHtml(creator.publicHandle)}</small>
               ${creator.categories.length ? `<p>${escapeHtml(creator.categories.slice(0, 2).join(" · "))}</p>` : ""}
             </div>
-            <a class="customhouse-creator-content__creator-action" href="${escapeHtml(creator.viewUrl)}">VIEW CREATOR</a>
+            <a class="customhouse-creator-content__creator-action" href="${escapeHtml(creator.viewUrl)}">VISA CREATOR</a>
           </article>`;
         })
         .join("")
-    : `<p class="customhouse-creator-content__empty-inline">Featured Creators will appear here when selected by CustomHouse.</p>`;
+    : `<p class="customhouse-creator-content__empty-inline">Utvalda creators visas här när de markeras av Customhouse.</p>`;
   const checkboxGroup = (
     title: string,
     name: string,
@@ -726,7 +720,7 @@ export function creatorContentHtml(
           <div class="customhouse-creator-content__filter-options">
             <div class="customhouse-creator-content__filter-tools" data-creator-content-filter-tools hidden>
               <div class="customhouse-creator-content__filter-search">
-                <input type="search" autocomplete="off" placeholder="Search ${escapeHtml(title.toLocaleLowerCase())}" aria-label="Search ${escapeHtml(title)} options" data-creator-content-filter-search>
+                <input type="search" autocomplete="off" placeholder="Sök bland ${escapeHtml(title.toLocaleLowerCase())}" aria-label="Sök bland alternativen för ${escapeHtml(title)}" data-creator-content-filter-search>
                 <span aria-hidden="true">⌕</span>
               </div>
             </div>
@@ -738,11 +732,11 @@ export function creatorContentHtml(
               )
               .join("")}
             </div>
-            <p class="customhouse-creator-content__filter-no-results" data-creator-content-filter-no-results hidden>No matching options.</p>
+            <p class="customhouse-creator-content__filter-no-results" data-creator-content-filter-no-results hidden>Inga matchande alternativ.</p>
             <div class="customhouse-creator-content__filter-pagination" data-creator-content-filter-pagination hidden>
-              <button type="button" aria-label="Previous ${escapeHtml(title)} options" data-creator-content-filter-page-prev>←</button>
+              <button type="button" aria-label="Föregående alternativ för ${escapeHtml(title)}" data-creator-content-filter-page-prev>←</button>
               <span data-creator-content-filter-page-status aria-live="polite">1 / 1</span>
-              <button type="button" aria-label="Next ${escapeHtml(title)} options" data-creator-content-filter-page-next>→</button>
+              <button type="button" aria-label="Nästa alternativ för ${escapeHtml(title)}" data-creator-content-filter-page-next>→</button>
             </div>
           </div>
         </details>`
@@ -756,40 +750,40 @@ export function creatorContentHtml(
     })),
   );
   const productTypeFilters = checkboxGroup(
-    "Product type",
+    "Produkttyp",
     "productType",
     input.filters.productTypes.map((value) => ({ value, label: value })),
   );
   const tagFilters = checkboxGroup(
-    "Tag",
+    "Tagg",
     "tags",
     input.filters.tags.map((value) => ({ value: value.toLocaleLowerCase(), label: value })),
   );
   const sizeFilters = checkboxGroup(
-    "Size",
+    "Storlek",
     "size",
     input.filters.sizes.map((value) => ({ value, label: value })),
   );
   const colorFilters = checkboxGroup(
-    "Color",
+    "Färg",
     "color",
     input.filters.colors.map((value) => ({ value, label: value })),
   );
   const availabilityFilters = input.products.length
     ? checkboxGroup(
-        "Availability",
+        "Tillgänglighet",
         "availability",
         [
-          { value: "available", label: "In stock" },
+          { value: "available", label: "I lager" },
           ...(input.filters.availability
-            ? [{ value: "unavailable", label: "Sold out" }]
+            ? [{ value: "unavailable", label: "Slutsåld" }]
             : []),
         ],
       )
     : "";
   const priceFilter = input.filters.price
     ? `<details class="customhouse-creator-content__filter-group customhouse-creator-content__filter-group--price">
-        <summary><span data-creator-content-filter-title>Price</span></summary>
+        <summary><span data-creator-content-filter-title>Pris</span></summary>
         <div class="customhouse-creator-content__filter-options">
         <div>
           <label>Min<input type="number" min="${escapeHtml(String(input.filters.price.min))}" max="${escapeHtml(String(input.filters.price.max))}" placeholder="${escapeHtml(String(input.filters.price.min))}" data-creator-content-price-min></label>
@@ -839,7 +833,7 @@ export function creatorContentHtml(
                   ? `<img src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(product.title)}" loading="lazy">`
                   : `<span aria-hidden="true">CH</span>`
               }
-              ${product.available ? "" : `<em>SOLD OUT</em>`}
+              ${product.available ? "" : `<em>SLUTSÅLD</em>`}
             </a>
             <div class="customhouse-creator-content__product-body">
               <a class="customhouse-creator-content__product-creator" href="${escapeHtml(product.creatorUrl)}">
@@ -852,21 +846,21 @@ export function creatorContentHtml(
               ${product.creatorContentTags.length ? `<div class="customhouse-creator-content__product-tags">${product.creatorContentTags.slice(0, 3).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : ""}
               <p class="customhouse-creator-content__product-type">${escapeHtml(product.productType)}</p>
               <strong class="customhouse-creator-content__price">${escapeHtml(price)}</strong>
-              <a class="customhouse-creator-content__buy" href="${escapeHtml(product.viewUrl)}">BUY PRODUCT</a>
+              <a class="customhouse-creator-content__buy" href="${escapeHtml(product.viewUrl)}">KÖP PRODUKT</a>
             </div>
           </article>`;
         })
         .join("")
     : "";
   return html(`<!doctype html>
-    <html lang="en">
+    <html lang="sv">
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Creator Content | CustomHouse</title>
+        <title>Creator Community | CustomHouse</title>
         ${publicCss()}
         <style>
-          .customhouse-creator-content-page{--cc-bg:#060708;--cc-panel:#111216;--cc-panel-2:#17181d;--cc-line:#303139;--cc-text:#f7f7f4;--cc-muted:#a1a3ad;--cc-lime:#b7ff00;--cc-purple:#872cff;min-height:100vh;background:var(--cc-bg);color:var(--cc-text);font-family:Arial,Helvetica,sans-serif}.customhouse-creator-content-page *{box-sizing:border-box}.customhouse-creator-content-page a{color:inherit}.customhouse-creator-content__container{width:min(1440px,calc(100% - 48px));margin:0 auto}.customhouse-creator-content__breadcrumb{display:flex;gap:9px;align-items:center;padding:20px 0 14px;color:#7f818c;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.customhouse-creator-content__breadcrumb span:last-child{color:var(--cc-purple)}.customhouse-creator-content__hero{position:relative;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr);min-height:420px;overflow:hidden;border:1px solid var(--cc-line);background:linear-gradient(115deg,#07080a 0 48%,#181922 48% 100%)}.customhouse-creator-content__hero::after{position:absolute;right:-70px;bottom:-130px;width:340px;height:340px;border:60px solid rgba(135,44,255,.26);border-radius:50%;content:""}.customhouse-creator-content__hero-copy{position:relative;z-index:2;display:flex;flex-direction:column;justify-content:center;padding:52px}.customhouse-creator-content__eyebrow{margin:0 0 12px;color:var(--cc-lime);font-size:12px;font-weight:900;letter-spacing:.16em}.customhouse-creator-content__hero h1{max-width:700px;margin:0;font-size:clamp(54px,6vw,94px);font-style:italic;font-weight:950;letter-spacing:-.07em;line-height:.82}.customhouse-creator-content__hero h1 span{display:block;color:var(--cc-lime)}.customhouse-creator-content__hero-copy>p:last-child{max-width:600px;margin:26px 0 0;color:#d2d3d8;font-size:16px;line-height:1.55}.customhouse-creator-content__hero-art{position:relative;min-height:420px;overflow:hidden}.customhouse-creator-content__hero-shot{position:absolute;display:block;overflow:hidden;border:1px solid rgba(255,255,255,.2);background:#0d0e12;box-shadow:0 24px 60px rgba(0,0,0,.5)}.customhouse-creator-content__hero-shot img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__hero-shot--1{right:6%;top:7%;width:55%;height:82%;transform:rotate(3deg)}.customhouse-creator-content__hero-shot--2{left:2%;bottom:5%;width:38%;height:56%;transform:rotate(-7deg)}.customhouse-creator-content__hero-shot--3{right:1%;bottom:-7%;width:31%;height:45%;transform:rotate(8deg)}.customhouse-creator-content__hero-monogram{position:absolute;inset:0;display:grid;place-items:center;color:rgba(255,255,255,.08);font-size:180px;font-weight:950}.customhouse-creator-content__benefits{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--cc-line);border-top:0;background:#0d0e11}.customhouse-creator-content__benefit{display:grid;grid-template-columns:38px 1fr;gap:10px;align-items:center;min-height:82px;padding:14px 22px;border-right:1px solid var(--cc-line)}.customhouse-creator-content__benefit:last-child{border-right:0}.customhouse-creator-content__benefit b{color:var(--cc-lime);font-size:22px}.customhouse-creator-content__benefit strong,.customhouse-creator-content__benefit small{display:block}.customhouse-creator-content__benefit strong{font-size:12px}.customhouse-creator-content__benefit small{margin-top:4px;color:var(--cc-muted);font-size:10px}.customhouse-creator-content__discovery{padding:42px 0 82px}.customhouse-creator-content__search{position:relative}.customhouse-creator-content__search input{width:100%;height:58px;border:1px solid var(--cc-line);border-radius:6px;outline:0;background:var(--cc-panel);color:var(--cc-text);padding:0 58px 0 20px;font:700 14px/1 Arial}.customhouse-creator-content__search input:focus{border-color:var(--cc-purple);box-shadow:0 0 0 3px rgba(135,44,255,.18)}.customhouse-creator-content__search span{position:absolute;right:20px;top:50%;transform:translateY(-50%);color:var(--cc-lime);font-size:24px}.customhouse-creator-content__chips{display:flex;gap:9px;overflow:auto;padding:16px 0 4px;scrollbar-width:none}.customhouse-creator-content__chips::-webkit-scrollbar{display:none}.customhouse-creator-content__chip{flex:0 0 auto;min-height:37px;border:1px solid var(--cc-line);border-radius:999px;background:var(--cc-panel);color:var(--cc-text);padding:0 17px;font-size:11px;font-weight:800;cursor:pointer}.customhouse-creator-content__chip.is-active{border-color:var(--cc-lime);background:rgba(183,255,0,.09);color:var(--cc-lime)}.customhouse-creator-content__section-heading{display:flex;align-items:end;justify-content:space-between;gap:20px;margin:42px 0 18px}.customhouse-creator-content__section-heading p{margin:0 0 7px;color:var(--cc-lime);font-size:11px;font-weight:900;letter-spacing:.14em}.customhouse-creator-content__section-heading h2{margin:0;font-size:clamp(28px,3vw,44px);letter-spacing:-.05em}.customhouse-creator-content__featured{display:flex;gap:12px;overflow:auto;padding:0 0 10px;scroll-snap-type:x proximity}.customhouse-creator-content__creator{display:grid;grid-template-columns:68px minmax(120px,1fr);grid-template-rows:auto auto;gap:10px 13px;min-width:285px;max-width:330px;flex:1 0 285px;border:1px solid var(--cc-line);border-radius:10px;background:linear-gradient(145deg,var(--cc-panel-2),#0b0c0f);padding:14px;scroll-snap-align:start}.customhouse-creator-content__creator-media{grid-row:1/3;width:68px;height:68px;overflow:hidden;border:2px solid var(--cc-purple);border-radius:50%;background:#20152d;text-decoration:none}.customhouse-creator-content__creator-media img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__creator-media span{display:grid;width:100%;height:100%;place-items:center;color:var(--cc-lime);font-size:20px;font-weight:900}.customhouse-creator-content__creator-copy{min-width:0}.customhouse-creator-content__creator-copy strong,.customhouse-creator-content__creator-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.customhouse-creator-content__creator-copy small,.customhouse-creator-content__creator-copy p{color:var(--cc-muted);font-size:10px}.customhouse-creator-content__creator-copy p{margin:5px 0 0}.customhouse-creator-content__creator-action{justify-self:start;color:var(--cc-lime);font-size:10px;font-weight:900;text-decoration:none}.customhouse-creator-content__empty-inline{color:var(--cc-muted)}.customhouse-creator-content__toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:38px 0 14px}.customhouse-creator-content__toolbar-left{display:flex;align-items:center;gap:12px}.customhouse-creator-content__toolbar button,.customhouse-creator-content__toolbar select{height:42px;border:1px solid var(--cc-line);border-radius:6px;background:var(--cc-panel);color:var(--cc-text);padding:0 14px;font-size:11px;font-weight:800}.customhouse-creator-content__filter-open{display:block;cursor:pointer}.customhouse-creator-content__active-filters{display:flex;gap:7px;flex-wrap:wrap}.customhouse-creator-content__active-filters button{height:30px;border-color:rgba(135,44,255,.7);color:#d8c2ff}.customhouse-creator-content__results{display:block}.customhouse-creator-content__results.is-filter-open{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px}.customhouse-creator-content__filters{position:sticky;top:18px;align-self:start;border:1px solid var(--cc-line);border-radius:8px;background:var(--cc-panel);padding:18px}.customhouse-creator-content__filter-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--cc-line);padding:0 0 14px}.customhouse-creator-content__filter-head h3{margin:0;font-size:15px}.customhouse-creator-content__filter-head button{border:0;background:none;color:var(--cc-lime);font-size:10px;font-weight:800;cursor:pointer}.customhouse-creator-content__filter-close{display:none}.customhouse-creator-content__filter-group{display:grid;gap:9px;margin:0;padding:17px 0;border:0;border-bottom:1px solid var(--cc-line)}.customhouse-creator-content__filter-group legend{padding:0 0 4px;font-size:11px;font-weight:900;text-transform:uppercase}.customhouse-creator-content__filter-group>label{display:flex;align-items:center;gap:8px;color:#d3d4da;font-size:11px}.customhouse-creator-content__filter-group input[type=checkbox]{width:16px;height:16px;accent-color:var(--cc-purple)}.customhouse-creator-content__filter-group--price>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}.customhouse-creator-content__filter-group--price label{display:grid;gap:5px;color:var(--cc-muted);font-size:9px}.customhouse-creator-content__filter-group--price input{min-width:0;width:100%;height:36px;border:1px solid var(--cc-line);border-radius:4px;background:#08090b;color:var(--cc-text);padding:0 8px}.customhouse-creator-content__filter-group--price small{color:var(--cc-muted)}.customhouse-creator-content__grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}.customhouse-creator-content__product{min-width:0;overflow:hidden;border:1px solid var(--cc-line);border-radius:8px;background:var(--cc-panel)}.customhouse-creator-content__product[hidden]{display:none}.customhouse-creator-content__product-media{position:relative;display:block;aspect-ratio:1/1;overflow:hidden;background:radial-gradient(circle at 50% 40%,#292b32,#0c0d10 72%)}.customhouse-creator-content__product-media img{width:100%;height:100%;object-fit:contain;transition:transform .25s ease}.customhouse-creator-content__product:hover .customhouse-creator-content__product-media img{transform:scale(1.025)}.customhouse-creator-content__product-media>span{display:grid;width:100%;height:100%;place-items:center;color:#2c2e36;font-size:70px;font-weight:950}.customhouse-creator-content__product-media em{position:absolute;left:10px;top:10px;border-radius:4px;background:#07080a;color:#fff;padding:6px 8px;font-size:9px;font-style:normal;font-weight:900}.customhouse-creator-content__product-body{display:grid;gap:9px;padding:12px}.customhouse-creator-content__product-creator{display:flex;align-items:center;gap:8px;text-decoration:none}.customhouse-creator-content__mini-avatar{display:grid;width:28px;height:28px;flex:0 0 28px;place-items:center;overflow:hidden;border:1px solid var(--cc-purple);border-radius:50%;background:#211431;color:var(--cc-lime);font-size:10px;font-weight:900}.customhouse-creator-content__mini-avatar img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__product-creator small,.customhouse-creator-content__product-creator strong{display:block}.customhouse-creator-content__product-creator small{color:var(--cc-muted);font-size:8px}.customhouse-creator-content__product-creator strong{font-size:10px}.customhouse-creator-content__product h3{min-height:34px;margin:0;font-size:13px;line-height:1.3}.customhouse-creator-content__product h3 a{text-decoration:none}.customhouse-creator-content__product-type{margin:0;color:var(--cc-muted);font-size:9px}.customhouse-creator-content__price{color:var(--cc-lime);font-size:13px}.customhouse-creator-content__buy{display:grid;min-height:37px;place-items:center;border:1px solid var(--cc-purple);border-radius:4px;color:#fff;font-size:10px;font-weight:900;text-decoration:none}.customhouse-creator-content__buy:hover{background:var(--cc-purple)}.customhouse-creator-content__empty{display:none;min-height:280px;place-items:center;border:1px dashed var(--cc-line);color:var(--cc-muted);text-align:center}.customhouse-creator-content__empty.is-visible{display:grid}.customhouse-creator-content__pagination{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;margin:28px 0 0;padding:13px;border:1px solid var(--cc-line);border-radius:10px;background:linear-gradient(135deg,#101116,#0b0c0f);box-shadow:0 14px 36px rgba(0,0,0,.2)}.customhouse-creator-content__pagination button{display:grid;min-width:42px;height:42px;place-items:center;border:1px solid var(--cc-line);border-radius:7px;background:#17181d;color:var(--cc-text);padding:0 14px;font-size:10px;font-weight:900;letter-spacing:.04em;cursor:pointer}.customhouse-creator-content__pagination button:hover:not(:disabled){border-color:var(--cc-purple);background:#211431}.customhouse-creator-content__pagination button:focus-visible{outline:2px solid var(--cc-lime);outline-offset:2px}.customhouse-creator-content__pagination button:disabled{cursor:not-allowed;opacity:.38}.customhouse-creator-content__pagination-pages{display:flex;justify-content:center;gap:7px;min-width:0}.customhouse-creator-content__pagination-pages button{padding:0}.customhouse-creator-content__pagination-pages button[aria-current=page]{border-color:var(--cc-purple);background:var(--cc-purple);box-shadow:0 0 0 2px rgba(135,44,255,.18);color:#fff}.customhouse-creator-content__pagination-ellipsis{display:grid;width:24px;height:42px;place-items:center;color:var(--cc-muted);font-weight:900}.customhouse-creator-content__pagination-status{color:var(--cc-muted);font-size:9px;font-weight:900;letter-spacing:.08em;white-space:nowrap}.customhouse-creator-content__pagination[aria-busy=true]{opacity:.68}.customhouse-creator-content__drawer-overlay{display:none}
+          .customhouse-creator-content-page{--cc-bg:#060708;--cc-panel:#111216;--cc-panel-2:#17181d;--cc-line:#303139;--cc-text:#f7f7f4;--cc-muted:#a1a3ad;--cc-lime:#b7ff00;--cc-purple:#872cff;min-height:100vh;background:var(--cc-bg);color:var(--cc-text);font-family:Arial,Helvetica,sans-serif}.customhouse-creator-content-page *{box-sizing:border-box}.customhouse-creator-content-page a{color:inherit}.customhouse-creator-content__container{width:min(1440px,calc(100% - 48px));margin:0 auto}.customhouse-creator-content__breadcrumb{display:flex;gap:9px;align-items:center;padding:20px 0 14px;color:#7f818c;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.customhouse-creator-content__breadcrumb span:last-child{color:var(--cc-purple)}.customhouse-creator-content__hero{position:relative;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(360px,.95fr);min-height:420px;overflow:hidden;border:1px solid var(--cc-line);background:linear-gradient(115deg,#07080a 0 48%,#181922 48% 100%)}.customhouse-creator-content__hero-copy{position:relative;z-index:2;display:flex;flex-direction:column;justify-content:center;padding:52px}.customhouse-creator-content__eyebrow{margin:0 0 12px;color:var(--cc-lime);font-size:12px;font-weight:900;letter-spacing:.16em}.customhouse-creator-content__hero h1{max-width:700px;margin:0;font-size:clamp(54px,6vw,94px);font-style:italic;font-weight:950;letter-spacing:-.07em;line-height:.82}.customhouse-creator-content__hero h1 span{display:block;color:var(--cc-lime)}.customhouse-creator-content__hero-copy>p:last-child{max-width:600px;margin:26px 0 0;color:#d2d3d8;font-size:16px;line-height:1.55}.customhouse-creator-content__hero-art{position:relative;min-height:420px;overflow:hidden;background:#0d0e12}.customhouse-creator-content__hero-art img{display:block;width:100%;height:100%;min-height:420px;object-fit:cover;object-position:center 48%}.customhouse-creator-content__benefits{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--cc-line);border-top:0;background:#0d0e11}.customhouse-creator-content__benefit{display:grid;grid-template-columns:38px 1fr;gap:10px;align-items:center;min-height:82px;padding:14px 22px;border-right:1px solid var(--cc-line)}.customhouse-creator-content__benefit:last-child{border-right:0}.customhouse-creator-content__benefit b{color:var(--cc-lime);font-size:22px}.customhouse-creator-content__benefit strong,.customhouse-creator-content__benefit small{display:block}.customhouse-creator-content__benefit strong{font-size:12px}.customhouse-creator-content__benefit small{margin-top:4px;color:var(--cc-muted);font-size:10px}.customhouse-creator-content__discovery{padding:42px 0 82px}.customhouse-creator-content__search{position:relative}.customhouse-creator-content__search input{width:100%;height:58px;border:1px solid var(--cc-line);border-radius:6px;outline:0;background:var(--cc-panel);color:var(--cc-text);padding:0 58px 0 20px;font:700 14px/1 Arial}.customhouse-creator-content__search input:focus{border-color:var(--cc-purple);box-shadow:0 0 0 3px rgba(135,44,255,.18)}.customhouse-creator-content__search span{position:absolute;right:20px;top:50%;transform:translateY(-50%);color:var(--cc-lime);font-size:24px}.customhouse-creator-content__chips{display:flex;gap:9px;overflow:auto;padding:16px 0 4px;scrollbar-width:none}.customhouse-creator-content__chips::-webkit-scrollbar{display:none}.customhouse-creator-content__chip{flex:0 0 auto;min-height:37px;border:1px solid var(--cc-line);border-radius:999px;background:var(--cc-panel);color:var(--cc-text);padding:0 17px;font-size:11px;font-weight:800;cursor:pointer}.customhouse-creator-content__chip.is-active{border-color:var(--cc-lime);background:rgba(183,255,0,.09);color:var(--cc-lime)}.customhouse-creator-content__section-heading{display:flex;align-items:end;justify-content:space-between;gap:20px;margin:42px 0 18px}.customhouse-creator-content__section-heading p{margin:0 0 7px;color:var(--cc-lime);font-size:11px;font-weight:900;letter-spacing:.14em}.customhouse-creator-content__section-heading h2{margin:0;font-size:clamp(28px,3vw,44px);letter-spacing:-.05em}.customhouse-creator-content__featured{display:flex;gap:12px;overflow:auto;padding:0 0 10px;scroll-snap-type:x proximity}.customhouse-creator-content__creator{display:grid;grid-template-columns:68px minmax(120px,1fr);grid-template-rows:auto auto;gap:10px 13px;min-width:285px;max-width:330px;flex:1 0 285px;border:1px solid var(--cc-line);border-radius:10px;background:linear-gradient(145deg,var(--cc-panel-2),#0b0c0f);padding:14px;scroll-snap-align:start}.customhouse-creator-content__creator-media{grid-row:1/3;width:68px;height:68px;overflow:hidden;border:2px solid var(--cc-purple);border-radius:50%;background:#20152d;text-decoration:none}.customhouse-creator-content__creator-media img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__creator-media span{display:grid;width:100%;height:100%;place-items:center;color:var(--cc-lime);font-size:20px;font-weight:900}.customhouse-creator-content__creator-copy{min-width:0}.customhouse-creator-content__creator-copy strong,.customhouse-creator-content__creator-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.customhouse-creator-content__creator-copy small,.customhouse-creator-content__creator-copy p{color:var(--cc-muted);font-size:10px}.customhouse-creator-content__creator-copy p{margin:5px 0 0}.customhouse-creator-content__creator-action{justify-self:start;color:var(--cc-lime);font-size:10px;font-weight:900;text-decoration:none}.customhouse-creator-content__empty-inline{color:var(--cc-muted)}.customhouse-creator-content__toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:38px 0 14px}.customhouse-creator-content__toolbar-left{display:flex;align-items:center;gap:12px}.customhouse-creator-content__toolbar button,.customhouse-creator-content__toolbar select{height:42px;border:1px solid var(--cc-line);border-radius:6px;background:var(--cc-panel);color:var(--cc-text);padding:0 14px;font-size:11px;font-weight:800}.customhouse-creator-content__filter-open{display:block;cursor:pointer}.customhouse-creator-content__active-filters{display:flex;gap:7px;flex-wrap:wrap}.customhouse-creator-content__active-filters button{height:30px;border-color:rgba(135,44,255,.7);color:#d8c2ff}.customhouse-creator-content__results{display:block}.customhouse-creator-content__results.is-filter-open{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px}.customhouse-creator-content__filters{position:sticky;top:18px;align-self:start;border:1px solid var(--cc-line);border-radius:8px;background:var(--cc-panel);padding:18px}.customhouse-creator-content__filter-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--cc-line);padding:0 0 14px}.customhouse-creator-content__filter-head h3{margin:0;font-size:15px}.customhouse-creator-content__filter-head button{border:0;background:none;color:var(--cc-lime);font-size:10px;font-weight:800;cursor:pointer}.customhouse-creator-content__filter-close{display:none}.customhouse-creator-content__filter-group{display:grid;gap:9px;margin:0;padding:17px 0;border:0;border-bottom:1px solid var(--cc-line)}.customhouse-creator-content__filter-group legend{padding:0 0 4px;font-size:11px;font-weight:900;text-transform:uppercase}.customhouse-creator-content__filter-group>label{display:flex;align-items:center;gap:8px;color:#d3d4da;font-size:11px}.customhouse-creator-content__filter-group input[type=checkbox]{width:16px;height:16px;accent-color:var(--cc-purple)}.customhouse-creator-content__filter-group--price>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}.customhouse-creator-content__filter-group--price label{display:grid;gap:5px;color:var(--cc-muted);font-size:9px}.customhouse-creator-content__filter-group--price input{min-width:0;width:100%;height:36px;border:1px solid var(--cc-line);border-radius:4px;background:#08090b;color:var(--cc-text);padding:0 8px}.customhouse-creator-content__filter-group--price small{color:var(--cc-muted)}.customhouse-creator-content__grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}.customhouse-creator-content__product{min-width:0;overflow:hidden;border:1px solid var(--cc-line);border-radius:8px;background:var(--cc-panel)}.customhouse-creator-content__product[hidden]{display:none}.customhouse-creator-content__product-media{position:relative;display:block;aspect-ratio:1/1;overflow:hidden;background:radial-gradient(circle at 50% 40%,#292b32,#0c0d10 72%)}.customhouse-creator-content__product-media img{width:100%;height:100%;object-fit:contain;transition:transform .25s ease}.customhouse-creator-content__product:hover .customhouse-creator-content__product-media img{transform:scale(1.025)}.customhouse-creator-content__product-media>span{display:grid;width:100%;height:100%;place-items:center;color:#2c2e36;font-size:70px;font-weight:950}.customhouse-creator-content__product-media em{position:absolute;left:10px;top:10px;border-radius:4px;background:#07080a;color:#fff;padding:6px 8px;font-size:9px;font-style:normal;font-weight:900}.customhouse-creator-content__product-body{display:grid;gap:9px;padding:12px}.customhouse-creator-content__product-creator{display:flex;align-items:center;gap:8px;text-decoration:none}.customhouse-creator-content__mini-avatar{display:grid;width:28px;height:28px;flex:0 0 28px;place-items:center;overflow:hidden;border:1px solid var(--cc-purple);border-radius:50%;background:#211431;color:var(--cc-lime);font-size:10px;font-weight:900}.customhouse-creator-content__mini-avatar img{width:100%;height:100%;object-fit:cover}.customhouse-creator-content__product-creator small,.customhouse-creator-content__product-creator strong{display:block}.customhouse-creator-content__product-creator small{color:var(--cc-muted);font-size:8px}.customhouse-creator-content__product-creator strong{font-size:10px}.customhouse-creator-content__product h3{min-height:34px;margin:0;font-size:13px;line-height:1.3}.customhouse-creator-content__product h3 a{text-decoration:none}.customhouse-creator-content__product-type{margin:0;color:var(--cc-muted);font-size:9px}.customhouse-creator-content__price{color:var(--cc-lime);font-size:13px}.customhouse-creator-content__buy{display:grid;min-height:37px;place-items:center;border:1px solid var(--cc-purple);border-radius:4px;color:#fff;font-size:10px;font-weight:900;text-decoration:none}.customhouse-creator-content__buy:hover{background:var(--cc-purple)}.customhouse-creator-content__empty{display:none;min-height:280px;place-items:center;border:1px dashed var(--cc-line);color:var(--cc-muted);text-align:center}.customhouse-creator-content__empty.is-visible{display:grid}.customhouse-creator-content__pagination{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;margin:28px 0 0;padding:13px;border:1px solid var(--cc-line);border-radius:10px;background:linear-gradient(135deg,#101116,#0b0c0f);box-shadow:0 14px 36px rgba(0,0,0,.2)}.customhouse-creator-content__pagination button{display:grid;min-width:42px;height:42px;place-items:center;border:1px solid var(--cc-line);border-radius:7px;background:#17181d;color:var(--cc-text);padding:0 14px;font-size:10px;font-weight:900;letter-spacing:.04em;cursor:pointer}.customhouse-creator-content__pagination button:hover:not(:disabled){border-color:var(--cc-purple);background:#211431}.customhouse-creator-content__pagination button:focus-visible{outline:2px solid var(--cc-lime);outline-offset:2px}.customhouse-creator-content__pagination button:disabled{cursor:not-allowed;opacity:.38}.customhouse-creator-content__pagination-pages{display:flex;justify-content:center;gap:7px;min-width:0}.customhouse-creator-content__pagination-pages button{padding:0}.customhouse-creator-content__pagination-pages button[aria-current=page]{border-color:var(--cc-purple);background:var(--cc-purple);box-shadow:0 0 0 2px rgba(135,44,255,.18);color:#fff}.customhouse-creator-content__pagination-ellipsis{display:grid;width:24px;height:42px;place-items:center;color:var(--cc-muted);font-weight:900}.customhouse-creator-content__pagination-status{color:var(--cc-muted);font-size:9px;font-weight:900;letter-spacing:.08em;white-space:nowrap}.customhouse-creator-content__pagination[aria-busy=true]{opacity:.68}.customhouse-creator-content__drawer-overlay{display:none}
           .customhouse-creator-content__filter-open{display:none}.customhouse-creator-content__results,.customhouse-creator-content__results.is-filter-open{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px}.customhouse-creator-content__filter-group{display:block}.customhouse-creator-content__filter-group summary{position:relative;display:flex;align-items:center;justify-content:space-between;min-height:42px;padding:0 24px 0 0;list-style:none;cursor:pointer;font-size:11px;font-weight:900;text-transform:uppercase}.customhouse-creator-content__filter-group summary::-webkit-details-marker{display:none}.customhouse-creator-content__filter-group summary::after{position:absolute;right:3px;top:50%;width:7px;height:7px;border-right:2px solid var(--cc-muted);border-bottom:2px solid var(--cc-muted);content:"";transform:translateY(-65%) rotate(45deg);transition:transform .18s ease,border-color .18s ease}.customhouse-creator-content__filter-group[open] summary::after{border-color:var(--cc-lime);transform:translateY(-35%) rotate(225deg)}.customhouse-creator-content__filter-group summary:focus-visible{outline:2px solid var(--cc-lime);outline-offset:3px}.customhouse-creator-content__filter-options{display:grid;gap:9px;padding:4px 0 8px}.customhouse-creator-content__filter-options>label{display:flex;align-items:center;gap:8px;color:#d3d4da;font-size:11px}.customhouse-creator-content__filter-group--price>.customhouse-creator-content__filter-options{grid-template-columns:1fr}.customhouse-creator-content__filter-group--price>.customhouse-creator-content__filter-options>div{display:grid;grid-template-columns:1fr 1fr;gap:8px}
           .customhouse-creator-content__filter-group:not([open])>.customhouse-creator-content__filter-options{display:none}
           .customhouse-creator-content__filter-tools[hidden],.customhouse-creator-content__filter-pagination[hidden],.customhouse-creator-content__filter-no-results[hidden]{display:none}.customhouse-creator-content__filter-search{position:relative}.customhouse-creator-content__filter-search input{width:100%;height:34px;border:1px solid var(--cc-line);border-radius:5px;outline:0;background:#08090b;color:var(--cc-text);padding:0 32px 0 10px;font-size:10px;font-weight:700}.customhouse-creator-content__filter-search input:focus{border-color:var(--cc-purple);box-shadow:0 0 0 2px rgba(135,44,255,.16)}.customhouse-creator-content__filter-search input::placeholder{color:var(--cc-muted)}.customhouse-creator-content__filter-search span{position:absolute;right:10px;top:50%;color:var(--cc-lime);font-size:16px;transform:translateY(-50%);pointer-events:none}.customhouse-creator-content__filter-option-list{display:grid;gap:9px}.customhouse-creator-content__filter-option-list>label{display:flex;align-items:center;gap:8px;color:#d3d4da;font-size:11px}.customhouse-creator-content__filter-option-list>label[hidden]{display:none}.customhouse-creator-content__filter-no-results{margin:2px 0;color:var(--cc-muted);font-size:10px}.customhouse-creator-content__filter-pagination{display:grid;grid-template-columns:30px 1fr 30px;gap:7px;align-items:center;padding-top:3px}.customhouse-creator-content__filter-pagination button{display:grid;width:30px;height:30px;place-items:center;border:1px solid var(--cc-line);border-radius:5px;background:#17181d;color:var(--cc-text);padding:0;cursor:pointer}.customhouse-creator-content__filter-pagination button:hover:not(:disabled){border-color:var(--cc-purple);color:var(--cc-lime)}.customhouse-creator-content__filter-pagination button:focus-visible{outline:2px solid var(--cc-lime);outline-offset:2px}.customhouse-creator-content__filter-pagination button:disabled{cursor:not-allowed;opacity:.35}.customhouse-creator-content__filter-pagination span{text-align:center;color:var(--cc-muted);font-size:9px;font-weight:900;letter-spacing:.08em}
@@ -874,7 +868,7 @@ export function creatorContentHtml(
           .customhouse-creator-content__featured-carousel{display:grid;grid-template-columns:42px minmax(0,1fr) 42px;gap:10px;align-items:center}.customhouse-creator-content__featured{scrollbar-width:none;padding-bottom:0}.customhouse-creator-content__featured::-webkit-scrollbar{display:none}.customhouse-creator-content__featured-arrow{display:grid;width:42px;height:42px;place-items:center;border:1px solid var(--cc-line);border-radius:50%;background:var(--cc-panel);color:var(--cc-text);font-size:20px;line-height:1;cursor:pointer;transition:border-color .18s ease,background .18s ease,color .18s ease,opacity .18s ease}.customhouse-creator-content__featured-arrow:hover:not(:disabled){border-color:var(--cc-purple);background:#211431;color:var(--cc-lime)}.customhouse-creator-content__featured-arrow:focus-visible{outline:2px solid var(--cc-lime);outline-offset:3px}.customhouse-creator-content__featured-arrow:disabled{cursor:not-allowed;opacity:.32}.customhouse-creator-content__pagination>[data-creator-content-page-prev],.customhouse-creator-content__pagination>[data-creator-content-page-next]{display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}.customhouse-creator-content__pagination>[data-creator-content-page-prev] span,.customhouse-creator-content__pagination>[data-creator-content-page-next] span{display:inline-block;line-height:1}
           @media(max-width:1279px){.customhouse-creator-content__container{width:min(1120px,calc(100% - 36px))}.customhouse-creator-content__hero{grid-template-columns:1fr .8fr}.customhouse-creator-content__hero-copy{padding:42px}.customhouse-creator-content__benefits{grid-template-columns:repeat(2,1fr)}.customhouse-creator-content__benefit:nth-child(2){border-right:0}.customhouse-creator-content__benefit:nth-child(-n+2){border-bottom:1px solid var(--cc-line)}.customhouse-creator-content__grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
           @media(max-width:900px){.customhouse-creator-content__hero{grid-template-columns:1fr minmax(260px,.62fr)}.customhouse-creator-content__results{grid-template-columns:1fr}.customhouse-creator-content__filter-open{display:block}.customhouse-creator-content__filters{position:fixed;z-index:1001;top:0;right:0;width:min(390px,92vw);height:100dvh;overflow:auto;border-radius:0;transform:translateX(105%);transition:transform .2s ease}.customhouse-creator-content__filters.is-open{transform:translateX(0)}.customhouse-creator-content__filter-close{display:block}.customhouse-creator-content__drawer-overlay{position:fixed;z-index:1000;inset:0;display:none;border:0;background:rgba(0,0,0,.72)}.customhouse-creator-content__drawer-overlay.is-open{display:block}.customhouse-creator-content__grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-          @media(max-width:767px){.customhouse-creator-content__container{width:min(100% - 24px,620px)}.customhouse-creator-content__breadcrumb{padding-top:14px}.customhouse-creator-content__hero{display:block;min-height:0}.customhouse-creator-content__hero-copy{padding:34px 24px 28px}.customhouse-creator-content__hero h1{font-size:clamp(48px,17vw,72px)}.customhouse-creator-content__hero-copy>p:last-child{font-size:13px}.customhouse-creator-content__hero-art{min-height:250px}.customhouse-creator-content__hero-shot--1{right:7%;width:58%;height:82%}.customhouse-creator-content__benefits{grid-template-columns:1fr 1fr}.customhouse-creator-content__benefit{grid-template-columns:28px 1fr;min-height:74px;padding:10px}.customhouse-creator-content__benefit b{font-size:18px}.customhouse-creator-content__discovery{padding:26px 0 58px}.customhouse-creator-content__search input{height:52px;font-size:12px}.customhouse-creator-content__section-heading{margin-top:30px}.customhouse-creator-content__section-heading h2{font-size:30px}.customhouse-creator-content__creator{min-width:250px;flex-basis:250px}.customhouse-creator-content__toolbar{align-items:stretch;flex-direction:column}.customhouse-creator-content__toolbar-left{justify-content:space-between}.customhouse-creator-content__toolbar select{width:100%}.customhouse-creator-content__active-filters:empty{display:none}.customhouse-creator-content__grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.customhouse-creator-content__product-body{padding:10px}.customhouse-creator-content__product h3{font-size:11px}.customhouse-creator-content__product-creator small{display:none}.customhouse-creator-content__buy{font-size:9px}.customhouse-creator-content__price{font-size:11px}}
+          @media(max-width:767px){.customhouse-creator-content__container{width:min(100% - 24px,620px)}.customhouse-creator-content__breadcrumb{padding-top:14px}.customhouse-creator-content__hero{display:block;min-height:0}.customhouse-creator-content__hero-copy{padding:34px 24px 28px}.customhouse-creator-content__hero h1{font-size:clamp(48px,17vw,72px)}.customhouse-creator-content__hero-copy>p:last-child{font-size:13px}.customhouse-creator-content__hero-art,.customhouse-creator-content__hero-art img{min-height:250px}.customhouse-creator-content__benefits{grid-template-columns:1fr 1fr}.customhouse-creator-content__benefit{grid-template-columns:28px 1fr;min-height:74px;padding:10px}.customhouse-creator-content__benefit b{font-size:18px}.customhouse-creator-content__discovery{padding:26px 0 58px}.customhouse-creator-content__search input{height:52px;font-size:12px}.customhouse-creator-content__section-heading{margin-top:30px}.customhouse-creator-content__section-heading h2{font-size:30px}.customhouse-creator-content__creator{min-width:250px;flex-basis:250px}.customhouse-creator-content__toolbar{align-items:stretch;flex-direction:column}.customhouse-creator-content__toolbar-left{justify-content:space-between}.customhouse-creator-content__toolbar select{width:100%}.customhouse-creator-content__active-filters:empty{display:none}.customhouse-creator-content__grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.customhouse-creator-content__product-body{padding:10px}.customhouse-creator-content__product h3{font-size:11px}.customhouse-creator-content__product-creator small{display:none}.customhouse-creator-content__buy{font-size:9px}.customhouse-creator-content__price{font-size:11px}}
           @media(max-width:767px){.customhouse-creator-content__hero h1{font-size:clamp(44px,15vw,72px)}.customhouse-creator-content__featured-carousel{grid-template-columns:36px minmax(0,1fr) 36px;gap:7px}.customhouse-creator-content__featured-arrow{width:36px;height:36px;font-size:17px}}
           @media(max-width:767px){.customhouse-creator-content__pagination{grid-template-columns:1fr auto 1fr;padding:10px}.customhouse-creator-content__pagination-pages{grid-column:1/-1;grid-row:1;justify-content:flex-start;overflow:auto;padding:2px;scrollbar-width:none}.customhouse-creator-content__pagination-pages::-webkit-scrollbar{display:none}.customhouse-creator-content__pagination>[data-creator-content-page-prev]{grid-column:1;grid-row:2}.customhouse-creator-content__pagination-status{grid-column:2;grid-row:2;text-align:center}.customhouse-creator-content__pagination>[data-creator-content-page-next]{grid-column:3;grid-row:2}.customhouse-creator-content__pagination>button{padding:0 10px}}
           @media(max-width:390px){.customhouse-creator-content__container{width:calc(100% - 18px)}.customhouse-creator-content__hero-copy{padding-left:18px;padding-right:18px}.customhouse-creator-content__benefit strong{font-size:10px}.customhouse-creator-content__benefit small{font-size:8px}.customhouse-creator-content__mini-avatar{display:none}}
@@ -886,57 +880,57 @@ export function creatorContentHtml(
       <body>
         <main class="customhouse-creator-content-page" data-customhouse data-creator-content-root data-next-offset="${escapeHtml(String(input.nextOffset ?? ""))}">
           <div class="customhouse-creator-content__container">
-            <nav class="customhouse-creator-content__breadcrumb" aria-label="Breadcrumb"><a href="/">HOME</a><span>›</span><a href="/pages/collections">COLLECTIONS</a><span>›</span><span>CREATOR CONTENT</span></nav>
+            <nav class="customhouse-creator-content__breadcrumb" aria-label="Brödsmulor"><a href="/">HEM</a><span>›</span><a href="/pages/collections">KOLLEKTIONER</a><span>›</span><span>CREATOR COMMUNITY</span></nav>
             <section class="customhouse-creator-content__hero">
               <div class="customhouse-creator-content__hero-copy">
-                <p class="customhouse-creator-content__eyebrow">FROM THE COMMUNITY</p>
-                <h1>CREATOR <span>CONTENT</span></h1>
-                <p>Discover unique designs from CustomHouse creators. Explore their collections and shop published designs with locked Creator artwork.</p>
+                <p class="customhouse-creator-content__eyebrow">FRÅN VÅRT COMMUNITY</p>
+                <h1>CREATOR <span>COMMUNITY</span></h1>
+                <p>Upptäck unika designs från Customhouse-creatörer. Utforska deras kollektioner och shoppa publicerade designs med låst Creator-design.</p>
               </div>
-              <div class="customhouse-creator-content__hero-art" aria-hidden="true">${heroArt}</div>
+              <div class="customhouse-creator-content__hero-art" aria-hidden="true"><img src="${escapeHtml(heroImageUrl)}" alt="" width="1254" height="1254" loading="eager" fetchpriority="high"></div>
             </section>
-            <section class="customhouse-creator-content__benefits" aria-label="Creator Content benefits">
-              <div class="customhouse-creator-content__benefit"><b>◇</b><span><strong>CREATOR COLLECTIONS</strong><small>Exclusive creator designs</small></span></div>
-              <div class="customhouse-creator-content__benefit"><b>◎</b><span><strong>DISCOVER CREATORS</strong><small>Explore creators and new drops</small></span></div>
-              <div class="customhouse-creator-content__benefit"><b>✦</b><span><strong>LIMITED DROPS</strong><small>Creator releases &amp; collaborations</small></span></div>
-              <div class="customhouse-creator-content__benefit"><b>▱</b><span><strong>WORLDWIDE SHIPPING</strong><small>Fast and reliable</small></span></div>
+            <section class="customhouse-creator-content__benefits" aria-label="Fördelar med Creator Community">
+              <div class="customhouse-creator-content__benefit"><b>◇</b><span><strong>CREATOR-KOLLEKTIONER</strong><small>Exklusiva designs från våra creators</small></span></div>
+              <div class="customhouse-creator-content__benefit"><b>◎</b><span><strong>UPPTÄCK CREATORS</strong><small>Utforska creators och nya designs</small></span></div>
+              <div class="customhouse-creator-content__benefit"><b>✦</b><span><strong>BEGRÄNSADE DROPS</strong><small>Unika releases och samarbeten</small></span></div>
+              <div class="customhouse-creator-content__benefit"><b>▱</b><span><strong>SNABBA LEVERANSER</strong><small>Full spårbarhet på ditt paket.</small></span></div>
             </section>
             <div class="customhouse-creator-content__discovery">
               <label class="customhouse-creator-content__search">
-                <input type="search" aria-label="Search creators, collections, designs, or tags" placeholder="Search creators, collections, designs or tags…" autocomplete="off" data-creator-content-search>
+                <input type="search" aria-label="Sök efter creators, kollektioner, designs eller taggar" placeholder="Sök efter creators, kollektioner, designs eller taggar…" autocomplete="off" data-creator-content-search>
                 <span aria-hidden="true">⌕</span>
               </label>
-              <div class="customhouse-creator-content__chips" aria-label="Creator interests">${categoryChips}</div>
-              <div class="customhouse-creator-content__section-heading"><div><p>DISCOVER THE COMMUNITY</p><h2>Featured Creators</h2></div></div>
+              <div class="customhouse-creator-content__chips" aria-label="Creator-intressen">${categoryChips}</div>
+              <div class="customhouse-creator-content__section-heading"><div><p>UPPTÄCK VÅRT COMMUNITY</p><h2>Utvalda Creators</h2></div></div>
               <div class="customhouse-creator-content__featured-carousel">
-                <button class="customhouse-creator-content__featured-arrow" type="button" data-creator-content-featured-prev aria-label="Previous featured creators" disabled><span aria-hidden="true">←</span></button>
-                <section class="customhouse-creator-content__featured" aria-label="Featured Creators" data-creator-content-featured-track>${featuredCreators}</section>
-                <button class="customhouse-creator-content__featured-arrow" type="button" data-creator-content-featured-next aria-label="Next featured creators"><span aria-hidden="true">→</span></button>
+                <button class="customhouse-creator-content__featured-arrow" type="button" data-creator-content-featured-prev aria-label="Föregående utvalda creators" disabled><span aria-hidden="true">←</span></button>
+                <section class="customhouse-creator-content__featured" aria-label="Utvalda Creators" data-creator-content-featured-track>${featuredCreators}</section>
+                <button class="customhouse-creator-content__featured-arrow" type="button" data-creator-content-featured-next aria-label="Nästa utvalda creators"><span aria-hidden="true">→</span></button>
               </div>
               <div class="customhouse-creator-content__toolbar">
-                <div class="customhouse-creator-content__toolbar-left"><button class="customhouse-creator-content__filter-open" type="button" data-creator-content-filter-open aria-controls="CreatorContentFilters" aria-expanded="false">FILTERS</button><strong><span data-creator-content-count>${input.products.length}</span> PRODUCTS</strong></div>
-                <label><span class="visually-hidden">Sort products</span><select data-creator-content-sort><option value="newest">Newest</option><option value="price-asc">Price: low to high</option><option value="price-desc">Price: high to low</option></select></label>
+                <div class="customhouse-creator-content__toolbar-left"><button class="customhouse-creator-content__filter-open" type="button" data-creator-content-filter-open aria-controls="CreatorContentFilters" aria-expanded="false">FILTER</button><strong><span data-creator-content-count>${input.products.length}</span> PRODUKTER</strong></div>
+                <label><span class="visually-hidden">Sortera produkter</span><select data-creator-content-sort><option value="newest">Nyast</option><option value="price-asc">Pris: lägst till högst</option><option value="price-desc">Pris: högst till lägst</option></select></label>
               </div>
               <div class="customhouse-creator-content__active-filters" data-creator-content-active-filters></div>
               <div class="customhouse-creator-content__results">
-                <aside id="CreatorContentFilters" class="customhouse-creator-content__filters" data-creator-content-filter-drawer aria-label="Product filters" aria-hidden="true" inert>
-                  <div class="customhouse-creator-content__filter-head"><h3>FILTERS</h3><button type="button" data-creator-content-clear>CLEAR ALL</button><button class="customhouse-creator-content__filter-close" type="button" data-creator-content-filter-close aria-label="Close filters">✕</button></div>
+                <aside id="CreatorContentFilters" class="customhouse-creator-content__filters" data-creator-content-filter-drawer aria-label="Produktfilter" aria-hidden="true" inert>
+                  <div class="customhouse-creator-content__filter-head"><h3>FILTER</h3><button type="button" data-creator-content-clear>RENSA ALLA</button><button class="customhouse-creator-content__filter-close" type="button" data-creator-content-filter-close aria-label="Stäng filter">✕</button></div>
                   ${creatorFilters}${tagFilters}${productTypeFilters}${sizeFilters}${colorFilters}${priceFilter}${availabilityFilters}
                 </aside>
                 <div>
                   <div class="customhouse-creator-content__grid" data-creator-content-grid>${productCards}</div>
-                  <div class="customhouse-creator-content__empty${input.products.length ? "" : " is-visible"}" data-creator-content-empty><p>No published Creator products match these filters.</p></div>
-                  <nav class="customhouse-creator-content__pagination" data-creator-content-pagination aria-label="Product pages">
-                    <button type="button" data-creator-content-page-prev disabled><span aria-hidden="true">←</span> PREVIOUS</button>
+                  <div class="customhouse-creator-content__empty${input.products.length ? "" : " is-visible"}" data-creator-content-empty><p>Inga publicerade Creator-produkter matchar dessa filter.</p></div>
+                  <nav class="customhouse-creator-content__pagination" data-creator-content-pagination aria-label="Produktsidor">
+                    <button type="button" data-creator-content-page-prev disabled><span aria-hidden="true">←</span> FÖREGÅENDE</button>
                     <div class="customhouse-creator-content__pagination-pages" data-creator-content-pages><button type="button" aria-current="page" data-creator-content-page="1">1</button></div>
-                    <span class="customhouse-creator-content__pagination-status" data-creator-content-page-status aria-live="polite">PAGE 1 OF 1</span>
-                    <button type="button" data-creator-content-page-next disabled>NEXT <span aria-hidden="true">→</span></button>
+                    <span class="customhouse-creator-content__pagination-status" data-creator-content-page-status aria-live="polite">SIDA 1 AV 1</span>
+                    <button type="button" data-creator-content-page-next disabled>NÄSTA <span aria-hidden="true">→</span></button>
                   </nav>
                 </div>
               </div>
             </div>
           </div>
-          <button class="customhouse-creator-content__drawer-overlay" type="button" data-creator-content-filter-close aria-label="Close filters"></button>
+          <button class="customhouse-creator-content__drawer-overlay" type="button" data-creator-content-filter-close aria-label="Stäng filter"></button>
         </main>
         <script>
           (() => {
@@ -1134,7 +1128,7 @@ export function creatorContentHtml(
               if (pagination) pagination.hidden = total === 0;
               if (previousPage) previousPage.disabled = model.page <= 1;
               if (nextPage) nextPage.disabled = model.page >= model.pageCount;
-              if (paginationStatus) paginationStatus.textContent = (catalogLoadError ? "PARTIAL CATALOG · " : "") + "PAGE " + model.page + " OF " + model.pageCount;
+              if (paginationStatus) paginationStatus.textContent = (catalogLoadError ? "OFULLSTÄNDIG KATALOG · " : "") + "SIDA " + model.page + " AV " + model.pageCount;
               if (!paginationPages) return;
               paginationPages.replaceChildren();
               visiblePageNumbers(model).forEach((page) => {
@@ -1149,7 +1143,7 @@ export function creatorContentHtml(
                 const button = document.createElement("button");
                 button.type = "button";
                 button.dataset.creatorContentPage = String(page);
-                button.setAttribute("aria-label", "Page " + page);
+                button.setAttribute("aria-label", "Sida " + page);
                 if (page === model.page) button.setAttribute("aria-current", "page");
                 button.textContent = String(page);
                 paginationPages.append(button);
@@ -1221,7 +1215,7 @@ export function creatorContentHtml(
               if (!nextOffset) return false;
               if (pageRequest) return pageRequest;
               pagination?.setAttribute("aria-busy", "true");
-              if (paginationStatus) paginationStatus.textContent = "LOADING PRODUCTS…";
+              if (paginationStatus) paginationStatus.textContent = "LADDAR PRODUKTER…";
               pageRequest = (async () => {
                 try {
                 const pageUrl = new URL(window.location.href);
@@ -1290,7 +1284,7 @@ export function creatorContentHtml(
                 return true;
                 } catch {
                   catalogLoadError = true;
-                  if (paginationStatus) paginationStatus.textContent = "MORE PRODUCTS UNAVAILABLE";
+                  if (paginationStatus) paginationStatus.textContent = "FLER PRODUKTER ÄR INTE TILLGÄNGLIGA";
                   return false;
                 } finally {
                   pagination?.removeAttribute("aria-busy");
@@ -2609,7 +2603,7 @@ export async function handleStorefrontProxy(
           return storefrontThemeResponse(
             creatorContentHtml({
               ...content,
-            }),
+            }, { assetOrigin: requestUrl.origin }),
             context,
           );
         }

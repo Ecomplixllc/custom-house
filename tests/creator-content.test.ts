@@ -975,8 +975,8 @@ test("Creator Content keeps growing filter groups searchable and paginated", asy
   const markup = await response.text();
 
   assert.match(markup, /data-creator-content-filter-search/);
-  assert.match(markup, /aria-label="Search Creator options"/);
-  assert.match(markup, /aria-label="Search Tag options"/);
+  assert.match(markup, /aria-label="Sök bland alternativen för Creator"/);
+  assert.match(markup, /aria-label="Sök bland alternativen för Tagg"/);
   assert.match(markup, /data-creator-content-filter-option-list/);
   assert.match(markup, /data-creator-content-filter-option/);
   assert.match(markup, /data-creator-content-filter-page-prev/);
@@ -1027,28 +1027,36 @@ test("Creator Content renderer provides responsive real-data discovery without c
     shopify as unknown as PublicContentClient,
     db as unknown as PublicContentDb,
   );
-  const response = creatorContentHtml({
-    ...data,
-  });
+  const response = creatorContentHtml(
+    {
+      ...data,
+    },
+    { assetOrigin: "https://assets.example" },
+  );
   const markup = await response.text();
   const pageMarkup = markup.match(/<main class="customhouse-creator-content-page"[\s\S]*?<\/main>/)?.[0] || "";
 
   assert.equal(response.status, 200);
   assert.match(markup, /class="customhouse-creator-content-page"/);
   assert.doesNotMatch(markup, /html,body\{/);
-  assert.match(markup, /HOME[\s\S]*CREATOR CONTENT/);
-  assert.match(markup, /Discover unique designs from CustomHouse creators/);
+  assert.match(markup, /HEM[\s\S]*KOLLEKTIONER[\s\S]*CREATOR COMMUNITY/);
+  assert.match(markup, /Upptäck unika designs från Customhouse-creatörer/);
+  assert.match(
+    markup,
+    /src="https:\/\/assets\.example\/images\/customhouse-creator-community-hero\.png"/,
+  );
+  assert.match(markup, /width="1254" height="1254" loading="eager" fetchpriority="high"/);
   assert.match(markup, /data-creator-content-search/);
-  assert.match(markup, /aria-label="Search creators, collections, designs, or tags"/);
+  assert.match(markup, /aria-label="Sök efter creators, kollektioner, designs eller taggar"/);
   assert.match(markup, /data-creator-content-category="Streetwear"/);
   assert.match(markup, /name="tags" value="streetwear"/i);
   assert.match(markup, /data-tags="streetwear\|\|art &amp; design"/i);
   assert.match(markup, /params\.set\("tag", activeCategory\)/);
   assert.match(markup, /Streetwear/);
-  assert.match(markup, /Featured Creators/);
+  assert.match(markup, /Utvalda Creators/);
   assert.match(markup, /href="\/apps\/customhouse\/creators\/beta-b1c2d"/);
   assert.match(markup, /href="\/apps\/customhouse\/creators\/beta-b1c2d\/products\/creator-product-b"/);
-  assert.match(markup, />BUY PRODUCT</);
+  assert.match(markup, />KÖP PRODUKT</);
   assert.match(markup, /data-creator-content-filter-drawer/);
   assert.match(markup, /data-creator-content-filter-drawer[^>]*aria-hidden="true"[^>]*inert/);
   assert.match(markup, /data-creator-content-filter-open[^>]*aria-expanded="false"/);
@@ -1061,7 +1069,7 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.doesNotMatch(markup, /data-creator-content-load-more|>LOAD MORE</);
   assert.match(markup, /new DOMParser\(\)/);
   assert.match(markup, /fetch\(pageUrl\.toString\(\)/);
-  assert.match(markup, /Price: low to high/);
+  assert.match(markup, /Pris: lägst till högst/);
   assert.match(markup, /@media\(max-width:1279px\)/);
   assert.match(markup, /@media\(max-width:767px\)/);
   assert.match(markup, /customhouse-creator-content__hero h1\{font-size:clamp\(44px,15vw,72px\)\}/);
@@ -1093,6 +1101,7 @@ test("Creator Content storefront handler loads the public service and reuses exi
   assert.match(source, /case "creatorContent":/);
   assert.match(source, /loadPublicCreatorContent\([\s\S]*?context\.shop,[\s\S]*?context\.client,[\s\S]*?undefined,[\s\S]*?\{ offset, includeFeatured: offset === 0 \},[\s\S]*?\)/);
   assert.match(source, /creatorContentHtml\(\{/);
+  assert.match(source, /assetOrigin: requestUrl\.origin/);
   assert.match(source, /getCreatorProductStorefrontUrl/);
   assert.doesNotMatch(source, /creatorContent.*showApp\(/i);
 });
