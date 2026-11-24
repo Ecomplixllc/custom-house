@@ -1046,6 +1046,14 @@ test("Creator Content renderer provides responsive real-data discovery without c
     /src="https:\/\/assets\.example\/images\/customhouse-creator-community-hero\.png"/,
   );
   assert.match(markup, /width="1254" height="1254" loading="eager" fetchpriority="high"/);
+  assert.match(
+    markup,
+    /\.customhouse-creator-content__hero\{[^}]*height:420px;[^}]*min-height:0;/,
+  );
+  assert.match(
+    markup,
+    /@media\(max-width:767px\)\{[^}]*\.customhouse-creator-content__hero\{display:block;height:auto;min-height:0\}/,
+  );
   assert.match(markup, /data-creator-content-search/);
   assert.match(markup, /aria-label="Sök efter creators, kollektioner, designs eller taggar"/);
   assert.match(markup, /data-creator-content-category="Streetwear"/);
