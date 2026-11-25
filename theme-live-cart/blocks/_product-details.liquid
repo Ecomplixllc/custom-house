@@ -253,9 +253,9 @@
             <span aria-hidden="true">&#128722;</span>
             <span data-add-to-cart-label>
               {%- if selected_variant.available or force_allow_purchase -%}
-                Add to cart
+                Lägg i varukorg
               {%- else -%}
-                Sold out
+                Slutsåld
               {%- endif -%}
             </span>
           </button>
@@ -1072,7 +1072,7 @@
       }
 
       if (addButtonLabel) {
-        addButtonLabel.textContent = canAttemptPurchase ? 'Add to cart' : 'Sold out';
+        addButtonLabel.textContent = canAttemptPurchase ? 'Lägg i varukorg' : 'Slutsåld';
       }
     }
 
