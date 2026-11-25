@@ -111,7 +111,25 @@ test("storefront Creator Application localizes every screen in English and Swedi
 
   assert.deepEqual(Object.keys(swedish).sort(), Object.keys(english).sort());
   assert.ok(Object.keys(english).length >= 140);
-  assert.equal(swedish.heading_initial, "Kreatörsansökan");
+  assert.equal(swedish.creator, "CREATOR");
+  assert.equal(swedish.heading_initial, "CREATOR-ansökan");
+  assert.equal(
+    swedish.benefit_tracking,
+    "Försäljning, ersättning, beställningar och utbetalningar registreras i Custom House.",
+  );
+  assert.equal(
+    swedish.approved_intro,
+    "Dela din kreativitet med världen. Bygg din kollektion. Få ersättning för varje försäljning.",
+  );
+  assert.equal(swedish.earn_more, "Få ersättning");
+  assert.equal(
+    swedish.earn_more_text,
+    "Få 20 % ersättning för varje försäljning från din kollektion.",
+  );
+  assert.doesNotMatch(
+    Object.values(swedish).join("\n"),
+    /kreatör|provision|tjäna pengar/i,
+  );
   assert.equal(swedish.submit_application, "Skicka in ansökan");
   assert.equal(swedish.under_review, "Ansökan granskas");
   assert.match(catalog, /data-creator-application-translations/);
