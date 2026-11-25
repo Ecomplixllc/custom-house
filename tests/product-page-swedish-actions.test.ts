@@ -12,6 +12,10 @@ test("product page uses the approved Swedish action labels", () => {
     "theme-live-cart/blocks/_product-details.liquid",
     "utf8",
   );
+  const pitchPrintHandoff = readFileSync(
+    "theme-live-cart/assets/customhouse-pitchprint-order-handoff.js",
+    "utf8",
+  );
 
   assert.match(productTemplate, /"customize_button_label": "Designa nu"/);
   assert.match(
@@ -26,4 +30,7 @@ test("product page uses the approved Swedish action labels", () => {
     productDetails,
     /addButtonLabel\.textContent = canAttemptPurchase \? 'Lägg i varukorg' : 'Slutsåld';/,
   );
+  assert.match(pitchPrintHandoff, /#pp_customize_design_btn/);
+  assert.match(pitchPrintHandoff, /PITCHPRINT_BUTTON_LABEL = 'Designa nu'/);
+  assert.match(pitchPrintHandoff, /new MutationObserver/);
 });

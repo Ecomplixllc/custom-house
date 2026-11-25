@@ -25,6 +25,8 @@
   const rootSelector = '[data-customhouse-pitchprint-required="true"]';
   const triggerSelector = '[data-pitchprint-customize-trigger]';
   const formSelector = 'form[data-customhouse-pitchprint-form="true"]';
+  const PITCHPRINT_BUTTON_SELECTOR = '#pp_customize_design_btn';
+  const PITCHPRINT_BUTTON_LABEL = 'Designa nu';
   const log = (message, detail) => {
     if (detail) {
       console.log(`[CustomHouse PitchPrint] ${message}`, detail);
@@ -35,6 +37,36 @@
   const warn = (message) => console.warn(`[CustomHouse PitchPrint] ${message}`);
   const publicContract = window.CustomHousePublicPitchPrintContract;
   const PENDING_PUBLIC_SAVE_ID = '__CUSTOMHOUSE_PUBLIC_SAVE_PENDING__';
+
+  const applyPitchPrintButtonLabel = (root = document) => {
+    const candidates = [];
+
+    if (root instanceof Element && root.matches(PITCHPRINT_BUTTON_SELECTOR)) {
+      candidates.push(root);
+    }
+    if (typeof root?.querySelectorAll === 'function') {
+      candidates.push(...root.querySelectorAll(PITCHPRINT_BUTTON_SELECTOR));
+    }
+
+    for (const button of candidates) {
+      if (button.textContent?.trim() !== PITCHPRINT_BUTTON_LABEL) {
+        button.textContent = PITCHPRINT_BUTTON_LABEL;
+      }
+      button.setAttribute('aria-label', PITCHPRINT_BUTTON_LABEL);
+    }
+  };
+
+  const pitchPrintButtonObserver = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.target instanceof Element) applyPitchPrintButtonLabel(record.target);
+      for (const node of record.addedNodes) {
+        if (node instanceof Element) applyPitchPrintButtonLabel(node);
+      }
+    }
+  });
+
+  applyPitchPrintButtonLabel();
+  pitchPrintButtonObserver.observe(document.documentElement, { childList: true, subtree: true });
 
   if (!publicContract) {
     warn('Public customization contract unavailable');
