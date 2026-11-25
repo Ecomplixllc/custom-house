@@ -887,12 +887,12 @@ export function creatorContentHtml(
               <div class="customhouse-creator-content__hero-copy">
                 <p class="customhouse-creator-content__eyebrow">FRÅN VÅRT COMMUNITY</p>
                 <h1>CREATOR <span>COMMUNITY</span></h1>
-                <p>Upptäck unika designs från Customhouse-creatörer. Utforska deras kollektioner och shoppa publicerade designs med låst Creator-design.</p>
+                <p>Utforska vårt creatorcommunity och hitta unika designs från creators runt om i världen.</p>
               </div>
               <div class="customhouse-creator-content__hero-art" aria-hidden="true"><img src="${escapeHtml(heroImageUrl)}" alt="" width="1254" height="1254" loading="eager" fetchpriority="high"></div>
             </section>
             <section class="customhouse-creator-content__benefits" aria-label="Fördelar med Creator Community">
-              <div class="customhouse-creator-content__benefit"><b>◇</b><span><strong>CREATOR-KOLLEKTIONER</strong><small>Exklusiva designs från våra creators</small></span></div>
+              <div class="customhouse-creator-content__benefit"><b>◇</b><span><strong>MER ÄN BARA MERCH.</strong><small>Kreativitet, passion och din personlighet.</small></span></div>
               <div class="customhouse-creator-content__benefit"><b>◎</b><span><strong>UPPTÄCK CREATORS</strong><small>Utforska creators och nya designs</small></span></div>
               <div class="customhouse-creator-content__benefit"><b>✦</b><span><strong>BEGRÄNSADE DROPS</strong><small>Unika releases och samarbeten</small></span></div>
               <div class="customhouse-creator-content__benefit"><b>▱</b><span><strong>SNABBA LEVERANSER</strong><small>Full spårbarhet på ditt paket.</small></span></div>

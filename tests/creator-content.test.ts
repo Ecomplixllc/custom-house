@@ -1040,7 +1040,12 @@ test("Creator Content renderer provides responsive real-data discovery without c
   assert.match(markup, /class="customhouse-creator-content-page"/);
   assert.doesNotMatch(markup, /html,body\{/);
   assert.match(markup, /HEM[\s\S]*KOLLEKTIONER[\s\S]*CREATOR COMMUNITY/);
-  assert.match(markup, /Upptäck unika designs från Customhouse-creatörer/);
+  assert.match(
+    markup,
+    /Utforska vårt creatorcommunity och hitta unika designs från creators runt om i världen\./,
+  );
+  assert.match(markup, /MER ÄN BARA MERCH\./);
+  assert.match(markup, /Kreativitet, passion och din personlighet\./);
   assert.match(
     markup,
     /src="https:\/\/assets\.example\/images\/customhouse-creator-community-hero\.png"/,
