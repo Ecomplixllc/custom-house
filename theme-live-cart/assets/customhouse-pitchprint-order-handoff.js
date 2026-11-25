@@ -56,17 +56,19 @@
     }
   };
 
-  const pitchPrintButtonObserver = new MutationObserver((records) => {
-    for (const record of records) {
-      if (record.target instanceof Element) applyPitchPrintButtonLabel(record.target);
-      for (const node of record.addedNodes) {
-        if (node instanceof Element) applyPitchPrintButtonLabel(node);
+  if (typeof MutationObserver === 'function') {
+    const pitchPrintButtonObserver = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.target instanceof Element) applyPitchPrintButtonLabel(record.target);
+        for (const node of record.addedNodes) {
+          if (node instanceof Element) applyPitchPrintButtonLabel(node);
+        }
       }
-    }
-  });
+    });
 
+    pitchPrintButtonObserver.observe(document.documentElement, { childList: true, subtree: true });
+  }
   applyPitchPrintButtonLabel();
-  pitchPrintButtonObserver.observe(document.documentElement, { childList: true, subtree: true });
 
   if (!publicContract) {
     warn('Public customization contract unavailable');
