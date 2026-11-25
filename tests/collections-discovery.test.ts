@@ -68,11 +68,42 @@ test("Collections discovery renders Swedish category copy while preserving custo
   const section = readFileSync("theme-live-cart/sections/customhouse-collections-discovery.liquid", "utf8");
 
   assert.match(section, /request\.locale\.iso_code == 'sv'/);
-  assert.match(section, /T-SHIRTAR,HUVTRÖJOR,BYXOR,KEPSAR,ACCESSOARER/);
-  assert.match(section, /Designa din t-shirt\|\|Designa din huvtröja/);
+  assert.match(section, /T-SHIRTAR,HOODIES,BYXOR,KEPSAR,ACCESSOARER/);
+  assert.match(section, /Designa din t-shirt\|\|Designa din hoodie/);
   assert.match(section, /Joggingbyxor, mjukisbyxor och mer/);
   assert.match(section, /category_block\.settings\.label/);
   assert.match(section, /category_block\.settings\.description/);
+});
+
+test("Collections discovery localizes hero, filters, sorting, and product actions in Swedish", () => {
+  const section = readFileSync("theme-live-cart/sections/customhouse-collections-discovery.liquid", "utf8");
+
+  for (const copy of [
+    "Premiumkvalitet",
+    "Byggd för att hålla",
+    "Din design",
+    "Tryck, brodyr eller patch",
+    "Leverans över hela världen",
+    "Snabbt och pålitligt",
+    "Filter",
+    "Kategori",
+    "Passform",
+    "Varumärke",
+    "Färg",
+    "Tryckmetod",
+    "Pris",
+    "Alla",
+    "Sortera efter",
+    "Mest relevant",
+    "Nyast",
+    "Pris: lägst till högst",
+    "Pris: högst till lägst",
+    "Spana in",
+    "Inga alternativ tillgängliga",
+    "Inga basprodukter matchar dessa filter",
+  ]) {
+    assert.match(section, new RegExp(copy), copy);
+  }
 });
 
 test("global header adds one duplicate-safe Collections discovery link without replacing menu links", () => {
