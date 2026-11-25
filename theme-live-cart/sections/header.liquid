@@ -471,19 +471,19 @@
                 href="{{ become_creator_url }}"
                 data-customhouse-become-creator-link
                 {% if is_approved_creator %}hidden{% endif %}
-              >Become a creator</a>
+              >Bli en creator</a>
 
               <a href="{{ routes.account_logout_url }}">Log out</a>
             {% else %}
-              <p class="customhouse-header__profile-name">Customer account</p>
+              <p class="customhouse-header__profile-name">Kundkonto</p>
               <a href="{{ account_login_redirect_url }}">Log in</a>
               <a class="customhouse-header__profile-choice" href="{{ account_login_redirect_url }}">
-                <strong>Create account</strong>
-                <small>Create a customer account to manage your orders and purchases.</small>
+                <strong>Skapa konto</strong>
+                <small>Skapa konto för att hålla koll på dina ordrar.</small>
               </a>
               <a class="customhouse-header__profile-choice" href="{{ become_creator_login_url }}">
-                <strong>Become a creator</strong>
-                <small>Apply to become a Creator and publish your designs on CustomHouse.</small>
+                <strong>Bli en creator</strong>
+                <small>Ansök om att bli en creator och få dina egna designs publicerade i vårt community.</small>
               </a>
             {% endif %}
           </div>
@@ -581,7 +581,7 @@
                 <path d="M4 16h24"></path>
               </svg>
             </span>
-            <span>BECOME A CREATOR</span>
+            <span>BLI EN CREATOR</span>
           </a>
         {% endif %}
         <a href="{% if customer %}{{ routes.account_logout_url }}{% else %}{{ account_login_redirect_url }}{% endif %}">

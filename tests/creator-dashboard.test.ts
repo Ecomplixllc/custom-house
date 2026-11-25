@@ -2904,10 +2904,12 @@ test("theme account choices and footer explain the canonical Creator path", () =
   const header = readFileSync("theme-live-cart/sections/header.liquid", "utf8");
   const footer = readFileSync("theme-live-cart/sections/footer-group.json", "utf8");
   assert.match(header, /class="customhouse-header__profile-choice"/);
-  assert.match(header, /<strong>Create account<\/strong>\s*<small>Create a customer account to manage your orders and purchases\.<\/small>/);
-  assert.match(header, /<strong>Become a creator<\/strong>\s*<small>Apply to become a Creator and publish your designs on CustomHouse\.<\/small>/);
-  assert.match(header, /Create a customer account to manage your orders and purchases\./);
-  assert.match(header, /Apply to become a Creator and publish your designs on CustomHouse\./);
+  assert.match(header, /<p class="customhouse-header__profile-name">Kundkonto<\/p>/);
+  assert.match(header, /<strong>Skapa konto<\/strong>\s*<small>Skapa konto för att hålla koll på dina ordrar\.<\/small>/);
+  assert.match(header, /<strong>Bli en creator<\/strong>\s*<small>Ansök om att bli en creator och få dina egna designs publicerade i vårt community\.<\/small>/);
+  assert.match(header, />Bli en creator<\/a>/);
+  assert.match(header, /<span>BLI EN CREATOR<\/span>/);
+  assert.doesNotMatch(header, /Customer account|Create account|Become a creator|BECOME A CREATOR/);
   assert.match(header, /\.customhouse-header__profile-menu\s*\{[\s\S]*gap: 4px;/);
   assert.match(header, /\.customhouse-header__profile-choice\s*\{[\s\S]*display: grid;[\s\S]*gap: 6px;[\s\S]*border-top: 1px solid rgb\(255 255 255 \/ 0\.1\);/);
   assert.match(header, /\.customhouse-header__profile-choice strong\s*\{[\s\S]*display: block;/);
